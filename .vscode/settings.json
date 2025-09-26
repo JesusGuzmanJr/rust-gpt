@@ -1,0 +1,10 @@
+{
+    "editor.formatOnSave": true,
+    "cSpell.words": [
+        "cout",
+        "cuda",
+        "malloc",
+        "memcpy",
+        "nvcc"
+    ]
+}
