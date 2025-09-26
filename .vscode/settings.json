@@ -5,6 +5,7 @@
         "cuda",
         "malloc",
         "memcpy",
+        "nullptr",
         "nvcc"
     ]
 }
