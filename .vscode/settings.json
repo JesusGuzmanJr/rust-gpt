@@ -1,5 +1,4 @@
 {
-    "editor.formatOnSave": true,
     "cSpell.words": [
         "cout",
         "cuda",
@@ -7,5 +6,16 @@
         "memcpy",
         "nullptr",
         "nvcc"
+    ],
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "evenBetterToml.formatter.reorderKeys": true,
+    "files.autoSave": "onFocusChange",
+    "files.trimFinalNewlines": true,
+    "files.trimTrailingWhitespace": true,
+    "rust-analyzer.showUnlinkedFileNotification": false,
+    "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.rustfmt.extraArgs": [
+        "+nightly",
     ]
 }

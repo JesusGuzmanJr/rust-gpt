@@ -8,9 +8,7 @@ pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
-
-    use super::*;
+    use {super::*, std::time::Instant};
 
     fn vec_add_naive(a: &[f32], b: &[f32], c: &mut [f32]) {
         for i in 0..a.len() {

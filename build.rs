@@ -4,7 +4,7 @@ fn main() {
     // Compile the CUDA file into a static lib via nvcc
     cc::Build::new()
         .cuda(true)
-        .file("src/kernel.cu")
+        .file("src/kernels.cu")
         .flag("-O3")
         .flag("-std=c++20")
         .flag("-arch=native")

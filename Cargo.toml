@@ -1,10 +1,10 @@
 [package]
-name = "cuda-playground"
+name = "rust-gpt"
 version = "0.1.0"
 authors = ["Jesus Guzman, Jr. <jesusguzmanjr@icloud.com>"]
 edition = "2024"
 publish = false
-repository = "https://github.com/MarzipanClub/cuda-playground"
+repository = "https://github.com/MarzipanClub/rust-gpt"
 
 # https://dev-doc.rust-lang.org/stable/rustc/lints/listing/index.html#lint-listing
 [lints.rust]
@@ -14,7 +14,6 @@ rust_2018_idioms = { level = "warn", priority = -1 }
 rust_2024_compatibility = { level = "warn", priority = -1 }
 single_use_lifetimes = "warn"
 unreachable_pub = "warn"
-unsafe_code = "forbid"
 unused_extern_crates = "deny"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"
@@ -23,11 +22,12 @@ unused_qualifications = "warn"
 
 [dependencies]
 
+[dev-dependencies]
+criterion = "0.7.0"
 
 [build-dependencies]
 cc = "1.2.39"
-criterion = "0.7.0"
 
 [[bench]]
-name = "vec_add"
+name = "kernels"
 harness = false
