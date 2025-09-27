@@ -1,3 +1,5 @@
+pub mod byte_pair_encoding;
+
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     #[link(name = "kernels", kind = "static")]
     unsafe extern "C" {
