@@ -1,10 +1,14 @@
 {
     "cSpell.words": [
+        "commonmark",
+        "comrak",
         "cout",
         "cuda",
         "encod",
+        "enwiki",
         "malloc",
         "memcpy",
+        "multistream",
         "nullptr",
         "nvcc",
         "oding",

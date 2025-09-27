@@ -1,10 +1,10 @@
 [package]
-name = "rust-gpt"
-version = "0.1.0"
 authors = ["Jesus Guzman, Jr. <jesusguzmanjr@icloud.com>"]
 edition = "2024"
+name = "rust-gpt"
 publish = false
 repository = "https://github.com/MarzipanClub/rust-gpt"
+version = "0.1.0"
 
 # https://dev-doc.rust-lang.org/stable/rustc/lints/listing/index.html#lint-listing
 [lints.rust]
@@ -21,7 +21,11 @@ unused_macro_rules = "warn"
 unused_qualifications = "warn"
 
 [dependencies]
+anyhow = "1.0.100"
+clap = { version = "4.5.48", features = ["derive"] }
+comrak = "0.42.0"
 icu_normalizer = "2.0.0"
+thousands = "0.2.0"
 
 [dev-dependencies]
 criterion = "0.7.0"
@@ -30,5 +34,5 @@ criterion = "0.7.0"
 cc = "1.2.39"
 
 [[bench]]
-name = "kernels"
 harness = false
+name = "kernels"

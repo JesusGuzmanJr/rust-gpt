@@ -1,4 +1,4 @@
-//! Byte Pair Encoding
+//! # Byte Pair Encoding
 //!
 //! Language models don't see text like you and I, instead they see a sequence
 //! of numbers (known as tokens). Byte pair encoding (BPE) is a way of

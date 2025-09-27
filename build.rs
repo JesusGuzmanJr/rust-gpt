@@ -1,5 +1,5 @@
 fn main() {
-    println!("cargo:rerun-if-changed=src/kernel.cu");
+    println!("cargo:rerun-if-changed=src/kernels.cu");
 
     // Compile the CUDA file into a static lib via nvcc
     cc::Build::new()
