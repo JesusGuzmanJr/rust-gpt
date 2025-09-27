@@ -2,10 +2,14 @@
     "cSpell.words": [
         "cout",
         "cuda",
+        "encod",
         "malloc",
         "memcpy",
         "nullptr",
-        "nvcc"
+        "nvcc",
+        "oding",
+        "subword",
+        "subwords"
     ],
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
