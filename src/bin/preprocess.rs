@@ -2,6 +2,7 @@ use {
     anyhow::{Context, Result},
     clap::Parser,
     comrak::{Arena, Options, parse_document},
+    rayon::prelude::*,
     std::{path::PathBuf, time::Instant},
     thousands::Separable,
 };
@@ -49,16 +50,33 @@ fn main() -> Result<()> {
     println!("Collecting markdown files...");
     let start = Instant::now();
 
-    let files = std::fs::read_dir(&input_dir)?
+    let input_files = std::fs::read_dir(&input_dir)?
         .map(|entry| entry.unwrap().path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "md")
         .collect::<Vec<_>>();
 
     println!(
         "Collected {} markdown files in {:0.2?}",
-        files.len().separate_with_commas(),
+        input_files.len().separate_with_commas(),
         start.elapsed()
     );
+
+    let thread_count = rayon::current_num_threads();
+    println!("Using {thread_count} threads");
+
+    let chunk_size = input_files.len().div_ceil(thread_count);
+    println!("Chunking files into {chunk_size} chunks");
+    input_files
+        .chunks(chunk_size)
+        .map(ToOwned::to_owned)
+        .collect::<Vec<_>>()
+        .par_iter()
+        .for_each(|chunk| {
+            println!(
+                "Thread processing {} files",
+                chunk.len().separate_with_commas()
+            );
+        });
 
     let arena = Arena::new();
 
