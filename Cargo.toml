@@ -27,6 +27,7 @@ comrak = "0.42.0"
 icu_normalizer = "2.0.0"
 rayon = "1.11.0"
 thousands = "0.2.0"
+zstd = "0.13.3"
 
 [dev-dependencies]
 criterion = "0.7.0"

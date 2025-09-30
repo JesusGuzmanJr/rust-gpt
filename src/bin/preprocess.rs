@@ -1,9 +1,8 @@
 use {
     anyhow::{Context, Result},
     clap::Parser,
-    comrak::{Arena, Options, parse_document},
     rayon::prelude::*,
-    std::{path::PathBuf, time::Instant},
+    std::{fs::File, io::Write, path::PathBuf, time::Instant},
     thousands::Separable,
 };
 
@@ -13,6 +12,8 @@ use {
 #[command(version, about, long_about = None)]
 struct Args {
     /// Path to the training data directory with the markdown files.
+    ///
+    /// A file should be about a single topic.
     /// Bad files will be skipped.
     ///
     /// Only *.md files will be processed. The directory will not be walked
@@ -51,9 +52,13 @@ fn main() -> Result<()> {
     let start = Instant::now();
 
     let input_files = std::fs::read_dir(&input_dir)?
-        .map(|entry| entry.unwrap().path())
+        .filter_map(|entry| entry.ok())
+        .map(|dir| dir.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "md")
         .collect::<Vec<_>>();
+
+    // TODO: remove this
+    let input_files = input_files.into_iter().take(10).collect::<Vec<_>>();
 
     println!(
         "Collected {} markdown files in {:0.2?}",
@@ -65,30 +70,78 @@ fn main() -> Result<()> {
     println!("Using {thread_count} threads");
 
     let chunk_size = input_files.len().div_ceil(thread_count);
+
     println!("Chunking files into {chunk_size} chunks");
     input_files
         .chunks(chunk_size)
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>()
         .par_iter()
-        .for_each(|chunk| {
-            println!(
-                "Thread processing {} files",
-                chunk.len().separate_with_commas()
-            );
+        .enumerate()
+        .map(|(i, chunk)| {
+            let mut file = File::create(args.output_dir.join(format!("shard-{i}.md.zstd")))?;
+
+            let mut encoder = zstd::Encoder::new(
+                &mut file,
+                // The compression level for the zstd encoder.
+                // The higher the level, the more compressed the data will be.
+                // Decompressing is same speed regardless of the level.
+                19,
+            )?
+            .auto_finish();
+
+            let arena = comrak::Arena::new();
+
+            let nfc = icu_normalizer::ComposingNormalizerBorrowed::new_nfc();
+
+            chunk
+                .iter()
+                .map(std::fs::read_to_string)
+                .filter_map(|result| {
+                    if let Err(error) = &result {
+                        eprintln!("{error}");
+                    }
+                    result.ok()
+                })
+                .map(|mut buffer| {
+                    {
+                        // remove control characters
+                        let cleaned = buffer
+                            .chars()
+                            .filter(|c| !c.is_control())
+                            .collect::<String>();
+
+                        assert!(
+                            cleaned.len() <= buffer.len(),
+                            "expected cleaned string to be less than or equal to byte length of raw file input"
+                        );
+
+                        // normalize Unicode
+                        nfc.normalize_to(&cleaned, &mut buffer)?;
+                    }
+
+                    // parse Markdown
+                    let markdown_options = comrak::Options::default();
+                    let parsed = comrak::parse_document(&arena, &buffer, &markdown_options);
+
+                    comrak::format_commonmark(parsed, &markdown_options, &mut encoder)?;
+                    encoder.write_all("\u{3}".as_bytes())?; // end-of-text character
+
+                    anyhow::Ok(())
+                })
+                .for_each(|result| {
+                    if let Err(error) = result {
+                        eprintln!("{error}");
+                    }
+                });
+
+            anyhow::Ok(())
+        })
+        .for_each(|result| {
+            if let Err(error) = result {
+                eprintln!("{error}");
+            }
         });
-
-    let arena = Arena::new();
-
-    let root = parse_document(
-        &arena,
-        "## Places of interest\n* Moyry Castle",
-        &Options::default(),
-    );
-
-    let mut file = std::fs::File::create("output.html").unwrap();
-    comrak::format_commonmark(&root, &Options::default(), &mut file)
-        .expect("Failed to format commonmark");
 
     Ok(())
 }

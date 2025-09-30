@@ -13,7 +13,8 @@
         "nvcc",
         "oding",
         "subword",
-        "subwords"
+        "subwords",
+        "zstd"
     ],
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
