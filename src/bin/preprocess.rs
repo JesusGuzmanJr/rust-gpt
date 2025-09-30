@@ -68,7 +68,10 @@ fn main() -> Result<()> {
 
     let chunk_size = input_files.len().div_ceil(thread_count);
 
-    println!("Chunking files into {chunk_size} chunks");
+    println!(
+        "Chunking files into {} chunks",
+        chunk_size.separate_with_commas()
+    );
     let start = Instant::now();
     input_files
         .chunks(chunk_size)
@@ -88,7 +91,6 @@ fn main() -> Result<()> {
             )?
             .auto_finish();
 
-            let arena = comrak::Arena::new();
             let markdown_options = comrak::Options::default();
 
             let nfc = icu_normalizer::ComposingNormalizerBorrowed::new_nfc();
@@ -124,7 +126,9 @@ fn main() -> Result<()> {
                         nfc.normalize_to(&cleaned, &mut buffer)?;
                     }
 
-                    // parse Markdown
+                    // parse Markdown - create a new arena for each file to avoid accumulating
+                    // memory
+                    let arena = comrak::Arena::new();
                     let parsed = comrak::parse_document(&arena, &buffer, &markdown_options);
 
                     comrak::format_commonmark(parsed, &markdown_options, &mut encoder)?;
