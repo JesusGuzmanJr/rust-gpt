@@ -93,6 +93,22 @@ fn main() -> Result<()> {
 
             let markdown_options = comrak::Options::default();
 
+            // Normalization Form C (Canonical Composition).
+            //
+            // Process:
+            // - Decompose everything canonically (like NFD).
+            // - Recompose wherever there’s a single canonical equivalent pre-composed
+            // character.
+            //
+            // The key is: NFC only recomposes when there exists exactly one
+            // pre-composed form. So it either:
+            // Shrinks (if multiple code points → 1 pre-composed code point).
+            // Leaves unchanged (if no pre-composed exists).
+            //
+            // It never expands into more code points, because that would break
+            // canonical equivalence.
+            //
+            // https://www.unicode.org/reports/tr15/
             let nfc = icu_normalizer::ComposingNormalizerBorrowed::new_nfc();
 
             chunk
@@ -122,7 +138,6 @@ fn main() -> Result<()> {
                             "expected cleaned string to contain ≤ original"
                         );
 
-                        // normalize Unicode
                         nfc.normalize_to(&cleaned, &mut buffer)?;
                     }
 
