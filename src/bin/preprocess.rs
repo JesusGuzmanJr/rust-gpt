@@ -57,9 +57,6 @@ fn main() -> Result<()> {
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "md")
         .collect::<Vec<_>>();
 
-    // TODO: remove this
-    let input_files = input_files.into_iter().take(10).collect::<Vec<_>>();
-
     println!(
         "Collected {} markdown files in {:0.2?}",
         input_files.len().separate_with_commas(),
@@ -72,6 +69,7 @@ fn main() -> Result<()> {
     let chunk_size = input_files.len().div_ceil(thread_count);
 
     println!("Chunking files into {chunk_size} chunks");
+    let start = Instant::now();
     input_files
         .chunks(chunk_size)
         .map(ToOwned::to_owned)
@@ -91,6 +89,7 @@ fn main() -> Result<()> {
             .auto_finish();
 
             let arena = comrak::Arena::new();
+            let markdown_options = comrak::Options::default();
 
             let nfc = icu_normalizer::ComposingNormalizerBorrowed::new_nfc();
 
@@ -105,6 +104,11 @@ fn main() -> Result<()> {
                 })
                 .map(|mut buffer| {
                     {
+                        // filter out files that are less than 20 lines
+                        if buffer.lines().count() < 20 {
+                            return Ok(());
+                        }
+
                         // remove control characters
                         let cleaned = buffer
                             .chars()
@@ -113,7 +117,7 @@ fn main() -> Result<()> {
 
                         assert!(
                             cleaned.len() <= buffer.len(),
-                            "expected cleaned string to be less than or equal to byte length of raw file input"
+                            "expected cleaned string to contain ≤ original"
                         );
 
                         // normalize Unicode
@@ -121,7 +125,6 @@ fn main() -> Result<()> {
                     }
 
                     // parse Markdown
-                    let markdown_options = comrak::Options::default();
                     let parsed = comrak::parse_document(&arena, &buffer, &markdown_options);
 
                     comrak::format_commonmark(parsed, &markdown_options, &mut encoder)?;
@@ -143,5 +146,10 @@ fn main() -> Result<()> {
             }
         });
 
+    println!(
+        "Processed {} markdown files in {:0.2?}",
+        input_files.len().separate_with_commas(),
+        start.elapsed()
+    );
     Ok(())
 }
