@@ -7,7 +7,7 @@ use {
 };
 
 /// Parse a directory of markdown files, normalize them, and save them to a new
-/// directory as *.md.zstd shards.
+/// directory as *.md.zstd compressed shards.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {

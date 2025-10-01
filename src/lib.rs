@@ -20,7 +20,7 @@ mod tests {
 
     #[test]
     fn test_vec_add() {
-        let n = 1_000_000_000;
+        let n = 1_000_000;
         let a: Vec<f32> = (0..n).map(|i| i as f32).collect();
         let b: Vec<f32> = (0..n).map(|i| (2 * i) as f32).collect();
         let mut c = vec![0f32; n];

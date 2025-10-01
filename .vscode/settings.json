@@ -1,5 +1,6 @@
 {
     "cSpell.words": [
+        "ahash",
         "commonmark",
         "comrak",
         "cout",
@@ -12,6 +13,7 @@
         "nullptr",
         "nvcc",
         "oding",
+        "Pretokenize",
         "subword",
         "subwords",
         "zstd"
