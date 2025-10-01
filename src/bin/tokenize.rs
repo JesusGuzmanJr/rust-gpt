@@ -162,13 +162,13 @@ fn main() -> Result<()> {
     );
 
     let start = Instant::now();
-    let vocab = input_files
+    let word_frequencies = input_files
         .chunks(chunk_size)
         .map(ToOwned::to_owned)
         .collect::<Vec<_>>()
         .par_iter()
         .map(|chunk| {
-            let mut vocab: HashMap<ByteString, u32> = HashMap::default();
+            let mut word_frequencies: HashMap<ByteString, u32> = HashMap::default();
             let mut line = String::new();
 
             chunk
@@ -188,7 +188,7 @@ fn main() -> Result<()> {
                             .find_iter(&line)
                             .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
                             .for_each(|w| {
-                                *vocab.entry(w).or_default() += 1;
+                                *word_frequencies.entry(w).or_default() += 1;
                             });
                     }
 
@@ -200,7 +200,7 @@ fn main() -> Result<()> {
                     }
                 });
 
-            vocab
+            word_frequencies
         })
         .reduce(HashMap::default, |mut vocab, v| {
             for (word, count) in v {
@@ -215,20 +215,23 @@ fn main() -> Result<()> {
         start.elapsed()
     );
 
-    println!("Vocab size: {}", vocab.len().separate_with_commas());
+    println!(
+        "Unique words: {}",
+        word_frequencies.len().separate_with_commas()
+    );
 
     {
         println!("Sorting by frequency...");
         let start = Instant::now();
 
-        let mut vocab = vocab.iter().collect::<Vec<_>>();
-        vocab.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+        let mut word_frequencies = word_frequencies.iter().collect::<Vec<_>>();
+        word_frequencies.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
 
         println!("Sorted by frequency in {:0.2?}", start.elapsed());
 
         const TOP_N: usize = 20;
         println!("First {TOP_N} most frequent words:");
-        for (word, count) in vocab.iter().take(TOP_N) {
+        for (word, count) in word_frequencies.iter().take(TOP_N) {
             println!(
                 "`{}`: {}",
                 String::from_utf8_lossy(word.as_slice()),
