@@ -176,15 +176,18 @@ fn main() -> Result<()> {
                 .map(|file| {
                     let mut reader = BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
-                    while reader.read_line(&mut line)? > 0 {
+                    loop {
+                        line.clear();
+                        if reader.read_line(&mut line)? == 0 {
+                            break;
+                        }
+
                         WORD_SPLITTER
                             .find_iter(&line)
                             .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
                             .for_each(|w| {
                                 *vocab.entry(w).or_default() += 1;
                             });
-
-                        line.clear();
                     }
 
                     anyhow::Ok(())
@@ -198,8 +201,8 @@ fn main() -> Result<()> {
             vocab
         })
         .reduce(HashMap::default, |mut vocab, v| {
-            for (w, v) in v {
-                *vocab.entry(w).or_default() += v;
+            for (word, count) in v {
+                *vocab.entry(word).or_default() += count;
             }
             vocab
         });
@@ -212,9 +215,23 @@ fn main() -> Result<()> {
 
     println!("Vocab size: {}", vocab.len().separate_with_commas());
 
-    // print first 100 vocab items
-    for (k, v) in vocab.iter().take(100) {
-        println!("{}: {}", String::from_utf8_lossy(k.as_slice()), v);
+    {
+        println!("Sorting by frequency...");
+        let start = Instant::now();
+
+        let mut vocab = vocab.iter().collect::<Vec<_>>();
+        vocab.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+
+        println!("Sorted by frequency in {:0.2?}", start.elapsed());
+
+        println!("First 100 most frequent words:");
+        for (word, count) in vocab.iter().take(100) {
+            println!(
+                "`{}`: {}",
+                String::from_utf8_lossy(word.as_slice()),
+                count.separate_with_commas()
+            );
+        }
     }
 
     // TODO: implement BPE
