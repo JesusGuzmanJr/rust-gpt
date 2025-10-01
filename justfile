@@ -3,10 +3,10 @@
     #!/usr/bin/env bash
     just --list --unsorted
 
-# Preprocess the markdown files
-preprocess *args:
+# Run the specified binary
+run bin *args:
     #!/usr/bin/env bash
-    cargo run --release --bin preprocess -- {{args}}
+    cargo run --release --bin {{bin}} -- {{args}}
 
 # Run tests
 test *args:

@@ -1,7 +1,8 @@
 use {
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::prelude::*,
+    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    rust_gpt::utils::canonicalize_path,
     std::{fs::File, io::Write, path::PathBuf, time::Instant},
     thousands::Separable,
 };
@@ -41,12 +42,7 @@ fn main() -> Result<()> {
         })?;
     }
 
-    let input_dir = args.input_dir.canonicalize().with_context(|| {
-        format!(
-            "Failed to canonicalize input directory: {}",
-            args.input_dir.display()
-        )
-    })?;
+    let input_dir = canonicalize_path(&args.input_dir)?;
 
     println!("Collecting markdown files...");
     let start = Instant::now();
@@ -72,6 +68,7 @@ fn main() -> Result<()> {
         "Chunking files into {} chunks",
         chunk_size.separate_with_commas()
     );
+
     let start = Instant::now();
     input_files
         .chunks(chunk_size)

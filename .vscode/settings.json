@@ -14,8 +14,10 @@
         "nvcc",
         "oding",
         "Pretokenize",
+        "smallvec",
         "subword",
         "subwords",
+        "vocabs",
         "zstd"
     ],
     "editor.formatOnPaste": true,
