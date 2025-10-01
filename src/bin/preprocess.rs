@@ -65,7 +65,7 @@ fn main() -> Result<()> {
     let chunk_size = input_files.len().div_ceil(thread_count);
 
     println!(
-        "Chunking files into {} chunks",
+        "Chunking files into chunks of {}",
         chunk_size.separate_with_commas()
     );
 
