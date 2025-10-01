@@ -1,3 +1,28 @@
+//! # Byte Pair Encoding
+//!
+//! Language models don't see text like you and I, instead they see a sequence
+//! of numbers (known as tokens). Byte pair encoding (BPE) is a way of
+//! converting text into tokens. It has a couple desirable properties:
+//!
+//! - It's reversible and lossless, so you can convert tokens back into the
+//!   original text
+//! - It works on arbitrary text, even text that is not in the tokenizer's
+//!   training data
+//! - It compresses the text: the token sequence is shorter than the bytes
+//!   corresponding to the original text. On average, in practice, each token
+//!   corresponds to about 4 bytes.
+//! - It attempts to let the model see common subwords. For instance, "ing" is a
+//!   common subword in English, so BPE encodings will often split "encoding"
+//!   into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding").
+//!   Because the model will then see the "ing" token again and again in
+//!   different contexts, it helps models generalize and better understand
+//!   grammar.
+//!
+//!  ---
+//!
+//! ### References
+//! - [TikToken](https://github.com/openai/tiktoken)
+//! - [Tokenizers](https://github.com/huggingface/tokenizers)
 use {
     ahash::HashMap,
     anyhow::Result,
@@ -25,6 +50,34 @@ type ByteString = SmallVec<[u8; 32]>;
 ///
 /// Byte-level BPE is a subtype of BPE that uses bytes instead of characters as
 /// basic token component.
+///
+/// ---
+///
+/// # Byte Pair Encoding
+///
+/// Language models don't see text like you and I, instead they see a sequence
+/// of numbers (known as tokens). Byte pair encoding (BPE) is a way of
+/// converting text into tokens. It has a couple desirable properties:
+///
+/// - It's reversible and lossless, so you can convert tokens back into the
+///   original text
+/// - It works on arbitrary text, even text that is not in the tokenizer's
+///   training data
+/// - It compresses the text: the token sequence is shorter than the bytes
+///   corresponding to the original text. On average, in practice, each token
+///   corresponds to about 4 bytes.
+/// - It attempts to let the model see common subwords. For instance, "ing" is a
+///   common subword in English, so BPE encodings will often split "encoding"
+///   into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding").
+///   Because the model will then see the "ing" token again and again in
+///   different contexts, it helps models generalize and better understand
+///   grammar.
+///
+///  ---
+///
+/// ### References
+/// - [TikToken](https://github.com/openai/tiktoken)
+/// - [Tokenizers](https://github.com/huggingface/tokenizers)
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
@@ -121,18 +174,18 @@ fn main() -> Result<()> {
             chunk
                 .iter()
                 .map(|file| {
-                    println!("Tokenizing file: {}", file.display());
                     let mut reader = BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
-                    line.clear();
-                    reader.read_line(&mut line)?;
+                    while reader.read_line(&mut line)? > 0 {
+                        WORD_SPLITTER
+                            .find_iter(&line)
+                            .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
+                            .for_each(|w| {
+                                *vocab.entry(w).or_default() += 1;
+                            });
 
-                    WORD_SPLITTER
-                        .find_iter(&line)
-                        .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
-                        .for_each(|w| {
-                            *vocab.entry(w).or_default() += 1;
-                        });
+                        line.clear();
+                    }
 
                     anyhow::Ok(())
                 })
@@ -157,12 +210,14 @@ fn main() -> Result<()> {
         start.elapsed()
     );
 
-    println!("Vocab size: {}", vocab.len());
+    println!("Vocab size: {}", vocab.len().separate_with_commas());
 
     // print first 100 vocab items
     for (k, v) in vocab.iter().take(100) {
         println!("{}: {}", String::from_utf8_lossy(k.as_slice()), v);
     }
+
+    // TODO: implement BPE
 
     Ok(())
 }
