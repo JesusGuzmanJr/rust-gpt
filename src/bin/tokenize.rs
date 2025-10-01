@@ -27,7 +27,7 @@ use {
     ahash::HashMap,
     anyhow::Result,
     clap::Parser,
-    rayon::iter::{IntoParallelRefIterator, ParallelIterator},
+    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::utils::canonicalize_path,
     smallvec::SmallVec,
@@ -151,56 +151,38 @@ fn main() -> Result<()> {
         start.elapsed()
     );
 
-    let thread_count = rayon::current_num_threads();
-    println!("Using {thread_count} threads");
-
-    let chunk_size = input_files.len().div_ceil(thread_count);
-
-    println!(
-        "Chunking files into chunks of {}",
-        chunk_size.separate_with_commas()
-    );
-
     let start = Instant::now();
     let word_frequencies = input_files
-        .chunks(chunk_size)
-        .map(ToOwned::to_owned)
-        .collect::<Vec<_>>()
         .par_iter()
-        .map(|chunk| {
+        .map(|file| {
             let mut word_frequencies: HashMap<ByteString, u32> = HashMap::default();
             let mut line = String::new();
 
-            chunk
-                .iter()
-                .map(|file| {
-                    let mut reader = BufReader::new(zstd::Decoder::new(File::open(file)?)?);
+            let mut reader = BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
-                    loop {
-                        line.clear();
-                        // we are tokenizing by whitespaces (among other things)
-                        // so splitting lines by newline doesn't split words
-                        if reader.read_line(&mut line)? == 0 {
-                            break;
-                        }
+            loop {
+                line.clear();
+                // we are tokenizing by whitespaces (among other things)
+                // so splitting lines by newline doesn't split words
+                if reader.read_line(&mut line)? == 0 {
+                    break;
+                }
 
-                        WORD_SPLITTER
-                            .find_iter(&line)
-                            .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
-                            .for_each(|w| {
-                                *word_frequencies.entry(w).or_default() += 1;
-                            });
-                    }
+                WORD_SPLITTER
+                    .find_iter(&line)
+                    .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
+                    .for_each(|w| {
+                        *word_frequencies.entry(w).or_default() += 1;
+                    });
+            }
 
-                    anyhow::Ok(())
-                })
-                .for_each(|result| {
-                    if let Err(error) = result {
-                        eprintln!("{error}");
-                    }
-                });
-
-            word_frequencies
+            anyhow::Ok(word_frequencies)
+        })
+        .filter_map(|result| {
+            if let Err(error) = &result {
+                eprintln!("{error}");
+            }
+            result.ok()
         })
         .reduce(HashMap::default, |mut vocab, v| {
             for (word, count) in v {
@@ -240,7 +222,20 @@ fn main() -> Result<()> {
         }
     }
 
-    // TODO: implement BPE
+    let word_frequencies = word_frequencies
+        .iter()
+        .collect::<Vec<_>>()
+        // .chunks(chunk_size)
+        // .map(ToOwned::to_owned)
+        // .collect::<Vec<_>>()
+        .par_iter()
+        .enumerate()
+        .map(|(i, chunk)| {
+            // let mut pair_counts = HashMap::default();
+
+            // for window in
+            // //
+        });
 
     Ok(())
 }
