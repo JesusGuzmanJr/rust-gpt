@@ -178,6 +178,8 @@ fn main() -> Result<()> {
 
                     loop {
                         line.clear();
+                        // we are tokenizing by whitespaces (among other things)
+                        // so splitting lines by newline doesn't split words
                         if reader.read_line(&mut line)? == 0 {
                             break;
                         }
@@ -224,8 +226,9 @@ fn main() -> Result<()> {
 
         println!("Sorted by frequency in {:0.2?}", start.elapsed());
 
-        println!("First 100 most frequent words:");
-        for (word, count) in vocab.iter().take(100) {
+        const TOP_N: usize = 20;
+        println!("First {TOP_N} most frequent words:");
+        for (word, count) in vocab.iter().take(TOP_N) {
             println!(
                 "`{}`: {}",
                 String::from_utf8_lossy(word.as_slice()),
