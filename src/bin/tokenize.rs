@@ -127,7 +127,7 @@ struct Args {
 ///
 /// Having "cat" and " cat" uses 2 slots, which is negligible. The benefit of
 /// capturing positional information far outweighs the cost.
-static WORD_SPLITTER: LazyLock<Regex> = LazyLock::new(|| {
+static WORD_BOUNDARY_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+").expect("invalid regex")
 });
 
@@ -168,7 +168,7 @@ fn main() -> Result<()> {
                     break;
                 }
 
-                WORD_SPLITTER
+                WORD_BOUNDARY_RE
                     .find_iter(&line)
                     .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
                     .for_each(|w| {
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn test_regex() {
         assert_eq!(
-            &WORD_SPLITTER
+            &WORD_BOUNDARY_RE
                 .find_iter("$51 for ticket 💸.")
                 .map(|m| m.as_str())
                 .collect::<Vec<_>>(),
