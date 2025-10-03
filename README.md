@@ -41,25 +41,19 @@ The `preprocess` binary (`src/bin/preprocess.rs`) performs the following operati
 
 2. **Text Cleaning & Normalization**
    - Removes control characters (except newlines)
-   - Removes HTML table tags (`<Table>...</Table>`)
-   - Applies Unicode NFC (Normalization Form C) for consistent character representation
-   - Filters out empty documents and content
+   - Removes `<Table>...</Table>` info-tables because they break our reading "flow".
+   - Applies Unicode NFC (Normalization Form C) for consistent byte representation of Unicode code points.
 
 3. **Article Assembly**
    - Groups consecutive rows by `document_title`
    - Assembles sections into complete articles
-   - Preserves section hierarchy
+   - Preserves section order
+   - Parses manually created markdown into an AST and then renders it to a String to ensure it's valid using [comrak](https://github.com/kivikakk/comrak)
 
-4. **Markdown Conversion**
-   - Document title → `# Title` (H1 heading)
-   - Section titles → `## Section` (H2 headings)
-   - Normalizes markdown formatting using [comrak](https://github.com/kivikakk/comrak)
-
-5. **Compression & Sharding**
-   - Writes articles to Zstandard (`.zstd`) compressed files
-   - Creates one shard file per CPU thread for parallel writing
+4. **Compression & Sharding**
+   - Writes markdown strings to [Zstandard](https://github.com/facebook/zstd) (`.zstd`) compressed files.
+   - One shard file per CPU thread for parallel writing
    - Each article is separated by the end-of-text control character (`\u{3}`)
-   - Compression level: 19 (maximum)
 
 ### Output Format
 
