@@ -66,7 +66,7 @@ fn main() -> Result<()> {
 
     let (tx, rx) = crossbeam_channel::unbounded();
 
-    let batch_size = rayon::current_num_threads();
+    let batch_size = rayon::current_num_threads() * 64;
 
     let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&canonicalize_path(
         &args.input_file,
@@ -84,10 +84,6 @@ fn main() -> Result<()> {
             batch.ok()
         })
         .map(|batch| {
-            println!(
-                "Collecting parquet columns from batch of {} rows...",
-                batch.num_rows()
-            );
             // see dataset card for column names
             // https://huggingface.co/datasets/stanford-oval/wikipedia
             let document_title = column(&batch, "document_title")?;
@@ -137,7 +133,7 @@ fn main() -> Result<()> {
                     result.ok()
                 })
                 .collect::<Vec<_>>();
-            println!("Done processing batch");
+
             anyhow::Ok(rows)
         })
         .filter_map(|result| {
