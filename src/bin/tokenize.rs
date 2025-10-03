@@ -41,8 +41,7 @@ use {
     thousands::Separable,
 };
 
-// a byte string is a small vector of bytes. Up to 32 bytes can be allocated on
-// the stack.
+// Up to 32 bytes can be allocated on the stack before heap allocating.
 type ByteString = SmallVec<[u8; 32]>;
 
 /// Tokenize a directory of normalized, compressed markdown shards using
@@ -81,17 +80,33 @@ type ByteString = SmallVec<[u8; 32]>;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    /// Path to the input directory with the normalized, compressed preprocessed
-    /// shards.
+    /// Path to the input directory with the normalized, zstd-compressed
+    /// preprocessed shards of textual content.
     ///
-    /// Only *.md.zstd files will be processed. The directory will not be walked
+    /// Only *.zstd files will be processed. The directory will not be walked
     /// recursively.
     #[arg(short, long)]
     input_dir: PathBuf,
 
-    /// Path to save the tokenizer *.bincode file.
+    /// Path to save the tokenizer *.zstd file.
     #[arg(short, long)]
     output_file: PathBuf,
+
+    /// The target vocabulary size.
+    ///
+    /// For English, 50,000 tokens is a good default.
+    ///
+    /// A larger vocabulary produces bigger pieces per token which means fewer
+    /// tokens per text or shorter token sequences. This translates to faster
+    /// training/inference per sequence at the cost of slower tokenization,
+    /// overfiting, etc.
+    ///
+    /// A smaller vocabulary produces smaller pieces per token which means more
+    /// tokens per text or longer token sequences. This translates to slower
+    /// training/inference per sequence but with the benefit of better subword
+    /// sharing across rarer forms, smaller embeddings, etc.
+    #[arg(short, long, default_value = "50000")]
+    vocab_size: usize,
 }
 
 /// Regex to split text into tokens.
@@ -136,9 +151,6 @@ fn main() -> Result<()> {
 
     let input_dir = canonicalize_path(&args.input_dir)?;
 
-    println!("Collecting markdown files...");
-    let start = Instant::now();
-
     let input_files = std::fs::read_dir(&input_dir)?
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
@@ -146,9 +158,8 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>();
 
     println!(
-        "Collected {} markdown files in {:0.2?}",
+        "Collected {} files\nComputing word frequencies...",
         input_files.len().separate_with_commas(),
-        start.elapsed()
     );
 
     let start = Instant::now();
@@ -192,9 +203,9 @@ fn main() -> Result<()> {
         });
 
     println!(
-        "Processed {} markdown files in {:0.2?}",
+        "Done computing word frequencies in {:0.2?} for {} files",
+        start.elapsed(),
         input_files.len().separate_with_commas(),
-        start.elapsed()
     );
 
     println!(
@@ -222,20 +233,18 @@ fn main() -> Result<()> {
         }
     }
 
-    let word_frequencies = word_frequencies
-        .iter()
-        .collect::<Vec<_>>()
-        // .chunks(chunk_size)
-        // .map(ToOwned::to_owned)
-        // .collect::<Vec<_>>()
-        .par_iter()
-        .enumerate()
-        .map(|(i, chunk)| {
-            // let mut pair_counts = HashMap::default();
+    // let word_frequencies = word_frequencies
+    //     .iter()
+    //     .collect::<Vec<_>>()
+    //     .chunks(1024)
+    //     .collect::<Vec<_>>()
+    //     .par_iter()
+    //     .map(|chunk| {
+    //         // let mut pair_counts = HashMap::default();
 
-            // for window in
-            // //
-        });
+    //         // for window in
+    //         // //
+    //     });
 
     Ok(())
 }
