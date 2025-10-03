@@ -64,9 +64,9 @@ fn main() -> Result<()> {
         })?;
     }
 
-    let (tx, rx) = crossbeam_channel::unbounded();
-
     let batch_size = rayon::current_num_threads() * 64;
+
+    let (tx, rx) = crossbeam_channel::bounded(batch_size);
 
     let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&canonicalize_path(
         &args.input_file,
@@ -214,8 +214,7 @@ fn main() -> Result<()> {
             encoder.write_all("\u{3}".as_bytes())?;
 
             Ok(())
-        })
-        .unwrap_or_else(|error| eprintln!("Error processing articles: {error}"));
+        })?;
 
     println!(
         "Finished processing {} articles",
