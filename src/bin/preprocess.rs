@@ -161,7 +161,6 @@ fn main() -> Result<()> {
                 };
 
                 // Block until the channel is ready to receive the article
-                println!("Sending article to channel");
                 tx.send(article).expect("channel is not open");
             });
         println!("Finished reading parquet file");
