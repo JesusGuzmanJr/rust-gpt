@@ -76,92 +76,96 @@ fn main() -> Result<()> {
 
     println!("Reading batches of {batch_size} rows from the parquet file...");
 
-    reader
-        .filter_map(|batch| {
-            if let Err(error) = &batch {
-                eprintln!("{error}");
-            }
-            batch.ok()
-        })
-        .map(|batch| {
-            // see dataset card for column names
-            // https://huggingface.co/datasets/stanford-oval/wikipedia
-            let document_title = column(&batch, "document_title")?;
-            let section_title = column(&batch, "section_title")?;
-            let content = column(&batch, "content")?;
+    rayon::spawn(move || {
+        reader
+            .filter_map(|batch| {
+                if let Err(error) = &batch {
+                    eprintln!("{error}");
+                }
+                batch.ok()
+            })
+            .map(|batch| {
+                // see dataset card for column names
+                // https://huggingface.co/datasets/stanford-oval/wikipedia
+                let document_title = column(&batch, "document_title")?;
+                let section_title = column(&batch, "section_title")?;
+                let content = column(&batch, "content")?;
 
-            let rows = (0..batch.num_rows())
-                .map(|i| {
-                    let document_title = document_title.value(i);
-                    let section_title = section_title.value(i);
-                    let content = content.value(i);
-                    (document_title, section_title, content)
-                })
-                .filter(|(document_title, _, content)| {
-                    !document_title.is_empty() && !content.is_empty()
-                })
-                .map(|(document_title, section_title, content)| {
-                    (
-                        document_title,
-                        if section_title.is_empty() {
-                            None
-                        } else {
-                            Some(section_title)
-                        },
-                        content,
-                    )
-                })
-                .collect::<Vec<_>>();
-
-            let rows = rows
-                .par_iter()
-                .map(|(document_title, section_title, content)| {
-                    anyhow::Ok((
-                        process_text(document_title)?,
-                        if let Some(section_title) = section_title {
-                            Some(process_text(section_title)?)
-                        } else {
-                            None
-                        },
-                        process_text(content)?,
-                    ))
-                })
-                .filter_map(|result| {
-                    if let Err(error) = &result {
-                        eprintln!("{error}");
-                    }
-                    result.ok()
-                })
-                .collect::<Vec<_>>();
-
-            anyhow::Ok(rows)
-        })
-        .filter_map(|result| {
-            if let Err(error) = &result {
-                eprintln!("{error}");
-            }
-            result.ok()
-        })
-        .flatten()
-        .chunk_by(
-            // Groups consecutive rows that have the same document_title
-            |(document_title, ..)| document_title.to_owned(),
-        )
-        .into_iter()
-        .for_each(move |(document_title, group)| {
-            let article = Article {
-                document_title,
-                sections: group
-                    .map(|(_, section_title, content)| Section {
-                        title: section_title,
-                        content,
+                let rows = (0..batch.num_rows())
+                    .map(|i| {
+                        let document_title = document_title.value(i);
+                        let section_title = section_title.value(i);
+                        let content = content.value(i);
+                        (document_title, section_title, content)
                     })
-                    .collect::<Vec<_>>(),
-            };
+                    .filter(|(document_title, _, content)| {
+                        !document_title.is_empty() && !content.is_empty()
+                    })
+                    .map(|(document_title, section_title, content)| {
+                        (
+                            document_title,
+                            if section_title.is_empty() {
+                                None
+                            } else {
+                                Some(section_title)
+                            },
+                            content,
+                        )
+                    })
+                    .collect::<Vec<_>>();
 
-            // Block until the channel is ready to receive the article
-            tx.send(article).expect("channel is not open");
-        });
+                let rows = rows
+                    .par_iter()
+                    .map(|(document_title, section_title, content)| {
+                        anyhow::Ok((
+                            process_text(document_title)?,
+                            if let Some(section_title) = section_title {
+                                Some(process_text(section_title)?)
+                            } else {
+                                None
+                            },
+                            process_text(content)?,
+                        ))
+                    })
+                    .filter_map(|result| {
+                        if let Err(error) = &result {
+                            eprintln!("{error}");
+                        }
+                        result.ok()
+                    })
+                    .collect::<Vec<_>>();
+
+                anyhow::Ok(rows)
+            })
+            .filter_map(|result| {
+                if let Err(error) = &result {
+                    eprintln!("{error}");
+                }
+                result.ok()
+            })
+            .flatten()
+            .chunk_by(
+                // Groups consecutive rows that have the same document_title
+                |(document_title, ..)| document_title.to_owned(),
+            )
+            .into_iter()
+            .for_each(move |(document_title, group)| {
+                let article = Article {
+                    document_title,
+                    sections: group
+                        .map(|(_, section_title, content)| Section {
+                            title: section_title,
+                            content,
+                        })
+                        .collect::<Vec<_>>(),
+                };
+
+                // Block until the channel is ready to receive the article
+                println!("Sending article to channel");
+                tx.send(article).expect("channel is not open");
+            });
+        println!("Finished reading parquet file");
+    });
 
     let encoders = Arc::new(Mutex::new(
         (0..rayon::current_num_threads())
