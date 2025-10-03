@@ -27,6 +27,7 @@ arrow-array = "56.2.0"
 arrow-cast = "56.2.0"
 clap = { version = "4.5.48", features = ["derive"] }
 comrak = "0.43.0"
+crossbeam-channel = "0.5.15"
 icu_normalizer = "2.0.0"
 itertools = "0.14.0"
 parquet = "56.2.0"

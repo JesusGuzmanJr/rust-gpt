@@ -9,6 +9,7 @@
         "enwiki",
         "FEFF",
         "formatcp",
+        "itertools",
         "malloc",
         "memcpy",
         "multistream",
