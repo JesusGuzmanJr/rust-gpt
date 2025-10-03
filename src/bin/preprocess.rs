@@ -12,7 +12,10 @@ use {
         fs::File,
         io::Write,
         path::PathBuf,
-        sync::{Arc, LazyLock, Mutex, atomic::AtomicU32},
+        sync::{
+            Arc, LazyLock, Mutex,
+            atomic::{AtomicU32, Ordering},
+        },
     },
     thousands::Separable,
 };
@@ -177,7 +180,7 @@ fn main() -> Result<()> {
     rx.into_iter()
         .par_bridge()
         .try_for_each(|article| -> Result<()> {
-            let processed = article_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+            let processed = article_count.fetch_add(1, Ordering::Relaxed) + 1;
 
             if processed % 1000 == 0 {
                 println!("Processed {} articles...", processed.separate_with_commas());
@@ -221,7 +224,7 @@ fn main() -> Result<()> {
 
     println!(
         "Finished processing {} articles",
-        article_count.load(std::sync::atomic::Ordering::Relaxed)
+        article_count.load(Ordering::Relaxed)
     );
 
     Ok(())
