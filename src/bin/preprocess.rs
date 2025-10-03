@@ -224,7 +224,7 @@ fn main() -> Result<()> {
 
     println!(
         "Finished processing {} articles",
-        article_count.load(Ordering::Relaxed)
+        article_count.load(Ordering::Relaxed).separate_with_commas()
     );
 
     Ok(())

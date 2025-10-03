@@ -21,7 +21,8 @@
         "subword",
         "subwords",
         "vocabs",
-        "zstd"
+        "zstd",
+        "zstdcat"
     ],
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,
