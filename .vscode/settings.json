@@ -9,6 +9,7 @@
         "enwiki",
         "FEFF",
         "formatcp",
+        "Halfaker's",
         "itertools",
         "malloc",
         "memcpy",
@@ -21,6 +22,7 @@
         "subword",
         "subwords",
         "vocabs",
+        "Wikitext",
         "zstd",
         "zstdcat"
     ],
