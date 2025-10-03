@@ -8,7 +8,12 @@ use {
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
     rust_gpt::utils::canonicalize_path,
-    std::{fs::File, io::Write, path::PathBuf, sync::LazyLock},
+    std::{
+        fs::File,
+        io::Write,
+        path::PathBuf,
+        sync::{Arc, LazyLock, Mutex, atomic::AtomicU32},
+    },
 };
 
 /// Parse a Stanford Oval Wikipedia parquet file creating shards of normalized,
@@ -58,168 +63,169 @@ fn main() -> Result<()> {
         })?;
     }
 
-    // Buffer up to 64 articles that need to be further processed and sharded
-    let (tx, rx) = crossbeam_channel::bounded(64);
+    let (tx, rx) = crossbeam_channel::unbounded();
+
+    let batch_size = rayon::current_num_threads();
 
     let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&canonicalize_path(
         &args.input_file,
     )?)?)?
-    .with_batch_size(rayon::current_num_threads() * 16)
-    .with_limit(50)
+    .with_batch_size(batch_size)
     .build()?;
 
-    // Reads rows from the parquet file and produces assembled Wikipedia articles.
-    std::thread::spawn(move || {
-        reader
-            .filter_map(|batch| {
-                if let Err(error) = &batch {
-                    eprintln!("{error}");
-                }
-                batch.ok()
-            })
-            .map(|batch| {
-                // see dataset card for column names
-                // https://huggingface.co/datasets/stanford-oval/wikipedia
-                let document_title = column(&batch, "document_title")?;
-                let section_title = column(&batch, "section_title")?;
-                let content = column(&batch, "content")?;
+    println!("Reading batches of {batch_size} rows from the parquet file...");
 
-                let rows = (0..batch.num_rows())
-                    .map(|i| {
-                        let document_title = document_title.value(i);
-                        let section_title = section_title.value(i);
-                        let content = content.value(i);
-                        (document_title, section_title, content)
-                    })
-                    .filter(|(document_title, _, content)| {
-                        !document_title.is_empty() && !content.is_empty()
-                    })
-                    .map(|(document_title, section_title, content)| {
-                        (
-                            document_title,
-                            if section_title.is_empty() {
-                                None
-                            } else {
-                                Some(section_title)
-                            },
-                            content,
-                        )
-                    })
-                    .collect::<Vec<_>>();
+    reader
+        .filter_map(|batch| {
+            if let Err(error) = &batch {
+                eprintln!("{error}");
+            }
+            batch.ok()
+        })
+        .map(|batch| {
+            println!(
+                "Collecting parquet columns from batch of {} rows...",
+                batch.num_rows()
+            );
+            // see dataset card for column names
+            // https://huggingface.co/datasets/stanford-oval/wikipedia
+            let document_title = column(&batch, "document_title")?;
+            let section_title = column(&batch, "section_title")?;
+            let content = column(&batch, "content")?;
 
-                // process the batched rows in parallel
-                let rows = rows
-                    .par_iter()
-                    .map(|(document_title, section_title, content)| {
-                        anyhow::Ok((
-                            process_text(document_title)?,
-                            if let Some(section_title) = section_title {
-                                Some(process_text(section_title)?)
-                            } else {
-                                None
-                            },
-                            process_text(content)?,
-                        ))
-                    })
-                    .filter_map(|result| {
-                        if let Err(error) = &result {
-                            eprintln!("{error}");
-                        }
-                        result.ok()
-                    })
-                    .collect::<Vec<_>>();
+            let rows = (0..batch.num_rows())
+                .map(|i| {
+                    let document_title = document_title.value(i);
+                    let section_title = section_title.value(i);
+                    let content = content.value(i);
+                    (document_title, section_title, content)
+                })
+                .filter(|(document_title, _, content)| {
+                    !document_title.is_empty() && !content.is_empty()
+                })
+                .map(|(document_title, section_title, content)| {
+                    (
+                        document_title,
+                        if section_title.is_empty() {
+                            None
+                        } else {
+                            Some(section_title)
+                        },
+                        content,
+                    )
+                })
+                .collect::<Vec<_>>();
 
-                anyhow::Ok(rows)
-            })
-            .filter_map(|result| {
-                if let Err(error) = &result {
-                    eprintln!("{error}");
-                }
-                result.ok()
-            })
-            .flatten()
-            .chunk_by(
-                // Groups consecutive rows that have the same document_title
-                |(document_title, ..)| document_title.to_owned(),
-            )
-            .into_iter()
-            .for_each(|(document_title, group)| {
-                let article = Article {
-                    document_title,
-                    sections: group
-                        .map(|(_, section_title, content)| Section {
-                            title: section_title,
-                            content,
-                        })
-                        .collect::<Vec<_>>(),
-                };
+            println!("Processing batched rows in parallel...");
+            for row in &rows {
+                println!("{row:?}");
+            }
+            println!("Done printing all rows");
+            let rows = rows
+                .par_iter()
+                .map(|(document_title, section_title, content)| {
+                    println!("Processing row...");
+                    anyhow::Ok((
+                        process_text(document_title)?,
+                        if let Some(section_title) = section_title {
+                            Some(process_text(section_title)?)
+                        } else {
+                            None
+                        },
+                        process_text(content)?,
+                    ))
+                })
+                .filter_map(|result| {
+                    if let Err(error) = &result {
+                        eprintln!("{error}");
+                    }
+                    result.ok()
+                })
+                .collect::<Vec<_>>();
+            println!("Done processing batch");
+            anyhow::Ok(rows)
+        })
+        .filter_map(|result| {
+            if let Err(error) = &result {
+                eprintln!("{error}");
+            }
+            result.ok()
+        })
+        .flatten()
+        .chunk_by(
+            // Groups consecutive rows that have the same document_title
+            |(document_title, ..)| document_title.to_owned(),
+        )
+        .into_iter()
+        .for_each(move |(document_title, group)| {
+            let article = Article {
+                document_title,
+                sections: group
+                    .map(|(_, section_title, content)| Section {
+                        title: section_title,
+                        content,
+                    })
+                    .collect::<Vec<_>>(),
+            };
 
-                // Block until the channel is ready to receive the article
-                tx.send(article).expect("channel is not open");
-            });
-    });
+            // Block until the channel is ready to receive the article
+            tx.send(article).expect("channel is not open");
+        });
+
+    let encoders = Arc::new(Mutex::new(
+        (0..rayon::current_num_threads())
+            .map(|_| None)
+            .collect::<Vec<_>>(),
+    ));
+
+    let article_count = AtomicU32::new(0);
 
     rx.into_iter()
-        .enumerate()
         .par_bridge()
-        .map(|(i, article)| {
-            let mut file = File::create(args.output_dir.join(format!("shard-{i}.md.zstd")))?;
+        .try_for_each(|article| -> Result<()> {
+            article_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
-            let mut encoder = zstd::Encoder::new(
-                &mut file,
-                // The compression level for the zstd encoder.
-                // The higher the level, the more compressed the data will be.
-                // Decompressing is same speed regardless of the level.
-                19,
-            )?
-            .auto_finish();
+            let markdown = article.to_markdown()?;
+            let thread_idx = rayon::current_thread_index().expect("thread index is not available");
 
-            // Build markdown document
-            let mut markdown = String::new();
-
-            // Add document title as H1
-            markdown.push_str("# ");
-            markdown.push_str(&article.document_title);
-            markdown.push_str("\n\n");
-
-            // Add each section
-            for section in &article.sections {
-                // Add section title as H2 if it exists and is not empty
-                if let Some(title) = &section.title
-                    && !title.is_empty()
-                {
-                    markdown.push_str("## ");
-                    markdown.push_str(title);
-                    markdown.push_str("\n\n");
-                }
-
-                // Add section content
-                markdown.push_str(&section.content);
-                markdown.push_str("\n\n");
+            // Get or create encoder for this thread
+            let mut encoders = encoders.lock().expect("failed to lock encoders");
+            if encoders[thread_idx].is_none() {
+                let file_name = format!("shard-{}.md.zstd", thread_idx);
+                println!("Writing to {file_name}...");
+                let file = File::create(args.output_dir.join(file_name))?;
+                let encoder = Box::new(
+                    zstd::Encoder::new(
+                        file,
+                        // The compression level for the zstd encoder.
+                        // The higher the level, the more compressed the data will be.
+                        // Decompressing is same speed regardless of the level.
+                        19,
+                    )?
+                    .auto_finish(),
+                );
+                encoders[thread_idx] = Some(encoder);
             }
 
-            let arena = comrak::Arena::new();
-            let options = comrak::Options::default();
-            let root = comrak::parse_document(&arena, &markdown, &options);
+            let encoder = encoders[thread_idx]
+                .as_mut()
+                .expect("encoder is not available")
+                .as_mut();
 
-            // Format to a string
-            let mut buffer = String::new();
-            comrak::format_commonmark(root, &options, &mut buffer)?;
-
-            // Write to encoder
-            encoder.write_all(buffer.as_bytes())?;
+            encoder.write_all(markdown.as_bytes())?;
 
             // Add end-of-text character
             // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
             encoder.write_all("\u{3}".as_bytes())?;
 
-            anyhow::Ok(())
+            Ok(())
         })
-        .for_each(|result| {
-            if let Err(error) = result {
-                eprintln!("{error}");
-            }
-        });
+        .unwrap_or_else(|e| eprintln!("Error processing articles: {}", e));
+
+    println!(
+        "Finished processing {} articles",
+        article_count.load(std::sync::atomic::Ordering::Relaxed)
+    );
 
     Ok(())
 }
@@ -276,4 +282,59 @@ fn process_text(text: &str) -> Result<String> {
     NFC.normalize_to(&text, &mut buffer)?;
 
     Ok(buffer)
+}
+
+impl Article {
+    /// Return a string of properly formatted markdown.
+    fn to_markdown(&self) -> Result<String> {
+        // Add 20% extra
+        let mut markdown = String::with_capacity(self.len() + self.len() / 5);
+
+        // Add document title as H1
+        markdown.push_str("# ");
+        markdown.push_str(&self.document_title);
+        markdown.push_str("\n\n");
+
+        // Add each section
+        for section in &self.sections {
+            // Add section title as H2 if it exists and is not empty
+            if let Some(title) = &section.title
+                && !title.is_empty()
+            {
+                markdown.push_str("## ");
+                markdown.push_str(title);
+                markdown.push_str("\n\n");
+            }
+
+            // Add section content
+            markdown.push_str(&section.content);
+            markdown.push_str("\n\n");
+        }
+
+        let arena = comrak::Arena::new();
+        let options = comrak::Options::default();
+        let root = comrak::parse_document(&arena, &markdown, &options);
+
+        let mut formatted = String::with_capacity((markdown.len() as f32 * 1.2) as usize);
+        comrak::format_commonmark(root, &options, &mut formatted)?;
+
+        Ok(formatted)
+    }
+
+    /// Get the byte length of the article.
+    fn len(&self) -> usize {
+        self.document_title.len()
+            + self
+                .sections
+                .iter()
+                .map(|section| section.len())
+                .sum::<usize>()
+    }
+}
+
+impl Section {
+    /// Get the byte length of the section.
+    fn len(&self) -> usize {
+        self.title.as_ref().map(|title| title.len()).unwrap_or(0) + self.content.len()
+    }
 }
