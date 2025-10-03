@@ -14,6 +14,7 @@ use {
         path::PathBuf,
         sync::{Arc, LazyLock, Mutex, atomic::AtomicU32},
     },
+    thousands::Separable,
 };
 
 /// Parse a Stanford Oval Wikipedia parquet file creating shards of normalized,
@@ -116,15 +117,9 @@ fn main() -> Result<()> {
                 })
                 .collect::<Vec<_>>();
 
-            println!("Processing batched rows in parallel...");
-            for row in &rows {
-                println!("{row:?}");
-            }
-            println!("Done printing all rows");
             let rows = rows
                 .par_iter()
                 .map(|(document_title, section_title, content)| {
-                    println!("Processing row...");
                     anyhow::Ok((
                         process_text(document_title)?,
                         if let Some(section_title) = section_title {
@@ -183,7 +178,11 @@ fn main() -> Result<()> {
     rx.into_iter()
         .par_bridge()
         .try_for_each(|article| -> Result<()> {
-            article_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let processed = article_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+
+            if processed % 1000 == 0 {
+                println!("Processed {} articles...", processed.separate_with_commas());
+            }
 
             let markdown = article.to_markdown()?;
             let thread_idx = rayon::current_thread_index().expect("thread index is not available");
@@ -220,7 +219,7 @@ fn main() -> Result<()> {
 
             Ok(())
         })
-        .unwrap_or_else(|e| eprintln!("Error processing articles: {}", e));
+        .unwrap_or_else(|error| eprintln!("Error processing articles: {error}"));
 
     println!(
         "Finished processing {} articles",
