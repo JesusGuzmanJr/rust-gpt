@@ -173,11 +173,11 @@ converting text into tokens. It has a couple desirable properties:
 
 ___
 
-### References
+### Code References
 
-- [TikToken](https://github.com/openai/tiktoken) - OpenAI's tokenization library
-- [Tokenizers](https://github.com/huggingface/tokenizers) - A generic tokenization library with multiple algorithms to choose from
-- [minbpe](https://github.com/karpathy/minbpe) - Karpathy's educational implementation of BPE.
+- [tiktoken](https://github.com/openai/tiktoken) - OpenAI's BPE implementation
+- [tokenizers](https://github.com/huggingface/tokenizers) - HuggingFace's implementation of widely used tokenizers
+- [minbpe](https://github.com/karpathy/minbpe) - Karpathy's educational BPE implementation
 
 ### Learning Materials
 

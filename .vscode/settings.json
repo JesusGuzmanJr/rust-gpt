@@ -26,6 +26,7 @@
         "smallvec",
         "subword",
         "subwords",
+        "tiktoken",
         "vocabs",
         "Wikitext",
         "Zstandard",
