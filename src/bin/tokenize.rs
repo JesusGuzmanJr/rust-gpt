@@ -24,20 +24,14 @@
 //! - [TikToken](https://github.com/openai/tiktoken)
 //! - [Tokenizers](https://github.com/huggingface/tokenizers)
 use {
-    ahash::HashMap,
+    ahash::{AHashSet, HashMap},
     anyhow::Result,
     clap::Parser,
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::utils::canonicalize_path,
     smallvec::SmallVec,
-    std::{
-        fs::File,
-        io::{BufRead, BufReader},
-        path::PathBuf,
-        sync::LazyLock,
-        time::Instant,
-    },
+    std::{fs::File, io::BufRead, path::PathBuf, sync::LazyLock, time::Instant},
     thousands::Separable,
 };
 
@@ -113,6 +107,8 @@ struct Args {
 ///
 /// ---
 ///
+/// ## Design Notes
+///
 /// We use optional leading space to preserve spacing information.
 /// E.g.
 /// ```txt
@@ -167,20 +163,21 @@ fn main() -> Result<()> {
         .par_iter()
         .map(|file| {
             let mut word_frequencies: HashMap<ByteString, u32> = HashMap::default();
-            let mut line = String::new();
-
-            let mut reader = BufReader::new(zstd::Decoder::new(File::open(file)?)?);
+            let mut buffer = String::new();
+            let mut reader = std::io::BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
             loop {
-                line.clear();
+                // Clearing is O(1).
+                buffer.clear();
+
                 // we are tokenizing by whitespaces (among other things)
                 // so splitting lines by newline doesn't split words
-                if reader.read_line(&mut line)? == 0 {
+                if reader.read_line(&mut buffer)? == 0 {
                     break;
                 }
 
                 WORD_BOUNDARY_RE
-                    .find_iter(&line)
+                    .find_iter(&buffer)
                     .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
                     .for_each(|w| {
                         *word_frequencies.entry(w).or_default() += 1;
@@ -226,25 +223,42 @@ fn main() -> Result<()> {
         println!("First {TOP_N} most frequent words:");
         for (word, count) in word_frequencies.iter().take(TOP_N) {
             println!(
-                "`{}`: {}",
+                "{:>16} → {:?}",
+                count.separate_with_commas(),
                 String::from_utf8_lossy(word.as_slice()),
-                count.separate_with_commas()
             );
         }
     }
 
-    // let word_frequencies = word_frequencies
-    //     .iter()
-    //     .collect::<Vec<_>>()
-    //     .chunks(1024)
-    //     .collect::<Vec<_>>()
-    //     .par_iter()
-    //     .map(|chunk| {
-    //         // let mut pair_counts = HashMap::default();
+    // Break down words into byte strings in preparation for BPE.
+    // b"low" -> [[b"l"], [b"o"], [b"w"]]
+    let start = Instant::now();
+    println!("Breaking down words into byte tokens...");
 
-    //         // for window in
-    //         // //
+    let mut word_frequencies = word_frequencies
+        .par_iter()
+        .map(|(word, count)| {
+            (
+                word.iter()
+                    .map(|b| ByteString::from_slice(&[*b]))
+                    .collect::<SmallVec<[ByteString; 32]>>(),
+                *count,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    println!("Done breaking down words in {:0.2?}", start.elapsed());
+
+    let mut vocabulary = (0x00u8..=0xff).collect::<AHashSet<_>>();
+
+    // .len() is O(1)
+    // while vocabulary.len() < args.vocab_size {
+    //     word_frequencies.par_iter().map(|(word, count)| {
+    //         for i in 0..word.len() - 1 {
+    //             vocabulary.insert(word[i]);
+    //         }
     //     });
+    // }
 
     Ok(())
 }
