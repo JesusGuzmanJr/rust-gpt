@@ -23,11 +23,19 @@
 //! ### References
 //! - [TikToken](https://github.com/openai/tiktoken)
 //! - [Tokenizers](https://github.com/huggingface/tokenizers)
+//! - [minbpe](https://github.com/karpathy/minbpe)
+//!
+//! ### Learning Materials
+//! - [Video lecture by Dan Jurafsky on BPE algorithm](https://www.youtube.com/watch?v=tOMjTCO0htA)
+//! - [GPT Tokenizer walkthrough by Andrew Karpathy](https://www.youtube.com/watch?v=zduSFxRajkE)
 use {
     ahash::{AHashSet, HashMap},
-    anyhow::Result,
+    anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    rayon::iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
     regex::Regex,
     rust_gpt::utils::canonicalize_path,
     smallvec::SmallVec,
@@ -36,7 +44,7 @@ use {
 };
 
 // Up to 32 bytes can be allocated on the stack before heap allocating.
-type ByteString = SmallVec<[u8; 32]>;
+type Token = SmallVec<[u8; 32]>;
 
 /// Tokenize a directory of normalized, compressed markdown shards using
 /// byte-level byte pair encoding (BPE).
@@ -145,6 +153,10 @@ static WORD_BOUNDARY_RE: LazyLock<Regex> = LazyLock::new(|| {
 fn main() -> Result<()> {
     let args = Args::parse();
 
+    if args.vocab_size < 256 {
+        anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
+    }
+
     let input_dir = canonicalize_path(&args.input_dir)?;
 
     let input_files = std::fs::read_dir(&input_dir)?
@@ -162,7 +174,7 @@ fn main() -> Result<()> {
     let word_frequencies = input_files
         .par_iter()
         .map(|file| {
-            let mut word_frequencies: HashMap<ByteString, u32> = HashMap::default();
+            let mut word_frequencies: HashMap<Token, u32> = HashMap::default();
             let mut buffer = String::new();
             let mut reader = std::io::BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
@@ -178,7 +190,7 @@ fn main() -> Result<()> {
 
                 WORD_BOUNDARY_RE
                     .find_iter(&buffer)
-                    .map(|w| ByteString::from_slice(w.as_str().as_bytes()))
+                    .map(|w| Token::from_slice(w.as_str().as_bytes()))
                     .for_each(|w| {
                         *word_frequencies.entry(w).or_default() += 1;
                     });
@@ -230,8 +242,8 @@ fn main() -> Result<()> {
         }
     }
 
-    // Break down words into byte strings in preparation for BPE.
-    // b"low" -> [[b"l"], [b"o"], [b"w"]]
+    // Break down words into bytes for byte-level BPE.
+    // b"low" -> [b"l", b"o", b"w"]
     let start = Instant::now();
     println!("Breaking down words into byte tokens...");
 
@@ -240,8 +252,8 @@ fn main() -> Result<()> {
         .map(|(word, count)| {
             (
                 word.iter()
-                    .map(|b| ByteString::from_slice(&[*b]))
-                    .collect::<SmallVec<[ByteString; 32]>>(),
+                    .map(|b| Token::from_slice(&[*b]))
+                    .collect::<SmallVec<[Token; 32]>>(),
                 *count,
             )
         })
@@ -252,13 +264,37 @@ fn main() -> Result<()> {
     let mut vocabulary = (0x00u8..=0xff).collect::<AHashSet<_>>();
 
     // .len() is O(1)
-    // while vocabulary.len() < args.vocab_size {
-    //     word_frequencies.par_iter().map(|(word, count)| {
-    //         for i in 0..word.len() - 1 {
-    //             vocabulary.insert(word[i]);
-    //         }
-    //     });
-    // }
+    while vocabulary.len() < args.vocab_size {
+        // Video lecture by Dan Jurafsky on BPE algorithm: https://www.youtube.com/watch?v=tOMjTCO0htA
+
+        let start = Instant::now();
+        println!("Computing most frequent pair of adjacent tokens...");
+
+        let top_pair = *word_frequencies
+            .par_iter()
+            .map(|(word, count)| {
+                word.windows(2)
+                    .fold(HashMap::<&[Token], u32>::default(), |mut acc, pair| {
+                        *acc.entry(pair).or_default() += count;
+                        acc
+                    })
+            })
+            .reduce(HashMap::default, |mut acc, pair_counts| {
+                for (pair, count) in pair_counts {
+                    *acc.entry(pair).or_default() += count;
+                }
+                acc
+            })
+            .par_iter()
+            .max_by_key(|(_, count)| **count)
+            .context("not enough tokens to compute most frequent pair")?
+            .0;
+
+        println!(
+            "Done computing most frequent pair in {:0.2?}",
+            start.elapsed()
+        );
+    }
 
     Ok(())
 }
