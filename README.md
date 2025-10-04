@@ -18,18 +18,16 @@ There's no direct converter from Wikitext (Wikipedia's markdown format used in t
 
 The dataset is in Apache Parquet format. This format is interesting in that it allows processing tabular data with lots of columns. You only need to load the columns of interest from a batch of rows at once.
 
-
 Each row of the `collection.parquet` represents a section of a Wikipedia article. We need to group multiple consecutive rows with the same `document_title` together to form complete articles.
 
 **Example input data** (other columns not shown):
 
-| document_title      | section_title | content                                    |
-|---------------------|---------------|--------------------------------------------|
-| "Anarchism"         | ""            | "Anarchism is a political philosophy..."   |
-| "Anarchism"         | "Etymology"   | "The word anarchism is derived from..."    |
-| "Anarchism"         | "History"     | "The history of anarchism dates back..."   |
-| "Albert Einstein"   | ""            | "Albert Einstein was a German-born..."     |
-
+| document_title    | section_title | content                                  |
+| ----------------- | ------------- | ---------------------------------------- |
+| "Anarchism"       | ""            | "Anarchism is a political philosophy..." |
+| "Anarchism"       | "Etymology"   | "The word anarchism is derived from..."  |
+| "Anarchism"       | "History"     | "The history of anarchism dates back..." |
+| "Albert Einstein" | ""            | "Albert Einstein was a German-born..."   |
 
 ### What the Preprocessor Does
 
@@ -58,6 +56,7 @@ The `preprocess` binary (`src/bin/preprocess.rs`) performs the following operati
 ### Output Format
 
 **Output files:**
+
 ```
 output-dir/
   ├── shard-0.md.zstd
@@ -67,6 +66,7 @@ output-dir/
 ```
 
 To view:
+
 ```sh
 FILE=/var/lib/rust-gpt/training-data/stanford-oval/wikipedia/20250320/en/preprocessed/shard-0.md.zstd
 
@@ -85,6 +85,7 @@ zstdcat $FILE | dd bs=1 skip=$OFFSET | head -100
 ```
 
 Each shard contains multiple articles in this format:
+
 ```markdown
 # Article Title
 
@@ -129,13 +130,68 @@ Parquet File → Producer (Rayon task)
 
 The producer reads and processes parquet row batches in parallel, sends assembled articles through a channel, and consumers (Rayon workers; one per logical CPU core) write to thread-local shard files in parallel.
 
+---
+
 ## Tokenizer Training
 
-*(Work in Progress)*
+<details>
+<summary>
+Why do we need a tokenizer?
+</summary>
+
+We use a tokenizer to turn raw text into a sequence of discrete, learnable units that make training and inference far more efficient while still covering any input. We can't use words as tokens because our vocabulary would be too large. We can't use bytes either because our sequences would be too long. We need a sub-word, multi-byte approach instead.
+
+| Strategy          | Pros                       | Cons                                                       |
+| ----------------- | -------------------------- | ---------------------------------------------------------- |
+| Tokenize by words | Fast decoding              | Explodes vocabulary size (~10M+), massive memory overhead  |
+| Tokenize by bytes | Fully general, small vocab | Extremely long sequences, poor compression, slow inference |
+
+
+</details>
+
+I’m using byte-level BPE (BBPE), a variant of BPE that treats the 256 byte values as the base alphabet instead of Unicode characters. The key benefit is total coverage: any input can be represented, so the tokenizer never needs an `<unk>` (unknown) token.
+
+### Byte Pair Encoding
+
+Language models don't see text like you and I, instead they see a sequence
+of numbers (known as tokens). Byte pair encoding (BPE) is a way of
+converting text into tokens. It has a couple desirable properties:
+
+- It's reversible and lossless, so you can convert tokens back into the
+  original text
+- It works on arbitrary text, even text that is not in the tokenizer's
+  training data
+- It compresses the text: the token sequence is shorter than the bytes
+  corresponding to the original text. On average, in practice, each token
+  corresponds to about 4 bytes.
+- It attempts to let the model see common subwords. For instance, "ing" is a
+  common subword in English, so BPE encodings will often split "encoding"
+  into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding").
+  Because the model will then see the "ing" token again and again in
+  different contexts, it helps models generalize and better understand
+  grammar.
+
+___
+
+### References
+
+- [TikToken](https://github.com/openai/tiktoken) - OpenAI's tokenization library
+- [Tokenizers](https://github.com/huggingface/tokenizers) - A generic tokenization library with multiple algorithms to choose from
+- [minbpe](https://github.com/karpathy/minbpe) - Karpathy's educational implementation of BPE.
+
+### Learning Materials
+
+- [Video lecture by Dan Jurafsky on BPE algorithm](https://www.youtube.com/watch?v=tOMjTCO0htA)
+- [GPT Tokenizer walkthrough by Andrew Karpathy](https://www.youtube.com/watch?v=zduSFxRajkE)
+- [A Programmer’s Introduction to Unicode by Nathan Reed](https://www.reedbeta.com/blog/programmers-intro-to-unicode)
+
+---
 
 ## Pre-Training
 
 *(Work in Progress)*
+
+---
 
 ## Inference
 

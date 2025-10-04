@@ -1,33 +1,3 @@
-//! # Byte Pair Encoding
-//!
-//! Language models don't see text like you and I, instead they see a sequence
-//! of numbers (known as tokens). Byte pair encoding (BPE) is a way of
-//! converting text into tokens. It has a couple desirable properties:
-//!
-//! - It's reversible and lossless, so you can convert tokens back into the
-//!   original text
-//! - It works on arbitrary text, even text that is not in the tokenizer's
-//!   training data
-//! - It compresses the text: the token sequence is shorter than the bytes
-//!   corresponding to the original text. On average, in practice, each token
-//!   corresponds to about 4 bytes.
-//! - It attempts to let the model see common subwords. For instance, "ing" is a
-//!   common subword in English, so BPE encodings will often split "encoding"
-//!   into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding").
-//!   Because the model will then see the "ing" token again and again in
-//!   different contexts, it helps models generalize and better understand
-//!   grammar.
-//!
-//!  ---
-//!
-//! ### References
-//! - [TikToken](https://github.com/openai/tiktoken)
-//! - [Tokenizers](https://github.com/huggingface/tokenizers)
-//! - [minbpe](https://github.com/karpathy/minbpe)
-//!
-//! ### Learning Materials
-//! - [Video lecture by Dan Jurafsky on BPE algorithm](https://www.youtube.com/watch?v=tOMjTCO0htA)
-//! - [GPT Tokenizer walkthrough by Andrew Karpathy](https://www.youtube.com/watch?v=zduSFxRajkE)
 use {
     ahash::{AHashSet, HashMap},
     anyhow::{Context, Result},
@@ -48,39 +18,8 @@ type Token = SmallVec<[u8; 32]>;
 
 /// Tokenize a directory of normalized, compressed markdown shards using
 /// byte-level byte pair encoding (BPE).
-///
-/// Byte-level BPE is a subtype of BPE that uses bytes instead of characters as
-/// basic token component.
-///
-/// ---
-///
-/// # Byte Pair Encoding
-///
-/// Language models don't see text like you and I, instead they see a sequence
-/// of numbers (known as tokens). Byte pair encoding (BPE) is a way of
-/// converting text into tokens. It has a couple desirable properties:
-///
-/// - It's reversible and lossless, so you can convert tokens back into the
-///   original text
-/// - It works on arbitrary text, even text that is not in the tokenizer's
-///   training data
-/// - It compresses the text: the token sequence is shorter than the bytes
-///   corresponding to the original text. On average, in practice, each token
-///   corresponds to about 4 bytes.
-/// - It attempts to let the model see common subwords. For instance, "ing" is a
-///   common subword in English, so BPE encodings will often split "encoding"
-///   into tokens like "encod" and "ing" (instead of e.g. "enc" and "oding").
-///   Because the model will then see the "ing" token again and again in
-///   different contexts, it helps models generalize and better understand
-///   grammar.
-///
-///  ---
-///
-/// ### References
-/// - [TikToken](https://github.com/openai/tiktoken)
-/// - [Tokenizers](https://github.com/huggingface/tokenizers)
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Args {
     /// Path to the input directory with the normalized, zstd-compressed
     /// preprocessed shards of textual content.
