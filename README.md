@@ -2,6 +2,10 @@
 
 A Rust implementation for training / running GPT models from scratch.
 
+This is an education project in the sprit of Richard Feynman's:
+
+> What I cannot create, I do not understand.
+
 ## Data Preprocessing
 
 ### Input Data Format

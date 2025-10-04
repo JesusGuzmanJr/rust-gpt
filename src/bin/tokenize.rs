@@ -33,20 +33,40 @@ struct Args {
     #[arg(short, long)]
     output_file: PathBuf,
 
-    /// The target vocabulary size.
+    /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
+    /// directly impacts how text is tokenized.
     ///
-    /// For English, 50,000 tokens is a good default.
+    /// ### Larger Vocabulary
     ///
-    /// A larger vocabulary produces bigger pieces per token which means fewer
-    /// tokens per text or shorter token sequences. This translates to faster
-    /// training/inference per sequence at the cost of slower tokenization,
-    /// overfiting, etc.
+    /// A larger vocabulary produces bigger pieces per token which means
+    /// fewer tokens per text or shorter token sequences. This translates to
+    /// faster training/inference per sequence at the cost of slower
+    /// tokenization, overfiting, etc.
+    ///
+    /// - Fewer tokens per sentence (longer subwords or even whole words are
+    ///   represented as single tokens).
+    /// - Better for capturing rare words or linguistic nuances. Increases
+    ///   memory and computational costs for embedding and training.
+    /// - Increases memory and computational costs for embedding and training.
+    ///
+    /// ### Smaller Vocabulary
     ///
     /// A smaller vocabulary produces smaller pieces per token which means more
     /// tokens per text or longer token sequences. This translates to slower
     /// training/inference per sequence but with the benefit of better subword
     /// sharing across rarer forms, smaller embeddings, etc.
-    #[arg(short, long, default_value = "50000")]
+    ///
+    /// - More tokens per sentence (each token represents a smaller unit like a
+    ///   character or short subword).
+    /// - Since token length for sentences is very high, the tokens may not fit
+    ///   in context length of LLMs. This may lead to loss of context and poor
+    ///   LLM training.
+    ///
+    /// ### Examples in industry
+    ///
+    /// - GPT-2 has a vocabulary size of 50257
+    /// - GPT-4 has a vocabulary size of ~100,000
+    #[arg(short, long)]
     vocab_size: usize,
 }
 
@@ -204,7 +224,7 @@ fn main() -> Result<()> {
 
     // .len() is O(1)
     while vocabulary.len() < args.vocab_size {
-        // Video lecture by Dan Jurafsky on BPE algorithm: https://www.youtube.com/watch?v=tOMjTCO0htA
+        // Video lecture by Dan Jurafsky on BPE algorithm will come in hand here: https://www.youtube.com/watch?v=tOMjTCO0htA
 
         let start = Instant::now();
         println!("Computing most frequent pair of adjacent tokens...");
