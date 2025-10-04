@@ -2,19 +2,13 @@ use {
     ahash::{AHashSet, HashMap},
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{
-        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
-        ParallelIterator,
-    },
+    rayon::iter::{IntoParallelRefIterator, ParallelIterator},
     regex::Regex,
-    rust_gpt::utils::canonicalize_path,
+    rust_gpt::{Token, TokenId, utils::canonicalize_path},
     smallvec::SmallVec,
     std::{fs::File, io::BufRead, path::PathBuf, sync::LazyLock, time::Instant},
     thousands::Separable,
 };
-
-// Up to 32 bytes can be allocated on the stack before heap allocating.
-type Token = SmallVec<[u8; 32]>;
 
 /// Tokenize a directory of normalized, compressed markdown shards using
 /// byte-level byte pair encoding (BPE).
@@ -29,14 +23,14 @@ struct Args {
     #[arg(short, long)]
     input_dir: PathBuf,
 
-    /// Path to save the tokenizer *.zstd file.
+    /// Path to save the tokenizer file.
     #[arg(short, long)]
     output_file: PathBuf,
 
     /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
     /// directly impacts how text is tokenized.
     ///
-    /// ### Larger Vocabulary
+    /// Larger Vocabulary
     ///
     /// A larger vocabulary produces bigger pieces per token which means
     /// fewer tokens per text or shorter token sequences. This translates to
@@ -45,11 +39,13 @@ struct Args {
     ///
     /// - Fewer tokens per sentence (longer subwords or even whole words are
     ///   represented as single tokens).
+    ///
     /// - Better for capturing rare words or linguistic nuances. Increases
     ///   memory and computational costs for embedding and training.
+    ///
     /// - Increases memory and computational costs for embedding and training.
     ///
-    /// ### Smaller Vocabulary
+    /// Smaller Vocabulary
     ///
     /// A smaller vocabulary produces smaller pieces per token which means more
     /// tokens per text or longer token sequences. This translates to slower
@@ -58,13 +54,15 @@ struct Args {
     ///
     /// - More tokens per sentence (each token represents a smaller unit like a
     ///   character or short subword).
-    /// - Since token length for sentences is very high, the tokens may not fit
-    ///   in context length of LLMs. This may lead to loss of context and poor
-    ///   LLM training.
     ///
-    /// ### Examples in industry
+    /// - Since token length for sentences is very high, the tokens may not fit
+    ///   in context length of models. This may lead to loss of context and poor
+    ///   model training.
+    ///
+    /// Examples in industry
     ///
     /// - GPT-2 has a vocabulary size of 50257
+    ///
     /// - GPT-4 has a vocabulary size of ~100,000
     #[arg(short, long)]
     vocab_size: usize,
@@ -220,16 +218,20 @@ fn main() -> Result<()> {
 
     println!("Done breaking down words in {:0.2?}", start.elapsed());
 
-    let mut vocabulary = (0x00u8..=0xff).collect::<AHashSet<_>>();
+    let mut vocabulary = (0x00u8..=0xff)
+        .map(|b| (b as u16, Token::from_slice(&[b])))
+        .collect::<HashMap<_, _>>();
 
-    // .len() is O(1)
-    while vocabulary.len() < args.vocab_size {
+    // num_merges = vocab_size - 256 base bytes (because this is byte-level BPE)
+    // loop num_merges times
+    for _ in 0..(args.vocab_size - 256) {
         // Video lecture by Dan Jurafsky on BPE algorithm will come in hand here: https://www.youtube.com/watch?v=tOMjTCO0htA
 
         let start = Instant::now();
         println!("Computing most frequent pair of adjacent tokens...");
 
-        let top_pair = *word_frequencies
+        // compute the most frequent pair of adjacent tokens from the word frequencies
+        let most_frequent = *word_frequencies
             .par_iter()
             .map(|(word, count)| {
                 word.windows(2)
@@ -250,10 +252,18 @@ fn main() -> Result<()> {
             .0;
 
         println!(
-            "Done computing most frequent pair in {:0.2?}",
+            "Done computing the most frequent pair in {:0.2?}",
             start.elapsed()
         );
+
+        // merge the most frequent pair
     }
+
+    assert_eq!(
+        vocabulary.len(),
+        args.vocab_size,
+        "vocabulary size is not equal to the target vocabulary size"
+    );
 
     Ok(())
 }
