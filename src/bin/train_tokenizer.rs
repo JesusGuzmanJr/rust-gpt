@@ -2,13 +2,18 @@ use {
     ahash::{AHashSet, HashMap, HashSet},
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    rayon::iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
     regex::Regex,
     rust_gpt::{Token, TokenId, utils::canonicalize_path},
     smallvec::SmallVec,
     std::{fs::File, io::BufRead, path::PathBuf, sync::LazyLock, time::Instant},
     thousands::Separable,
 };
+
+type TokenVec = SmallVec<[Token; 32]>;
 
 /// Tokenize a directory of normalized, compressed markdown shards using
 /// byte-level byte pair encoding (BPE).
@@ -204,13 +209,15 @@ fn main() -> Result<()> {
     let start = Instant::now();
     println!("Breaking down words into byte tokens...");
 
+    // We want word_frequencies to be a vector so we can operate on its indices in
+    // parallel
     let mut word_frequencies = word_frequencies
         .par_iter()
         .map(|(word, count)| {
             (
                 word.iter()
                     .map(|b| Token::from_slice(&[*b]))
-                    .collect::<SmallVec<[Token; 32]>>(),
+                    .collect::<TokenVec>(),
                 *count,
             )
         })
@@ -229,66 +236,107 @@ fn main() -> Result<()> {
         // https://www.youtube.com/watch?v=tOMjTCO0htA
 
         let start = Instant::now();
-        println!("Computing most frequent pair of adjacent tokens...");
+        println!("Finding most frequent pair of adjacent tokens...");
 
-        // compute the most frequent pair of adjacent tokens from the word frequencies
-        let pair_mapping = word_frequencies
-            .par_iter()
-            .enumerate()
-            .map(|(i, (word, count))| {
-                // map each word into a mapping of adjacent tokens to counts
-                // (i, word, count) -> [(pair1: (count, i)), (pair2: (count, i)),
-                // ...]
-                //
-                // i: 0 // index of the word in the word frequencies list
-                // word: "hello"
-                // count: 3
-                //
-                // pairs: ("h", "e"), ("e", "l"), ("l", "l"), ("l", "o")
-                //
-                // pair counts: ("h", "e", 3,), ("e", "l", 3), ("l", "l", 3), ...
-                //
-                // (0, "hello", 3) -> [(("h", "e"): (3, 0)), (("e", "l"): (3, 0)), ...]
-                word.windows(2).fold(
-                    HashMap::<&[Token], (u32, usize)>::default(),
-                    |mut acc, pair| {
-                        acc.entry(pair).or_insert((0, i)).0 += count;
-                        acc
-                    },
-                )
-            })
-            .fold(HashMap::default, |mut acc, pair_counts| {
-                // we're working in parallel so we'll have multiple mappings that need merging
-                // however now the mappings will reduce from (pair, index) to (pair, indices)
-                for (pair, (count, i)) in pair_counts {
-                    let entry = acc.entry(pair).or_insert((0, HashSet::default()));
-                    entry.0 += count;
-                    entry.1.insert(i);
-                }
-                acc
-            })
-            .reduce(HashMap::default, |mut acc, pair_counts| {
-                // we need to reduce the indices into a single set for each pair
-                for (pair, (count, indices)) in pair_counts {
-                    let entry = acc.entry(pair).or_insert((0, HashSet::default()));
-                    entry.0 += count;
-                    entry.1.extend(indices);
-                }
-                acc
-            });
+        let (most_frequent, indices) = {
+            // compute the most frequent pair of adjacent tokens from the word frequencies
+            // token -> (count, indices_of_word_frequencies_set)
+            let pair_mapping = word_frequencies
+                .par_iter()
+                .enumerate()
+                .map(|(i, (word, count))| {
+                    // map each word into a mapping of adjacent tokens to counts
+                    // (i, word, count) -> [(pair1: (count, i)), (pair2: (count, i)),
+                    // ...]
+                    //
+                    // i: 0 // index of the word in the word frequencies list
+                    // word: "hello"
+                    // count: 3
+                    //
+                    // pairs: ("h", "e"), ("e", "l"), ("l", "l"), ("l", "o")
+                    //
+                    // pair counts: ("h", "e", 3,), ("e", "l", 3), ("l", "l", 3), ...
+                    //
+                    // (0, "hello", 3) -> [(("h", "e"): (3, 0)), (("e", "l"): (3, 0)), ...]
+                    word.windows(2).fold(
+                        HashMap::<&[Token], (u32, usize)>::default(),
+                        |mut acc, pair| {
+                            acc.entry(pair).or_insert((0, i)).0 += count;
+                            acc
+                        },
+                    )
+                })
+                .fold(HashMap::default, |mut acc, pair_counts| {
+                    // we're working in parallel so we'll have multiple mappings that need merging
+                    // however now the mappings will reduce from (pair, index) to (pair, indices)
+                    for (pair, (count, i)) in pair_counts {
+                        let entry = acc.entry(pair).or_insert((0, HashSet::default()));
+                        entry.0 += count;
+                        entry.1.insert(i);
+                    }
+                    acc
+                })
+                .reduce(HashMap::default, |mut acc, pair_counts| {
+                    // we need to reduce the indices into a single set for each pair
+                    for (pair, (count, indices)) in pair_counts {
+                        let entry = acc.entry(pair).or_insert((0, HashSet::default()));
+                        entry.0 += count;
+                        entry.1.extend(indices);
+                    }
+                    acc
+                });
 
-        let (most_frequent, (_, indices)) = pair_mapping
-            .par_iter()
-            .max_by_key(|(_, (count, _))| *count)
-            .context("not enough tokens to compute most frequent pair")?;
+            let (most_frequent, (_, indices)) = pair_mapping
+                .par_iter()
+                .max_by_key(|(_, (count, _))| *count)
+                .context("not enough tokens to compute most frequent pair")?;
 
-        println!(
-            "Done computing the most frequent pair in {:0.2?}\n{most_frequent:?}\n{indices:?}",
-            start.elapsed()
-        );
+            println!(
+                "Done finding the most frequent pair in {:0.2?}\n\
+                The most frequent pair of adjacent tokens appears in {} words",
+                start.elapsed(),
+                indices.len().separate_with_commas()
+            );
+
+            // return minimally owned data so we can later mutate word frequencies when
+            // merging the most frequent pair
+            (
+                [most_frequent[0].clone(), most_frequent[1].clone()],
+                indices.clone(), //
+            )
+        };
 
         // merge the most frequent pair
-        // TODO: implement this
+        word_frequencies
+            .par_iter_mut()
+            .enumerate()
+            .filter(|(i, _)| indices.contains(i))
+            .map(|(_, (word, count))| (word, count))
+            .for_each(|(word, _)| {
+                // skip next pair because it contains the rightmost token of the most frequent
+                // pair
+                let mut skip = false;
+
+                *word = word
+                    .windows(2)
+                    .filter_map(|pair| {
+                        if skip {
+                            // reset skip after skipping once
+                            skip = false;
+                            return None;
+                        }
+
+                        if pair == most_frequent {
+                            skip = true;
+                            let mut new_token = pair[0].clone();
+                            new_token.extend(pair[1].clone());
+                            Some(new_token)
+                        } else {
+                            Some(pair[0].clone())
+                        }
+                    })
+                    .collect::<TokenVec>();
+            });
     }
 
     assert_eq!(
