@@ -1,8 +1,8 @@
 use {
-    ahash::{AHashSet, HashMap},
+    ahash::{AHashSet, HashMap, HashSet},
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{IntoParallelRefIterator, ParallelIterator},
+    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::{Token, TokenId, utils::canonicalize_path},
     smallvec::SmallVec,
@@ -225,50 +225,70 @@ fn main() -> Result<()> {
     // num_merges = vocab_size - 256 base bytes (we're implementing byte-level BPE)
     // loop num_merges times
     for _ in 0..(args.vocab_size - 256) {
-        // Video lecture by Dan Jurafsky on BPE algorithm will come in hand here: https://www.youtube.com/watch?v=tOMjTCO0htA
+        // Video lecture by Dan Jurafsky on BPE algorithm will come in handy here
+        // https://www.youtube.com/watch?v=tOMjTCO0htA
 
         let start = Instant::now();
         println!("Computing most frequent pair of adjacent tokens...");
 
         // compute the most frequent pair of adjacent tokens from the word frequencies
-        let most_frequent = *word_frequencies
+        let pair_mapping = word_frequencies
             .par_iter()
-            .map(|(word, count)| {
+            .enumerate()
+            .map(|(i, (word, count))| {
                 // map each word into a mapping of adjacent tokens to counts
-                // (word, count) -> [(pair1, count), (pair2, count), ...]
+                // (i, word, count) -> [(pair1: (count, i)), (pair2: (count, i)),
+                // ...]
                 //
+                // i: 0 // index of the word in the word frequencies list
                 // word: "hello"
                 // count: 3
                 //
                 // pairs: ("h", "e"), ("e", "l"), ("l", "l"), ("l", "o")
                 //
-                // pair counts: ("h", "e", 3), ("e", "l", 3), ("l", "l", 3), ("l", "o", 3)
+                // pair counts: ("h", "e", 3,), ("e", "l", 3), ("l", "l", 3), ...
                 //
-                // ("hello", 3) -> [("h", "e", 3), ("e", "l", 3), ("l", "l", 3), ("l", "o", 3)]
-                word.windows(2)
-                    .fold(HashMap::<&[Token], u32>::default(), |mut acc, pair| {
-                        *acc.entry(pair).or_default() += count;
+                // (0, "hello", 3) -> [(("h", "e"): (3, 0)), (("e", "l"): (3, 0)), ...]
+                word.windows(2).fold(
+                    HashMap::<&[Token], (u32, usize)>::default(),
+                    |mut acc, pair| {
+                        acc.entry(pair).or_insert((0, i)).0 += count;
                         acc
-                    })
+                    },
+                )
             })
-            .reduce(HashMap::default, |mut acc, pair_counts| {
+            .fold(HashMap::default, |mut acc, pair_counts| {
                 // we're working in parallel so we'll have multiple mappings that need merging
-                for (pair, count) in pair_counts {
-                    *acc.entry(pair).or_default() += count;
+                // however now the mappings will reduce from (pair, index) to (pair, indices)
+                for (pair, (count, i)) in pair_counts {
+                    let entry = acc.entry(pair).or_insert((0, HashSet::default()));
+                    entry.0 += count;
+                    entry.1.insert(i);
                 }
                 acc
             })
+            .reduce(HashMap::default, |mut acc, pair_counts| {
+                // we need to reduce the indices into a single set for each pair
+                for (pair, (count, indices)) in pair_counts {
+                    let entry = acc.entry(pair).or_insert((0, HashSet::default()));
+                    entry.0 += count;
+                    entry.1.extend(indices);
+                }
+                acc
+            });
+
+        let (most_frequent, (_, indices)) = pair_mapping
             .par_iter()
-            .max_by_key(|(_, count)| **count)
-            .context("not enough tokens to compute most frequent pair")?
-            .0;
+            .max_by_key(|(_, (count, _))| *count)
+            .context("not enough tokens to compute most frequent pair")?;
 
         println!(
-            "Done computing the most frequent pair in {:0.2?}\n{most_frequent:?}",
+            "Done computing the most frequent pair in {:0.2?}\n{most_frequent:?}\n{indices:?}",
             start.elapsed()
         );
 
         // merge the most frequent pair
+        // TODO: implement this
     }
 
     assert_eq!(
