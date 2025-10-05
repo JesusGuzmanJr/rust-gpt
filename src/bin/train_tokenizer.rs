@@ -222,7 +222,7 @@ fn main() -> Result<()> {
         .map(|b| (b as u16, Token::from_slice(&[b])))
         .collect::<HashMap<_, _>>();
 
-    // num_merges = vocab_size - 256 base bytes (because this is byte-level BPE)
+    // num_merges = vocab_size - 256 base bytes (we're implementing byte-level BPE)
     // loop num_merges times
     for _ in 0..(args.vocab_size - 256) {
         // Video lecture by Dan Jurafsky on BPE algorithm will come in hand here: https://www.youtube.com/watch?v=tOMjTCO0htA
@@ -234,6 +234,17 @@ fn main() -> Result<()> {
         let most_frequent = *word_frequencies
             .par_iter()
             .map(|(word, count)| {
+                // map each word into a mapping of adjacent tokens to counts
+                // (word, count) -> [(pair1, count), (pair2, count), ...]
+                //
+                // word: "hello"
+                // count: 3
+                //
+                // pairs: ("h", "e"), ("e", "l"), ("l", "l"), ("l", "o")
+                //
+                // pair counts: ("h", "e", 3), ("e", "l", 3), ("l", "l", 3), ("l", "o", 3)
+                //
+                // ("hello", 3) -> [("h", "e", 3), ("e", "l", 3), ("l", "l", 3), ("l", "o", 3)]
                 word.windows(2)
                     .fold(HashMap::<&[Token], u32>::default(), |mut acc, pair| {
                         *acc.entry(pair).or_default() += count;
@@ -241,6 +252,7 @@ fn main() -> Result<()> {
                     })
             })
             .reduce(HashMap::default, |mut acc, pair_counts| {
+                // we're working in parallel so we'll have multiple mappings that need merging
                 for (pair, count) in pair_counts {
                     *acc.entry(pair).or_default() += count;
                 }
@@ -252,7 +264,7 @@ fn main() -> Result<()> {
             .0;
 
         println!(
-            "Done computing the most frequent pair in {:0.2?}",
+            "Done computing the most frequent pair in {:0.2?}\n{most_frequent:?}",
             start.elapsed()
         );
 
