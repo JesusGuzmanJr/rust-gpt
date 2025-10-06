@@ -39,9 +39,6 @@ pub type TokenId = u16;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct TokenizationModel {
     pub merges: Vec<(Token, Token)>,
-
-    // The vocabulary without the 256 base byte tokens.
-    pub additional_vocabulary: Vec<Token>,
 }
 
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
