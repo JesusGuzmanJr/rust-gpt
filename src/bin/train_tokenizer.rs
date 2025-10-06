@@ -80,6 +80,10 @@ struct Args {
     /// - GPT-4 has a vocabulary size of ~100,000
     #[arg(short, long)]
     vocab_size: usize,
+
+    /// Verbose output
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 /// Regex to split text into tokens.
@@ -260,6 +264,19 @@ fn main() -> Result<()> {
         // Video lecture by Dan Jurafsky on BPE algorithm will come in handy here
         // https://www.youtube.com/watch?v=tOMjTCO0htA
 
+        if args.verbose {
+            println!("Word frequencies:");
+            for (word, count) in word_frequencies.iter() {
+                println!(
+                    "{:>16} → {}",
+                    count.separate_with_commas(),
+                    word.iter()
+                        .map(|token| format!("[{}]", String::from_utf8_lossy(token.as_slice())))
+                        .collect::<String>()
+                );
+            }
+        }
+
         let (most_frequent, indices) = {
             // compute the most frequent pair of adjacent tokens from the word frequencies
             // token -> (count, indices_of_word_frequencies_set)
@@ -308,9 +325,24 @@ fn main() -> Result<()> {
                     acc
                 });
 
+            if args.verbose {
+                println!("Pair mapping:");
+                for (pair, (count, indices)) in &pair_mapping {
+                    println!(
+                        "([{}], [{}]) → count: {count}, indices: {indices:?}",
+                        String::from_utf8_lossy(pair[0].as_slice()),
+                        String::from_utf8_lossy(pair[1].as_slice()),
+                    );
+                }
+            }
+
             let (most_frequent, (_, indices)) = pair_mapping
                 .par_iter()
-                .max_by_key(|(_, (count, _))| *count)
+                .max_by_key(|(pair, (count, _))| {
+                    // if multiple pairs have the same count,
+                    // we sort by the pair to bring it into a deterministic order
+                    (*count, *pair)
+                })
                 .context(
                     "Not enough tokens to compute most frequent pair\n\
                     You don't have enough text for the desired vocabulary size",
@@ -341,6 +373,14 @@ fn main() -> Result<()> {
             new_token.extend(most_frequent[1].clone());
             new_token
         };
+
+        if args.verbose {
+            println!(
+                "Merging [{}], [{}]",
+                String::from_utf8_lossy(most_frequent[0].as_slice()),
+                String::from_utf8_lossy(most_frequent[1].as_slice())
+            );
+        }
 
         word_frequencies
             .par_iter_mut()
