@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     clap::Parser,
-    rust_gpt::TokenizationModel,
+    rust_gpt::Token,
     std::{fs::File, io::Read, path::PathBuf},
     thousands::Separable,
 };
@@ -20,10 +20,13 @@ fn main() -> Result<()> {
 
     let mut buffer = Vec::new();
 
-    zstd::Decoder::new(File::open(args.input_file)?)?.read_to_end(&mut buffer)?;
+    File::open(args.input_file)?.read_to_end(&mut buffer)?;
 
-    let TokenizationModel { merges } =
-        bincode::serde::decode_from_slice(&buffer, bincode::config::standard())?.0;
+    let merges = bincode::serde::decode_from_slice::<Vec<(Token, Token)>, _>(
+        &buffer,
+        bincode::config::standard(),
+    )?
+    .0;
 
     println!("Merges: {}", merges.len().separate_with_commas(),);
 

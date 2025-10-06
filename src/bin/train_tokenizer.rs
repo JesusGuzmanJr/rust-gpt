@@ -7,7 +7,7 @@ use {
         ParallelIterator,
     },
     regex::Regex,
-    rust_gpt::{Token, TokenizationModel, utils::canonicalize_path},
+    rust_gpt::{Token, utils::canonicalize_path},
     smallvec::SmallVec,
     std::{
         fs::File,
@@ -249,6 +249,20 @@ fn main() -> Result<()> {
 
     println!("Performing {} merges...", num_merges.separate_with_commas());
 
+    // Note that the model (the merges) will always fit in memory.
+    //
+    // Say we wanted to train BPE to have a vocabulary of 200k tokens. (GPT-4o
+    // has ~200k tokens.)
+    //
+    // That means we need 200,000 minus 256 merges; so 199,744 merges.
+    //
+    // Each merge is 2 tokens:
+    // 2 * 199,744 = 399,488 tokens
+    //
+    // The token size is variable. Let's take a worst case of 64 bytes per
+    // token. A 64 byte token is HUGE and very unlikely.
+    //
+    // 64 * 399,488 = 25,567,232 bytes or 25.57 MiB.
     let mut merges = Vec::with_capacity(num_merges);
 
     let start = Instant::now();
@@ -381,19 +395,10 @@ fn main() -> Result<()> {
 
     println!("Saving tokenizer to {}...", args.output_file.display());
 
-    let model_bytes =
-        bincode::serde::encode_to_vec(&TokenizationModel { merges }, bincode::config::standard())?;
-
-    let mut encoder = zstd::Encoder::new(
-        File::create(args.output_file)?,
-        // The compression level for the zstd encoder.
-        // The higher the level, the more compressed the data will be.
-        // Decompressing is same speed regardless of the level.
-        22,
-    )?
-    .auto_finish();
-
-    encoder.write_all(&model_bytes)?;
+    File::create(args.output_file)?.write_all(&bincode::serde::encode_to_vec(
+        &merges,
+        bincode::config::standard(),
+    )?)?;
 
     println!("Done in {:0.2?}", training_start.elapsed());
 
