@@ -3,6 +3,7 @@
         "ahash",
         "BBPE",
         "bytesize",
+        "chrono",
         "commonmark",
         "comrak",
         "cout",
