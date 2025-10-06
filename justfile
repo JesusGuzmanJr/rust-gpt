@@ -6,7 +6,8 @@
 # Run the specified binary
 run bin *args:
     #!/usr/bin/env bash
-    cargo run --release --bin {{bin}} -- {{args}}
+    mkdir -p target/logs/{{bin}}
+    cargo run --release --bin {{bin}} -- {{args}} | tee target/logs/{{bin}}/$(date +%Y-%m-%d_%H-%M-%S).log
 
 # Run tests
 test *args:

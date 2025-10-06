@@ -122,6 +122,8 @@ static WORD_BOUNDARY_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 fn main() -> Result<()> {
+    let training_start = Instant::now();
+
     let args = Args::parse();
 
     if args.vocab_size < 256 {
@@ -322,6 +324,16 @@ fn main() -> Result<()> {
             )
         };
 
+        let max_token_size_warning = 64;
+        if most_frequent[0].len() + most_frequent[1].len() > max_token_size_warning {
+            println!(
+                "You are attempting to merge a pair of tokens \n\
+                that is greater than {max_token_size_warning} bytes.\n\
+                Tokens that big are probably not desirable. \n\
+                Try lowering the vocabulary size."
+            );
+        }
+
         merges.push((most_frequent[0].clone(), most_frequent[1].clone()));
 
         let new_token = || {
@@ -395,7 +407,7 @@ fn main() -> Result<()> {
 
     encoder.write_all(&model_bytes)?;
 
-    println!("Done");
+    println!("Done in {:0.2?}", training_start.elapsed());
 
     Ok(())
 }
