@@ -25,6 +25,7 @@ ahash = "0.8.12"
 anyhow = "1.0.100"
 arrow-array = "56.2.0"
 arrow-cast = "56.2.0"
+bytesize = "2.1.0"
 clap = { version = "4.5.48", features = ["derive"] }
 comrak = "0.43.0"
 crossbeam-channel = "0.5.15"

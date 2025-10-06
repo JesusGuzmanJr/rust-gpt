@@ -9,7 +9,16 @@ use {
     regex::Regex,
     rust_gpt::{Token, TokenId, utils::canonicalize_path},
     smallvec::SmallVec,
-    std::{fs::File, io::BufRead, path::PathBuf, sync::LazyLock, time::Instant},
+    std::{
+        fs::File,
+        io::BufRead,
+        path::PathBuf,
+        sync::{
+            LazyLock,
+            atomic::{AtomicU64, AtomicUsize, Ordering},
+        },
+        time::Instant,
+    },
     thousands::Separable,
 };
 
@@ -128,9 +137,11 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>();
 
     println!(
-        "Collected {} files\nComputing word frequencies...",
+        "Reading {} files...",
         input_files.len().separate_with_commas(),
     );
+
+    let bytes_read: AtomicUsize = AtomicUsize::new(0);
 
     let start = Instant::now();
     let word_frequencies = input_files
@@ -144,10 +155,14 @@ fn main() -> Result<()> {
                 // Clearing is O(1).
                 buffer.clear();
 
+                let read = reader.read_line(&mut buffer)?;
+
                 // we are tokenizing by whitespaces (among other things)
                 // so splitting lines by newline doesn't split words
-                if reader.read_line(&mut buffer)? == 0 {
+                if read == 0 {
                     break;
+                } else {
+                    bytes_read.fetch_add(read, Ordering::Relaxed);
                 }
 
                 WORD_BOUNDARY_RE
@@ -174,9 +189,11 @@ fn main() -> Result<()> {
         });
 
     println!(
-        "Done computing word frequencies in {:0.2?} for {} files",
+        "Read {} in {:0.2?}",
+        bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
+            .display()
+            .iec(),
         start.elapsed(),
-        input_files.len().separate_with_commas(),
     );
 
     println!(
@@ -229,14 +246,16 @@ fn main() -> Result<()> {
         .map(|b| (b as u16, Token::from_slice(&[b])))
         .collect::<HashMap<_, _>>();
 
-    // num_merges = vocab_size - 256 base bytes (we're implementing byte-level BPE)
-    // loop num_merges times
-    for _ in 0..(args.vocab_size - 256) {
+    // num_merges is vocab_size minus 256 base bytes because we're implementing
+    // byte-level BPE
+    let num_merges = args.vocab_size - 256;
+    println!("Performing {} merges...", num_merges.separate_with_commas());
+
+    let start = Instant::now();
+
+    for _ in 0..num_merges {
         // Video lecture by Dan Jurafsky on BPE algorithm will come in handy here
         // https://www.youtube.com/watch?v=tOMjTCO0htA
-
-        let start = Instant::now();
-        println!("Finding most frequent pair of adjacent tokens...");
 
         let (most_frequent, indices) = {
             // compute the most frequent pair of adjacent tokens from the word frequencies
@@ -289,14 +308,10 @@ fn main() -> Result<()> {
             let (most_frequent, (_, indices)) = pair_mapping
                 .par_iter()
                 .max_by_key(|(_, (count, _))| *count)
-                .context("not enough tokens to compute most frequent pair")?;
-
-            println!(
-                "Done finding the most frequent pair in {:0.2?}\n\
-                The most frequent pair of adjacent tokens appears in {} words",
-                start.elapsed(),
-                indices.len().separate_with_commas()
-            );
+                .context(
+                    "Not enough tokens to compute most frequent pair\n\
+                    You don't have enough text for the desired vocabulary size",
+                )?;
 
             // return minimally owned data so we can later mutate word frequencies when
             // merging the most frequent pair
@@ -306,7 +321,12 @@ fn main() -> Result<()> {
             )
         };
 
-        // merge the most frequent pair
+        let new_token = || {
+            let mut new_token = most_frequent[0].clone();
+            new_token.extend(most_frequent[1].clone());
+            new_token
+        };
+
         word_frequencies
             .par_iter_mut()
             .enumerate()
@@ -328,16 +348,22 @@ fn main() -> Result<()> {
 
                         if pair == most_frequent {
                             skip = true;
-                            let mut new_token = pair[0].clone();
-                            new_token.extend(pair[1].clone());
-                            Some(new_token)
+                            Some(new_token())
                         } else {
                             Some(pair[0].clone())
                         }
                     })
                     .collect::<TokenVec>();
             });
+
+        vocabulary.insert(vocabulary.len() as TokenId, new_token());
     }
+
+    println!(
+        "Done performing {} merges in {:0.2?}",
+        num_merges.separate_with_commas(),
+        start.elapsed()
+    );
 
     assert_eq!(
         vocabulary.len(),
