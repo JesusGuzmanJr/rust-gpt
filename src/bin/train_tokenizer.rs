@@ -1,5 +1,5 @@
 use {
-    ahash::{AHashSet, HashMap, HashSet},
+    ahash::{HashMap, HashSet},
     anyhow::{Context, Result},
     clap::Parser,
     rayon::iter::{
@@ -7,15 +7,15 @@ use {
         ParallelIterator,
     },
     regex::Regex,
-    rust_gpt::{Token, TokenId, utils::canonicalize_path},
+    rust_gpt::{Token, TokenizationModel, utils::canonicalize_path},
     smallvec::SmallVec,
     std::{
         fs::File,
-        io::BufRead,
+        io::{BufRead, Write},
         path::PathBuf,
         sync::{
             LazyLock,
-            atomic::{AtomicU64, AtomicUsize, Ordering},
+            atomic::{AtomicUsize, Ordering},
         },
         time::Instant,
     },
@@ -242,14 +242,15 @@ fn main() -> Result<()> {
 
     println!("Done breaking down words in {:0.2?}", start.elapsed());
 
-    let mut vocabulary = (0x00u8..=0xff)
-        .map(|b| (b as u16, Token::from_slice(&[b])))
-        .collect::<HashMap<_, _>>();
-
     // num_merges is vocab_size minus 256 base bytes because we're implementing
-    // byte-level BPE
     let num_merges = args.vocab_size - 256;
+
     println!("Performing {} merges...", num_merges.separate_with_commas());
+
+    let mut merges = Vec::with_capacity(num_merges);
+
+    // The vocabulary without the 256 base bytes.
+    let mut additional_vocabulary: Vec<SmallVec<[u8; 32]>> = Vec::with_capacity(num_merges);
 
     let start = Instant::now();
 
@@ -321,6 +322,8 @@ fn main() -> Result<()> {
             )
         };
 
+        merges.push((most_frequent[0].clone(), most_frequent[1].clone()));
+
         let new_token = || {
             let mut new_token = most_frequent[0].clone();
             new_token.extend(most_frequent[1].clone());
@@ -356,7 +359,7 @@ fn main() -> Result<()> {
                     .collect::<TokenVec>();
             });
 
-        vocabulary.insert(vocabulary.len() as TokenId, new_token());
+        additional_vocabulary.push(new_token());
     }
 
     println!(
@@ -366,10 +369,33 @@ fn main() -> Result<()> {
     );
 
     assert_eq!(
-        vocabulary.len(),
+        additional_vocabulary.len() + 256,
         args.vocab_size,
         "vocabulary size is not equal to the target vocabulary size"
     );
+
+    println!("Saving vocabulary to {}...", args.output_file.display());
+
+    let model_bytes = bincode::serde::encode_to_vec(
+        &TokenizationModel {
+            merges,
+            additional_vocabulary,
+        },
+        bincode::config::standard(),
+    )?;
+
+    let mut encoder = zstd::Encoder::new(
+        File::create(args.output_file)?,
+        // The compression level for the zstd encoder.
+        // The higher the level, the more compressed the data will be.
+        // Decompressing is same speed regardless of the level.
+        22,
+    )?
+    .auto_finish();
+
+    encoder.write_all(&model_bytes)?;
+
+    println!("Done");
 
     Ok(())
 }

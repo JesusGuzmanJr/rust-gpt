@@ -1,4 +1,7 @@
-use smallvec::SmallVec;
+use {
+    serde::{Deserialize, Serialize},
+    smallvec::SmallVec,
+};
 
 pub mod utils;
 
@@ -11,6 +14,35 @@ pub type Token = SmallVec<[u8; 32]>;
 ///
 /// Allows for up to 65,536 tokens.
 pub type TokenId = u16;
+
+/// The BPE tokenization model parameters.
+///
+/// ---
+///
+/// Note that the model will always fit in memory.
+///
+/// Say we wanted to train BPE to have a vocabulary of 200k tokens. (GPT-4o has
+/// ~200k tokens.)
+///
+/// That means we need 200,000 - 256 merges, so 199,744 merges.
+/// Each merge is 2 tokens.
+/// 2 * 199,744 = 399,488 tokens.
+/// 199,744 additional vocabulary items * 1 token is 199,744 tokens.
+/// 399,488 + 199,744 = 599,232 tokens.
+///
+/// The token size is variable. Let's take a worst case of 64 bytes per token. A
+/// 64 byte token is HUGE and very unlikely.
+///
+/// 64 * 599,232 = 38,353,920 bytes or 38.35 MiB.
+///
+/// 40 MiB fits in memory.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenizationModel {
+    pub merges: Vec<(Token, Token)>,
+
+    // The vocabulary without the 256 base bytes.
+    pub additional_vocabulary: Vec<Token>,
+}
 
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     #[link(name = "kernels", kind = "static")]

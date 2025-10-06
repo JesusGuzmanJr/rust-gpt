@@ -194,10 +194,9 @@ fn main() -> Result<()> {
             if encoders[thread_idx].is_none() {
                 let file_name = format!("shard-{}.md.zstd", thread_idx);
                 println!("Writing to {file_name}...");
-                let file = File::create(args.output_dir.join(file_name))?;
                 let encoder = Box::new(
                     zstd::Encoder::new(
-                        file,
+                        File::create(args.output_dir.join(file_name))?,
                         // The compression level for the zstd encoder.
                         // The higher the level, the more compressed the data will be.
                         // Decompressing is same speed regardless of the level.

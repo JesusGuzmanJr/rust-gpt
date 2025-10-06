@@ -24,6 +24,7 @@
         "oding",
         "overfiting",
         "Pretokenize",
+        "serde",
         "smallvec",
         "subword",
         "subwords",

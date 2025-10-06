@@ -25,6 +25,7 @@ ahash = "0.8.12"
 anyhow = "1.0.100"
 arrow-array = "56.2.0"
 arrow-cast = "56.2.0"
+bincode = { version = "2.0.1", features = ["serde"] }
 bytesize = "2.1.0"
 clap = { version = "4.5.48", features = ["derive"] }
 comrak = "0.43.0"
@@ -34,7 +35,8 @@ itertools = "0.14.0"
 parquet = "56.2.0"
 rayon = "1.11.0"
 regex = "1.11.3"
-smallvec = "1.15.1"
+serde = { version = "1.0.228", features = ["derive"] }
+smallvec = { version = "1.15.1", features = ["serde"] }
 thousands = "0.2.0"
 zstd = "0.13.3"
 
@@ -42,7 +44,7 @@ zstd = "0.13.3"
 criterion = "0.7.0"
 
 [build-dependencies]
-cc = "1.2.39"
+cc = "1.2.40"
 
 [[bench]]
 harness = false
