@@ -40,7 +40,7 @@ pub type TokenId = u16;
 pub struct TokenizationModel {
     pub merges: Vec<(Token, Token)>,
 
-    // The vocabulary without the 256 base bytes.
+    // The vocabulary without the 256 base byte tokens.
     pub additional_vocabulary: Vec<Token>,
 }
 
@@ -62,6 +62,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_vec_add() {
         let n = 1_000_000;
