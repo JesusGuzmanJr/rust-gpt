@@ -1,6 +1,9 @@
 use {
     anyhow::{Context, Result},
-    std::path::{Path, PathBuf},
+    std::{
+        io::IsTerminal,
+        path::{Path, PathBuf},
+    },
 };
 
 /// Canonicalize a path.
@@ -13,6 +16,7 @@ pub fn canonicalize_path(path: &Path) -> Result<PathBuf> {
 pub fn setup_tracing_subscriber() {
     tracing_subscriber::fmt()
         .with_timer(tracing_subscriber::fmt::time::Uptime::default())
+        .with_ansi(std::io::stdout().is_terminal())
         .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
                 .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())

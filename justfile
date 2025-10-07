@@ -10,7 +10,7 @@ set positional-arguments
 run bin *args:
     #!/usr/bin/env bash
     mkdir -p target/logs/{{bin}}
-    cargo run --release --bin {{bin}} -- "${@:2}" |& tee target/logs/{{bin}}/$(date +%Y-%m-%d_%H-%M-%S).log
+    cargo run --release --bin {{bin}} -- "${@:2}"
 
 # Run tests
 test *args:

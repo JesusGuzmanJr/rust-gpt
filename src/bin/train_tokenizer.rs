@@ -211,7 +211,7 @@ fn main() -> Result<()> {
         trace!("Pair frequencies:");
         for (i, (pair, count)) in pair_frequencies.iter().enumerate() {
             trace!(
-                "  {:<4} {:>4}x → [{:?}][{:?}]",
+                "  {:<8} {:>8}x → [{:?}][{:?}]",
                 format!("{}:", i.separate_with_commas()),
                 count.separate_with_commas(),
                 String::from_utf8_lossy(pair.0.as_slice()),
