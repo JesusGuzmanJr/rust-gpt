@@ -1,4 +1,5 @@
 export RUST_LOG := env("RUST_LOG", "info")
+set positional-arguments
 
 [private]
 @default:
@@ -9,9 +10,9 @@ export RUST_LOG := env("RUST_LOG", "info")
 run bin *args:
     #!/usr/bin/env bash
     mkdir -p target/logs/{{bin}}
-    cargo run --release --bin {{bin}} -- {{args}} |& tee target/logs/{{bin}}/$(date +%Y-%m-%d_%H-%M-%S).log
+    cargo run --release --bin {{bin}} -- "${@:2}" |& tee target/logs/{{bin}}/$(date +%Y-%m-%d_%H-%M-%S).log
 
 # Run tests
 test *args:
     #!/usr/bin/env bash
-    cargo test --release --quiet --no-fail-fast {{args}} -- --color always --no-capture
+    cargo test --release --quiet --no-fail-fast "${@:2}" -- --color always --no-capture
