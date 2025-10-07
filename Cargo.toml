@@ -39,7 +39,7 @@ serde = { version = "1.0.228", features = ["derive"] }
 smallvec = { version = "1.15.1", features = ["serde"] }
 thousands = "0.2.0"
 tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = ["chrono"] }
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 zstd = "0.13.3"
 
 [dev-dependencies]

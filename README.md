@@ -200,3 +200,7 @@ ___
 ## Inference
 
 *(Work in Progress)*
+
+---
+
+Made with 💜 by Jesus Guzman, Jr. in Seattle, WA.

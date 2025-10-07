@@ -1,3 +1,5 @@
+export RUST_LOG := env("RUST_LOG", "info")
+
 [private]
 @default:
     #!/usr/bin/env bash

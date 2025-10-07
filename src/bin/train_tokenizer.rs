@@ -17,18 +17,52 @@ use {
         time::Instant,
     },
     thousands::Separable,
-    tracing::*,
+    tracing::{level_filters::LevelFilter, *},
 };
 
 type TokenVec = SmallVec<[Token; 32]>;
 
-/// Regex for the initial split of text into words.
-const DEFAULT_WORD_BOUNDARY_RE: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
+/// The word regex to use by default.
+///
+/// ---
+///
+/// ## Design
+///
+/// We want to capture a leading space to preserve spacing information.
+/// E.g.
+/// ```txt
+/// "The cat" → ["The", " cat"]
+/// "cat"     → ["cat"]
+/// ```
+/// The token "cat" and " cat" are **different** tokens with different IDs.
+/// This helps the model understand positional context.
+///  During training, neural networks learn embeddings (vector
+/// representations) for each token. The model will learn that:
+/// - "cat" and " cat" have similar meanings (both refer to the animal)
+/// - But they have different positional contexts
+///
+/// Through millions of training examples, the embeddings naturally become
+/// similar:
+/// ```txt
+/// embedding("cat") ≈ embedding(" cat")  (but not identical)
+/// ```
+/// The model learns this relationship automatically from data, just like it
+/// learns that "cat" and "cats" are related.
+///
+/// Having both tokens uses more vocabulary space. But:
+///
+/// Typical vocabulary: 50,000 tokens
+/// - ~256 base bytes
+/// - ~49,744 merged tokens (learned subwords)
+///
+/// Having "cat" and " cat" uses 2 slots, which is negligible. The benefit
+/// of capturing positional information far outweighs the cost.
+const DEFAULT_WORD_RE: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
 
 /// Tokenize a directory of normalized, compressed markdown shards using
 /// byte-level byte pair encoding (BPE).
 #[derive(Parser, Debug)]
-#[command(version, about)]
+#[command(version, long_about)]
 struct Args {
     /// Path to the input directory with the normalized, zstd-compressed
     /// preprocessed shards of textual content.
@@ -82,52 +116,15 @@ struct Args {
     #[arg(short, long)]
     vocab_size: usize,
 
-    /// Regex for the initial split of text into words.
-    ///
-    /// ---
-    ///
-    /// ## Design Notes
-    ///
-    /// We use optional leading space to preserve spacing information.
-    /// E.g.
-    /// ```txt
-    /// "The cat" → ["The", " cat"]
-    /// "cat"     → ["cat"]
-    /// ```
-    /// The token "cat" and " cat" are **different** tokens with different IDs.
-    /// This helps the model understand positional context.
-    ///  During training, neural networks learn embeddings (vector
-    /// representations) for each token. The model will learn that:
-    /// - "cat" and " cat" have similar meanings (both refer to the animal)
-    /// - But they have different positional contexts
-    ///
-    /// Through millions of training examples, the embeddings naturally become
-    /// similar:
-    /// ```txt
-    /// embedding("cat") ≈ embedding(" cat")  (but not identical)
-    /// ```
-    /// The model learns this relationship automatically from data, just like it
-    /// learns that "cat" and "cats" are related.
-    ///
-    /// Having both tokens uses more vocabulary space. But:
-    ///
-    /// Typical vocabulary: 50,000 tokens
-    /// - ~256 base bytes
-    /// - ~49,744 merged tokens (learned subwords)
-    ///
-    /// Having "cat" and " cat" uses 2 slots, which is negligible. The benefit
-    /// of capturing positional information far outweighs the cost.
-    #[arg(short, long, default_value = DEFAULT_WORD_BOUNDARY_RE)]
-    word_boundary_re: String,
+    /// Regex for the initial split of text into words. The regex should capture
+    /// what you want the words to contain.
+    #[arg(short, long, default_value = DEFAULT_WORD_RE)]
+    word_re: String,
 }
 
 fn main() -> Result<()> {
     let training_start = Instant::now();
-
-    tracing_subscriber::fmt()
-        .with_timer(tracing_subscriber::fmt::time::Uptime::default())
-        .init();
-
+    rust_gpt::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
     if args.vocab_size < 256 {
@@ -136,42 +133,40 @@ fn main() -> Result<()> {
 
     let word_frequencies = count_word_frequencies(
         &canonicalize_path(&args.input_dir)?,
-        Regex::new(&args.word_boundary_re).context("Invalid word boundary regex")?,
+        Regex::new(&args.word_re).context("Invalid word boundary regex")?,
     )?;
 
-    {
-        let span = span!(Level::INFO, "sorting");
-        let _guard = span.enter();
+    // num_merges is vocab_size minus 256 base bytes because we're implementing
+    let merges = perform_merges(word_frequencies, args.vocab_size - 256)?;
 
-        info!("Sorting by frequency");
-        let start = Instant::now();
+    info!(output_file = %args.output_file.display(), "Saving tokenizer");
 
-        let mut word_frequencies = word_frequencies.iter().collect::<Vec<_>>();
-        word_frequencies.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+    File::create(args.output_file)?.write_all(&bincode::serde::encode_to_vec(
+        &merges,
+        bincode::config::standard(),
+    )?)?;
 
-        info!(
-            elapsed = ?start.elapsed(),
-            "Sorted"
-        );
+    info!(
+        elapsed = ?training_start.elapsed(),
+        "Done training tokenizer"
+    );
 
-        const TOP_N: usize = 20;
-        info!("First {TOP_N} most frequent words:");
-        for (word, count) in word_frequencies.iter().take(TOP_N) {
-            info!(
-                "{:>16} → {:?}",
-                count.separate_with_commas(),
-                String::from_utf8_lossy(word.as_slice()),
-            );
-        }
-    }
+    Ok(())
+}
+
+/// Performs num_merges merges on the word frequencies vector in parallel.
+#[tracing::instrument(skip(word_frequencies))]
+fn perform_merges(
+    word_frequencies: HashMap<Token, u32>,
+    num_merges: usize,
+) -> Result<Vec<(Token, Token)>> {
+    let start = Instant::now();
 
     // Break down words into bytes for byte-level BPE.
     // b"low" -> [b"l", b"o", b"w"]
-    let start = Instant::now();
     info!("Breaking down words into byte tokens");
 
-    // We want word_frequencies to be a vector so we can operate on its indices in
-    // parallel
+    // We want to split words into tokens to perform merges
     let mut word_frequencies = word_frequencies
         .par_iter()
         .map(|(word, count)| {
@@ -189,11 +184,6 @@ fn main() -> Result<()> {
         "Done breaking down words"
     );
 
-    // num_merges is vocab_size minus 256 base bytes because we're implementing
-    let num_merges = args.vocab_size - 256;
-
-    info!("Performing {} merges", num_merges.separate_with_commas());
-
     // Note that the model (the merges) will always fit in memory.
     //
     // Say we wanted to train BPE to have a vocabulary of 200k tokens. (GPT-4o
@@ -210,11 +200,22 @@ fn main() -> Result<()> {
     // 64 * 399,488 = 25,567,232 bytes or 25.57 MiB.
     let mut merges = Vec::with_capacity(num_merges);
 
-    let start = Instant::now();
-
     for _ in 0..num_merges {
         // Video lecture by Dan Jurafsky on BPE algorithm will come in handy here
         // https://www.youtube.com/watch?v=tOMjTCO0htA
+
+        if LevelFilter::current() == LevelFilter::TRACE {
+            trace!("Word frequencies:");
+            for (word, count) in word_frequencies.iter() {
+                trace!(
+                    "{:>16} → {}",
+                    count.separate_with_commas(),
+                    word.iter()
+                        .map(|token| format!("[{}]", String::from_utf8_lossy(token.as_slice())))
+                        .collect::<String>()
+                );
+            }
+        }
 
         let (most_frequent, indices) = {
             // compute the most frequent pair of adjacent tokens from the word frequencies
@@ -264,6 +265,17 @@ fn main() -> Result<()> {
                     acc
                 });
 
+            if LevelFilter::current() == LevelFilter::TRACE {
+                trace!("Pair mapping:");
+                for (pair, (count, indices)) in &pair_mapping {
+                    trace!(
+                        "([{}], [{}]) → count: {count}, indices: {indices:?}",
+                        String::from_utf8_lossy(pair[0].as_slice()),
+                        String::from_utf8_lossy(pair[1].as_slice()),
+                    );
+                }
+            }
+
             let (most_frequent, (_, indices)) = pair_mapping
                 .par_iter()
                 .max_by_key(|(_, (count, indices))| {
@@ -295,6 +307,14 @@ fn main() -> Result<()> {
         }
 
         merges.push((most_frequent[0].clone(), most_frequent[1].clone()));
+
+        if LevelFilter::current() == LevelFilter::TRACE {
+            trace!(
+                "Merging [{}], [{}]",
+                String::from_utf8_lossy(most_frequent[0].as_slice()),
+                String::from_utf8_lossy(most_frequent[1].as_slice())
+            );
+        }
 
         let new_token = || {
             let mut new_token = most_frequent[0].clone();
@@ -338,27 +358,17 @@ fn main() -> Result<()> {
         "Done performing merges"
     );
 
-    info!(output_file = %args.output_file.display(), "Saving tokenizer");
-
-    File::create(args.output_file)?.write_all(&bincode::serde::encode_to_vec(
-        &merges,
-        bincode::config::standard(),
-    )?)?;
-
-    info!(
-        elapsed = ?training_start.elapsed(),
-        "Done training tokenizer"
-    );
-
-    Ok(())
+    Ok(merges)
 }
 
+/// Count the frequency of words in a directory of .zstd compressed files in
+/// parallel.
 #[tracing::instrument(skip_all)]
 fn count_word_frequencies(
     input_dir: &Path,
     word_boundary_re: Regex,
 ) -> Result<HashMap<Token, u32>> {
-    let input_files = std::fs::read_dir(&input_dir)?
+    let input_files = std::fs::read_dir(input_dir)?
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zstd")
@@ -426,6 +436,23 @@ fn count_word_frequencies(
         "Done reading",
     );
 
+    // we can skip this entire block if we're not in INFO level; it just
+    // informational logging
+    if LevelFilter::current() == LevelFilter::INFO {
+        let mut word_frequencies = word_frequencies.iter().collect::<Vec<_>>();
+        word_frequencies.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
+
+        const TOP_N: usize = 20;
+        info!("First {TOP_N} most frequent words:");
+        for (word, count) in word_frequencies.iter().take(TOP_N) {
+            info!(
+                "{:>16} → {:?}",
+                count.separate_with_commas(),
+                String::from_utf8_lossy(word.as_slice()),
+            );
+        }
+    }
+
     Ok(word_frequencies)
 }
 
@@ -433,15 +460,50 @@ fn count_word_frequencies(
 mod tests {
     use super::*;
 
+    // regex to collect all non whitespace characters
+    const NON_WHITESPACE_REGEX: &str = r"\S+";
+
     #[test]
-    fn test_regex() {
+    fn test_default_word_boundary_regex() {
         assert_eq!(
-            &Regex::new(DEFAULT_WORD_BOUNDARY_RE)
+            &Regex::new(DEFAULT_WORD_RE)
                 .expect("invalid regex")
                 .find_iter("$51 for ticket 💸.")
                 .map(|m| m.as_str())
                 .collect::<Vec<_>>(),
             &["$", "51", " for", " ticket", " 💸."]
         );
+    }
+
+    #[test]
+    fn test_regex_split_by_whitespace() {
+        assert_eq!(
+            &Regex::new(NON_WHITESPACE_REGEX)
+                .expect("invalid regex")
+                .find_iter("$51 for ticket 💸.")
+                .map(|m| m.as_str())
+                .collect::<Vec<_>>(),
+            &["$51", "for", "ticket", "💸."]
+        );
+    }
+
+    #[test]
+    fn test_count_word_frequencies() {
+        // file contents in training-data/preprocessed.txt.zstd is a single line:
+        // "low low low low low lowest lowest newer newer newer newer newer newer wider
+        // wider wider new new"
+
+        let word_frequencies = count_word_frequencies(
+            Path::new("training-data"),
+            Regex::new(NON_WHITESPACE_REGEX).expect("invalid regex"),
+        )
+        .expect("failed to count word frequencies");
+
+        assert_eq!(word_frequencies.len(), 5);
+        assert_eq!(word_frequencies[&Token::from_slice(b"low")], 5);
+        assert_eq!(word_frequencies[&Token::from_slice(b"lowest")], 2);
+        assert_eq!(word_frequencies[&Token::from_slice(b"newer")], 6);
+        assert_eq!(word_frequencies[&Token::from_slice(b"wider")], 3);
+        assert_eq!(word_frequencies[&Token::from_slice(b"new")], 2);
     }
 }
