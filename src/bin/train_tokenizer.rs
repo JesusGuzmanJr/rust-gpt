@@ -67,7 +67,8 @@ const DEFAULT_PRE_TOKENIZATION_REGEX: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N
 #[command(version, long_about)]
 struct Args {
     /// Path to the input directory with the normalized, zstd-compressed
-    /// preprocessed shards of textual content.
+    /// preprocessed shards of textual content. Make sure to to split words
+    /// across file boundaries.
     ///
     /// Only *.zst files will be processed. The directory will not be walked
     /// recursively.
@@ -153,81 +154,80 @@ fn main() -> Result<()> {
         "Reading files",
     );
 
-    // num_merges is vocab_size minus 256 base bytes because we're implementing
-    let bytes_read: AtomicUsize = AtomicUsize::new(0);
+    for _ in 0..(args.vocab_size - 256) {
+        let pair_frequencies = input_files
+            .par_iter()
+            .enumerate()
+            .map(|(i, file)| {
+                let mut pair_frequencies = IndexMap::<_, u64>::default();
+                let mut buffer = String::new();
+                let mut reader = std::io::BufReader::new(zstd::Decoder::new(File::open(file)?)?);
 
-    let pair_frequencies = input_files
-        .par_iter()
-        .enumerate()
-        .map(|(i, file)| {
-            let mut pair_frequencies = IndexMap::<_, u64>::default();
-            let mut buffer = String::new();
-            let mut reader = std::io::BufReader::new(zstd::Decoder::new(File::open(file)?)?);
+                loop {
+                    // Clearing is O(1).
+                    buffer.clear();
 
-            loop {
-                // Clearing is O(1).
-                buffer.clear();
+                    // we are tokenizing by whitespaces (among other things)
+                    // so splitting lines by newline doesn't split words
+                    if reader.read_line(&mut buffer)? == 0 {
+                        break;
+                    }
 
-                let read = reader.read_line(&mut buffer)?;
-
-                // we are tokenizing by whitespaces (among other things)
-                // so splitting lines by newline doesn't split words
-                if read == 0 {
-                    break;
-                } else {
-                    bytes_read.fetch_add(read, Ordering::Relaxed);
+                    pre_tokenization_regex
+                        .find_iter(&buffer)
+                        .map(|m| m.as_str().as_bytes())
+                        .for_each(|bytes| {
+                            bytes.windows(2).for_each(|pair| {
+                                *pair_frequencies
+                                    .entry((
+                                        Token::from_slice(&[pair[0]]),
+                                        Token::from_slice(&[pair[1]]),
+                                    ))
+                                    .or_default() += 1;
+                            });
+                        });
                 }
 
-                pre_tokenization_regex
-                    .find_iter(&buffer)
-                    .map(|m| m.as_str().as_bytes())
-                    .for_each(|bytes| {
-                        bytes.windows(2).for_each(|pair| {
-                            *pair_frequencies
-                                .entry((
-                                    Token::from_slice(&[pair[0]]),
-                                    Token::from_slice(&[pair[1]]),
-                                ))
-                                .or_default() += 1;
-                        });
-                    });
+                anyhow::Ok((i, pair_frequencies))
+            })
+            .filter_map(|result| {
+                if let Err(error) = &result {
+                    error!("{error}");
+                }
+                result.ok()
+            })
+            .collect::<Vec<_>>()
+            .into_iter()
+            .sorted_by_key(|(i, _)| *i)
+            .flat_map(|(_, pairs)| pairs)
+            .collect::<IndexMap<_, _>>();
+
+        let (most_frequent, count) = pair_frequencies
+            .iter()
+            .rev()
+            .max_by_key(|(_, count)| *count)
+            .context("No pairs found")?;
+
+        if LevelFilter::current() == LevelFilter::TRACE {
+            trace!("Pair frequencies:");
+            for (i, (pair, count)) in pair_frequencies.iter().enumerate() {
+                trace!(
+                    "  {:<8} {:>8}x → [{:?}][{:?}]",
+                    format!("{}:", i.separate_with_commas()),
+                    count.separate_with_commas(),
+                    String::from_utf8_lossy(pair.0.as_slice()),
+                    String::from_utf8_lossy(pair.1.as_slice())
+                );
             }
 
-            anyhow::Ok((i, pair_frequencies))
-        })
-        .filter_map(|result| {
-            if let Err(error) = &result {
-                error!("{error}");
-            }
-            result.ok()
-        })
-        .collect::<Vec<_>>()
-        .into_iter()
-        .sorted_by_key(|(i, _)| *i)
-        .flat_map(|(_, pairs)| pairs)
-        .collect::<IndexMap<_, _>>();
-
-    if LevelFilter::current() == LevelFilter::TRACE {
-        trace!("Pair frequencies:");
-        for (i, (pair, count)) in pair_frequencies.iter().enumerate() {
             trace!(
-                "  {:<8} {:>8}x → [{:?}][{:?}]",
-                format!("{}:", i.separate_with_commas()),
-                count.separate_with_commas(),
-                String::from_utf8_lossy(pair.0.as_slice()),
-                String::from_utf8_lossy(pair.1.as_slice())
+                "Most frequent pair: [{:?}][{:?}] ({}x)",
+                String::from_utf8_lossy(most_frequent.0.as_slice()),
+                String::from_utf8_lossy(most_frequent.1.as_slice()),
+                count.separate_with_commas()
             );
         }
     }
-
-    info!(
-        unique_words = pair_frequencies.len().separate_with_commas(),
-        elapsed = ?start.elapsed(),
-        read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
-            .display()
-            .iec(),
-        "Done reading",
-    );
 
     info!(output_file = %args.output_file.display(), "Saving tokenizer");
 
