@@ -12,7 +12,11 @@ pub fn canonicalize_path(path: &Path) -> Result<PathBuf> {
 /// Set up tracing subscriber to log with relative time.
 pub fn setup_tracing_subscriber() {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .with_timer(tracing_subscriber::fmt::time::Uptime::default())
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::builder()
+                .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())
+                .from_env_lossy(),
+        )
         .init();
 }
