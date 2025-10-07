@@ -53,7 +53,7 @@ The `preprocess` binary (`src/bin/preprocess.rs`) performs the following operati
    - Parses manually created markdown into an AST and then renders it to a String to ensure it's valid using [comrak](https://github.com/kivikakk/comrak)
 
 4. **Compression & Sharding**
-   - Writes markdown strings to [Zstandard](https://github.com/facebook/zstd) (`.zstd`) compressed files.
+   - Writes markdown strings to [Zstandard](https://github.com/facebook/zstd) (`.zst`) compressed files.
    - One shard file per CPU thread for parallel writing
    - Each article is separated by the end-of-text control character (`\u{3}`)
 
@@ -63,16 +63,16 @@ The `preprocess` binary (`src/bin/preprocess.rs`) performs the following operati
 
 ```
 output-dir/
-  ├── shard-0.md.zstd
-  ├── shard-1.md.zstd
-  ├── shard-2.md.zstd
+  ├── shard-0.md.zst
+  ├── shard-1.md.zst
+  ├── shard-2.md.zst
   └── ...
 ```
 
 To view:
 
 ```sh
-FILE=/var/lib/rust-gpt/training-data/stanford-oval/wikipedia/20250320/en/preprocessed/shard-0.md.zstd
+FILE=/var/lib/rust-gpt/training-data/stanford-oval/wikipedia/20250320/en/preprocessed/shard-0.md.zst
 
 # Get compressed file size in bytes
 SIZE=$(stat -c%s $FILE)  # Linux

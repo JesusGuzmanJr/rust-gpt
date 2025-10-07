@@ -192,7 +192,7 @@ fn main() -> Result<()> {
             // Get or create encoder for this thread
             let mut encoders = encoders.lock().expect("failed to lock encoders");
             if encoders[thread_idx].is_none() {
-                let file_name = format!("shard-{}.md.zstd", thread_idx);
+                let file_name = format!("shard-{}.md.zst", thread_idx);
                 println!("Writing to {file_name}...");
                 let encoder = Box::new(
                     zstd::Encoder::new(
