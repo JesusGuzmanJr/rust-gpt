@@ -2,6 +2,7 @@ use {
     ahash::{HashMap, HashSet},
     anyhow::{Context, Result},
     clap::Parser,
+    itertools::Itertools,
     rayon::iter::{
         IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
         ParallelIterator,
@@ -67,7 +68,7 @@ struct Args {
     /// Path to the input directory with the normalized, zstd-compressed
     /// preprocessed shards of textual content.
     ///
-    /// Only *.zstd files will be processed. The directory will not be walked
+    /// Only *.zst files will be processed. The directory will not be walked
     /// recursively.
     #[arg(short, long)]
     input_dir: PathBuf,
@@ -133,7 +134,7 @@ fn main() -> Result<()> {
 
     let word_frequencies = count_word_frequencies(
         &canonicalize_path(&args.input_dir)?,
-        Regex::new(&args.word_re).context("Invalid word boundary regex")?,
+        Regex::new(&args.word_re)?,
     )?;
 
     // num_merges is vocab_size minus 256 base bytes because we're implementing
@@ -206,9 +207,10 @@ fn perform_merges(
 
         if LevelFilter::current() == LevelFilter::TRACE {
             trace!("Word frequencies:");
-            for (word, count) in word_frequencies.iter() {
+            for (i, (word, count)) in word_frequencies.iter().enumerate() {
                 trace!(
-                    "{:>16} → {}",
+                    "  {:<4} {:>4}x → {}",
+                    format!("{}:", i.separate_with_commas()),
                     count.separate_with_commas(),
                     word.iter()
                         .map(|token| format!("[{}]", String::from_utf8_lossy(token.as_slice())))
@@ -265,28 +267,29 @@ fn perform_merges(
                     acc
                 });
 
-            if LevelFilter::current() == LevelFilter::TRACE {
-                trace!("Pair mapping:");
-                for (pair, (count, indices)) in &pair_mapping {
-                    trace!(
-                        "([{}], [{}]) → count: {count}, indices: {indices:?}",
-                        String::from_utf8_lossy(pair[0].as_slice()),
-                        String::from_utf8_lossy(pair[1].as_slice()),
-                    );
-                }
-            }
-
             let (most_frequent, (_, indices)) = pair_mapping
                 .par_iter()
                 .max_by_key(|(_, (count, indices))| {
                     // if multiple pairs have the same count,
-                    // we sort by the pair to bring it into a deterministic order
-                    (*count, indices.iter().min().expect("indices was empty"))
+                    // we sort by the indices to bring it into a deterministic order
+                    (*count, indices.iter().sorted().rev().collect::<Vec<_>>())
                 })
                 .context(
                     "Not enough tokens to compute most frequent pair\n\
                     You don't have enough text for the desired vocabulary size",
                 )?;
+
+            if LevelFilter::current() == LevelFilter::TRACE {
+                trace!("Pair mapping:");
+                for (pair, (count, indices)) in &pair_mapping {
+                    trace!(
+                        "{} ([{}], [{}]) → {count:}x in {indices:?}",
+                        if pair == most_frequent { "*" } else { " " },
+                        String::from_utf8_lossy(pair[0].as_slice()),
+                        String::from_utf8_lossy(pair[1].as_slice()),
+                    );
+                }
+            }
 
             // return minimally owned data so we can later mutate word frequencies when
             // merging the most frequent pair
@@ -334,18 +337,16 @@ fn perform_merges(
 
                 *word = word
                     .windows(2)
-                    .filter_map(|pair| {
+                    .map(|pair| {
                         if skip {
                             // reset skip after skipping once
                             skip = false;
-                            return None;
-                        }
-
-                        if pair == most_frequent {
+                            pair[1].clone()
+                        } else if pair == most_frequent {
                             skip = true;
-                            Some(new_token())
+                            new_token()
                         } else {
-                            Some(pair[0].clone())
+                            pair[0].clone()
                         }
                     })
                     .collect::<TokenVec>();
@@ -361,7 +362,7 @@ fn perform_merges(
     Ok(merges)
 }
 
-/// Count the frequency of words in a directory of .zstd compressed files in
+/// Count the frequency of words in a directory of .zst compressed files in
 /// parallel.
 #[tracing::instrument(skip_all)]
 fn count_word_frequencies(
@@ -371,7 +372,7 @@ fn count_word_frequencies(
     let input_files = std::fs::read_dir(input_dir)?
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
-        .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zstd")
+        .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
         .collect::<Vec<_>>();
 
     info!(
@@ -489,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_count_word_frequencies() {
-        // file contents in training-data/preprocessed.txt.zstd is a single line:
+        // file contents in training-data/preprocessed.txt.zst is a single line:
         // "low low low low low lowest lowest newer newer newer newer newer newer wider
         // wider wider new new"
 
@@ -505,5 +506,45 @@ mod tests {
         assert_eq!(word_frequencies[&Token::from_slice(b"newer")], 6);
         assert_eq!(word_frequencies[&Token::from_slice(b"wider")], 3);
         assert_eq!(word_frequencies[&Token::from_slice(b"new")], 2);
+    }
+
+    // #[test]
+    // fn test_perform_merges_1() {
+    //     assert_eq!(
+    //         perform_merges([(Token::from_slice(b"aabb"),
+    // 1)].into_iter().collect(), 2)             .expect("failed to perform
+    // merges"),         vec![
+    //             // the first most frequent pair is "a" and "a" it occurs once
+    //             (Token::from_slice(b"a"), Token::from_slice(b"a")),
+    //             // after the 'a' and 'a' is merged, the word becomes [[aa][b][b]]
+    //             // so the next most frequent pair is "aa" and "b"
+    //             (Token::from_slice(b"aa"), Token::from_slice(b"b"))
+    //         ]
+    //     );
+    // }
+
+    #[test]
+    fn test_perform_merges_2() {
+        assert_eq!(
+            perform_merges(
+                [
+                    (Token::from_slice(b"low "), 5),
+                    (Token::from_slice(b"lowest "), 2),
+                    (Token::from_slice(b"newer "), 6),
+                    (Token::from_slice(b"wider "), 3),
+                    (Token::from_slice(b"new "), 2)
+                ]
+                .into_iter()
+                .collect(),
+                4
+            )
+            .expect("failed to perform merges"),
+            vec![
+                (Token::from_slice(b"e"), Token::from_slice(b"r")),
+                (Token::from_slice(b"er"), Token::from_slice(b" ")),
+                (Token::from_slice(b"n"), Token::from_slice(b"e")),
+                (Token::from_slice(b"ne"), Token::from_slice(b"w"))
+            ]
+        );
     }
 }
