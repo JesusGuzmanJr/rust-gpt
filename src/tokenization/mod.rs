@@ -6,6 +6,10 @@ mod tokenizer;
 
 pub use {model::*, token::*, tokenizer::*};
 
+/// Unicode NFC normalizer.
+static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
+    LazyLock::new(ComposingNormalizerBorrowed::new_nfc);
+
 /// Remove control characters and normalize the string using NFC.
 ///
 /// ---
@@ -26,9 +30,6 @@ pub use {model::*, token::*, tokenizer::*};
 ///
 /// See [Unicode normalization forms](https://www.unicode.org/reports/tr15).
 pub fn normalize_text(text: &str) -> Result<String> {
-    static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
-        LazyLock::new(ComposingNormalizerBorrowed::new_nfc);
-
     // Remove control characters and normalize whitespace
     let text = text
         .chars()

@@ -6,7 +6,7 @@ use {
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
-    rust_gpt::{tokenization::normalize_text, utils::canonicalize_path},
+    rust_gpt::tokenization::normalize_text,
     std::{
         fs::File,
         io::Write,
@@ -70,11 +70,9 @@ fn main() -> Result<()> {
 
     let (tx, rx) = crossbeam_channel::bounded(batch_size);
 
-    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&canonicalize_path(
-        &args.input_file,
-    )?)?)?
-    .with_batch_size(batch_size)
-    .build()?;
+    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&args.input_file)?)?
+        .with_batch_size(batch_size)
+        .build()?;
 
     println!("Reading batches of {batch_size} rows from the parquet file...");
 

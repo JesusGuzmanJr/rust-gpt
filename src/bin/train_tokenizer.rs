@@ -7,10 +7,7 @@ use {
         ParallelIterator,
     },
     regex::Regex,
-    rust_gpt::{
-        tokenization::{Token, TokenizerModel},
-        utils::canonicalize_path,
-    },
+    rust_gpt::tokenization::{Token, TokenizerModel},
     smallvec::SmallVec,
     std::{
         fs::File,
@@ -149,13 +146,6 @@ fn main() -> Result<()> {
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
-        .map(|path| canonicalize_path(&path))
-        .filter_map(|result| {
-            if let Err(error) = &result {
-                error!("{error}");
-            }
-            result.ok()
-        })
         .collect::<Vec<_>>();
 
     info!(
