@@ -2,12 +2,11 @@ use {
     anyhow::{Context, Result},
     arrow_array::{GenericByteArray, RecordBatch, StringArray, types::GenericStringType},
     clap::Parser,
-    icu_normalizer::ComposingNormalizerBorrowed,
     itertools::Itertools,
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
-    rust_gpt::utils::canonicalize_path,
+    rust_gpt::{tokenization::normalize_text, utils::canonicalize_path},
     std::{
         fs::File,
         io::Write,
@@ -121,13 +120,13 @@ fn main() -> Result<()> {
                     .par_iter()
                     .map(|(document_title, section_title, content)| {
                         anyhow::Ok((
-                            process_text(document_title)?,
+                            clean_text(document_title)?,
                             if let Some(section_title) = section_title {
-                                Some(process_text(section_title)?)
+                                Some(clean_text(section_title)?)
                             } else {
                                 None
                             },
-                            process_text(content)?,
+                            clean_text(content)?,
                         ))
                     })
                     .filter_map(|result| {
@@ -242,45 +241,15 @@ fn column<'a>(
         .context("content is not a StringArray")
 }
 
-/// Remove control characters and normalize the string using NFC.
-///
-/// ---
-///
-/// ## Normalization Form C (Canonical Composition).
-/// Process:
-/// - Decompose everything canonically (like NFD).
-/// - Recompose wherever there’s a single canonical equivalent pre-composed
-///   character.
-///
-/// The key is: NFC only recomposes when there exists exactly one
-/// pre-composed form. So it either:
-/// Shrinks (if multiple code points → 1 pre-composed code point).
-/// Leaves unchanged (if no pre-composed exists).
-///
-/// It never expands into more code points, because that would break
-/// canonical equivalence.
-///
-/// See [Unicode normalization forms](https://www.unicode.org/reports/tr15).
-fn process_text(text: &str) -> Result<String> {
-    static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
-        LazyLock::new(ComposingNormalizerBorrowed::new_nfc);
+fn clean_text(text: &str) -> Result<String> {
+    Ok(remove_tables(&normalize_text(text)?))
+}
 
-    // Remove control characters and normalize whitespace
-    let text = text
-        .chars()
-        .filter(|c| !c.is_control() || *c == '\n') // Keep newlines
-        .collect::<String>();
-
+fn remove_tables(text: &str) -> String {
     static TABLE_RE: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"(?s)<Table>.*?</Table>").expect("invalid regex"));
 
-    let text = TABLE_RE.replace_all(&text, " ");
-
-    // Apply Unicode NFC normalization
-    let mut buffer = String::with_capacity(text.len());
-    NFC.normalize_to(&text, &mut buffer)?;
-
-    Ok(buffer)
+    TABLE_RE.replace_all(text, " ").to_string()
 }
 
 impl Article {

@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     clap::Parser,
-    rust_gpt::tokenization::Token,
+    rust_gpt::tokenization::{Token, TokenizerModel},
     std::{fs::File, io::Read, path::PathBuf},
     thousands::Separable,
 };
@@ -22,15 +22,15 @@ fn main() -> Result<()> {
 
     File::open(args.input_file)?.read_to_end(&mut buffer)?;
 
-    let merges =
-        bincode::serde::decode_from_slice::<Vec<Token>, _>(&buffer, bincode::config::standard())?.0;
+    let model = TokenizerModel::from_bytes(&buffer)?;
 
     println!(
-        "Vocabulary size: {}",
-        (merges.len() + 256).separate_with_commas(),
+        "Pre-tokenization regex: {:?}\nVocabulary size: {}",
+        model.pre_tokenization_regex,
+        (model.merges.len() + 256).separate_with_commas(),
     );
 
-    for (i, merge) in merges.into_iter().enumerate() {
+    for (i, merge) in model.merges.into_iter().enumerate() {
         println!("{:<8}: {merge:?}", (i + 256).separate_with_commas());
     }
 

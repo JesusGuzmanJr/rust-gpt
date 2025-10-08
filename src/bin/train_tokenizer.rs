@@ -7,7 +7,10 @@ use {
         ParallelIterator,
     },
     regex::Regex,
-    rust_gpt::{tokenization::Token, utils::canonicalize_path},
+    rust_gpt::{
+        tokenization::{Token, TokenizerModel},
+        utils::canonicalize_path,
+    },
     smallvec::SmallVec,
     std::{
         fs::File,
@@ -326,10 +329,13 @@ fn main() -> Result<()> {
 
     info!(output_file = %args.output_file.display(), "Saving tokenizer");
 
-    File::create(args.output_file)?.write_all(&bincode::serde::encode_to_vec(
-        &merges,
-        bincode::config::standard(),
-    )?)?;
+    File::create(args.output_file)?.write_all(
+        &TokenizerModel {
+            pre_tokenization_regex: args.pre_tokenization_regex,
+            merges,
+        }
+        .to_bytes()?,
+    )?;
 
     info!(
         elapsed = ?start.elapsed(),
@@ -337,4 +343,25 @@ fn main() -> Result<()> {
     );
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_train_tokenizer() {
+        let output = std::process::Command::new("just")
+            .arg("run")
+            .arg("train_tokenizer")
+            .arg("--input-dir")
+            .arg("training-data")
+            .arg("--output-file")
+            .arg("target/test/test-tokenizer")
+            .arg("--vocab-size")
+            .arg("272")
+            .output()
+            .expect("failed to run train_tokenizer");
+
+        assert!(&output.status.success());
+    }
 }
