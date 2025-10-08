@@ -2,7 +2,7 @@ export RUST_LOG := env("RUST_LOG", "info")
 set positional-arguments
 
 [private]
-@default:
+default:
     #!/usr/bin/env bash
     just --list --unsorted
 

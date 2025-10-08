@@ -1,6 +1,5 @@
 use {
-    ahash::HashSet,
-    anyhow::{Context, Result},
+    anyhow::Result,
     clap::Parser,
     itertools::Itertools,
     rayon::iter::{
@@ -13,8 +12,7 @@ use {
     std::{
         fs::File,
         io::{BufRead, Seek, Write},
-        iter,
-        path::{Path, PathBuf},
+        path::PathBuf,
         sync::atomic::{AtomicUsize, Ordering},
         time::Instant,
     },
@@ -135,7 +133,6 @@ struct Args {
 fn main() -> Result<()> {
     let start = Instant::now();
 
-    let training_start = Instant::now();
     let args = Args::parse();
     rust_gpt::utils::setup_tracing_subscriber();
 
@@ -149,6 +146,13 @@ fn main() -> Result<()> {
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
+        .map(|path| canonicalize_path(&path))
+        .filter_map(|result| {
+            if let Err(error) = &result {
+                error!("{error}");
+            }
+            result.ok()
+        })
         .collect::<Vec<_>>();
 
     info!(
@@ -328,7 +332,7 @@ fn main() -> Result<()> {
     )?)?;
 
     info!(
-        elapsed = ?training_start.elapsed(),
+        elapsed = ?start.elapsed(),
         "Done training tokenizer"
     );
 
