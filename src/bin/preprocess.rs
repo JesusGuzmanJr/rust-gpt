@@ -240,7 +240,7 @@ fn column<'a>(
 }
 
 fn clean_text(text: &str) -> Result<String> {
-    Ok(remove_tables(&normalize_text(text)?))
+    Ok(remove_tables(&normalize_text(text)))
 }
 
 fn remove_tables(text: &str) -> String {

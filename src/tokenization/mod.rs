@@ -1,4 +1,4 @@
-use {anyhow::Result, icu_normalizer::ComposingNormalizerBorrowed, std::sync::LazyLock};
+use {icu_normalizer::ComposingNormalizerBorrowed, std::sync::LazyLock};
 
 mod model;
 mod token;
@@ -29,7 +29,7 @@ static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
 /// canonical equivalence.
 ///
 /// See [Unicode normalization forms](https://www.unicode.org/reports/tr15).
-pub fn normalize_text(text: &str) -> Result<String> {
+pub fn normalize_text(text: &str) -> String {
     // Remove control characters and normalize whitespace
     let text = text
         .chars()
@@ -37,8 +37,9 @@ pub fn normalize_text(text: &str) -> Result<String> {
         .collect::<String>();
 
     // Apply Unicode NFC normalization
-    let mut buffer = String::with_capacity(text.len());
-    NFC.normalize_to(&text, &mut buffer)?;
+    let mut string = String::with_capacity(text.len());
+    NFC.normalize_to(&text, &mut string)
+        .expect("failed to normalize text");
 
-    Ok(buffer)
+    string
 }
