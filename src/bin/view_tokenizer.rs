@@ -25,10 +25,13 @@ fn main() -> Result<()> {
     let merges =
         bincode::serde::decode_from_slice::<Vec<Token>, _>(&buffer, bincode::config::standard())?.0;
 
-    println!("Merges: {}", merges.len().separate_with_commas(),);
+    println!(
+        "Vocabulary size: {}",
+        (merges.len() + 256).separate_with_commas(),
+    );
 
-    for merge in merges {
-        println!("{merge:?}",);
+    for (i, merge) in merges.into_iter().enumerate() {
+        println!("{:<8}: {merge:?}", (i + 256).separate_with_commas());
     }
 
     Ok(())
