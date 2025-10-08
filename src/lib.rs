@@ -1,16 +1,5 @@
-use smallvec::SmallVec;
-
+pub mod tokenization;
 pub mod utils;
-
-/// A byte string representation of a token.
-///
-/// Up to 32 bytes can be allocated on the stack before heap allocating.
-pub type Token = SmallVec<[u8; 32]>;
-
-/// A unique identifier for a token.
-///
-/// Allows for up to 65,536 tokens.
-pub type TokenId = u16;
 
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     #[link(name = "kernels", kind = "static")]
