@@ -23,6 +23,8 @@ fn test_train_tokenizer() {
             .arg("training-data")
             .arg("--tokenizer-file")
             .arg("target/test/test-tokenizer")
+            .arg("--training-config-file")
+            .arg("target/test/test-training-config")
             .arg("--vocab-size")
             .arg("264")
             .arg("--regex")
@@ -36,8 +38,8 @@ fn test_train_tokenizer() {
         &Command::new("just")
             .arg("run")
             .arg("train_tokenizer")
-            .arg("--tokenizer-file")
-            .arg("target/test/test-tokenizer")
+            .arg("--training-config-file")
+            .arg("target/test/test-training-config")
             .output()
             .expect("failed to run train_tokenizer"),
     );

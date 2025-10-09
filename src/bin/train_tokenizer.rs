@@ -119,11 +119,14 @@ fn main() -> Result<()> {
                     },
                     &tokenizer_file,
                 )?;
-
+                std::io::stdout().flush()?;
+                std::io::stderr().flush()?;
                 anyhow::Ok(())
             })() {
                 error!("{error}");
             }
+
+            std::process::exit(0);
         }
     })
     .expect("error setting Ctrl-C handler");
