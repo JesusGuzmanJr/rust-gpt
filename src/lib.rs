@@ -1,6 +1,10 @@
 pub mod tokenization;
 pub mod utils;
 
+mod bincode;
+
+pub use bincode::Bincode;
+
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     #[link(name = "kernels", kind = "static")]
     unsafe extern "C" {

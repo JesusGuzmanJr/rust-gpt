@@ -7,7 +7,10 @@ use {
         ParallelIterator,
     },
     regex::Regex,
-    rust_gpt::tokenization::{Token, TokenizerModel},
+    rust_gpt::{
+        Bincode,
+        tokenization::{Token, TokenizerModel},
+    },
     smallvec::SmallVec,
     std::{
         fs::File,
@@ -337,9 +340,9 @@ fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use {
-        regex::Regex,
-        rust_gpt::tokenization::{Token, TokenizerModel},
+    use rust_gpt::{
+        Bincode,
+        tokenization::{Token, TokenizerModel},
     };
 
     #[test]

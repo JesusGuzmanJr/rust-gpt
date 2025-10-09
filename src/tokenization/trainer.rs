@@ -6,7 +6,7 @@ use {
 
 /// A byte-level BPE trained tokenizer model.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Trainer {
+pub struct TrainerConfig {
     /// The regex used to pre-tokenize the text before BPE.
     pub pre_tokenization_regex: String,
 
@@ -14,16 +14,4 @@ pub struct Trainer {
     pub merges: Vec<Token>,
 }
 
-impl Trainer {
-    const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
-
-    /// Deserialize a tokenizer model from bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        Ok(bincode::serde::decode_from_slice::<Self, _>(bytes, Self::BINCODE_CONFIG)?.0)
-    }
-
-    /// Serialize a tokenizer model to bytes.
-    pub fn to_bytes(&self) -> Result<Vec<u8>> {
-        Ok(bincode::serde::encode_to_vec(self, Self::BINCODE_CONFIG)?)
-    }
-}
+impl crate::Bincode for TrainerConfig {}
