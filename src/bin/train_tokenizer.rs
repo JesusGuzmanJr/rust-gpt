@@ -248,11 +248,13 @@ fn main() -> Result<()> {
     );
 
     info!(num_merges = %num_merges.separate_with_commas(), "Finding merges...");
+    let mut durations = Vec::with_capacity(num_merges);
     for _ in 0..num_merges {
         let merges_search_start = Instant::now();
         let merges = lock_merges().clone();
-        let mut durations = Vec::with_capacity(merges.len());
 
+        // merges might contain existing merges from previous training and durations is
+        // only the current runtime merge durations
         assert_eq!(
             merges.len() - tokenizer.as_ref().map(|t| t.merges.len()).unwrap_or(0),
             durations.len()
