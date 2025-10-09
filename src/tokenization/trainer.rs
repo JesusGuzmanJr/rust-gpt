@@ -12,7 +12,7 @@ pub struct TokenizerTrainingConfig {
     pub input_dir: PathBuf,
 
     /// Path to save the tokenizer file.
-    pub output_file: PathBuf,
+    pub tokenizer_file: PathBuf,
 
     /// The target vocabulary size.
     pub vocab_size: usize,

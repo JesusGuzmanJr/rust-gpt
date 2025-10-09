@@ -244,9 +244,9 @@ fn main() -> Result<()> {
         }
     }
 
-    info!(output_file = %config.output_file.display(), "Saving tokenizer");
+    info!(output_file = %config.tokenizer_file.display(), "Saving tokenizer");
 
-    File::create(config.output_file)?.write_all(
+    File::create(config.tokenizer_file)?.write_all(
         &TokenizerModel {
             pre_tokenization_regex: config.pre_tokenization_regex,
             merges,
@@ -261,52 +261,4 @@ fn main() -> Result<()> {
         );
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use rust_gpt::{
-        Bincode,
-        tokenization::{Token, TokenizerModel},
-    };
-
-    #[test]
-    fn test_train_tokenizer() {
-        let regex = r"\p{L}+ ?";
-        let output = std::process::Command::new("just")
-            .arg("run")
-            .arg("train_tokenizer")
-            .arg("--input-dir")
-            .arg("training-data")
-            .arg("--output-file")
-            .arg("target/test/test-tokenizer")
-            .arg("--vocab-size")
-            .arg("264")
-            .arg("--regex")
-            .arg(regex)
-            .output()
-            .expect("failed to run train_tokenizer");
-
-        assert!(&output.status.success());
-
-        let control_model = TokenizerModel {
-            pre_tokenization_regex: regex.to_string(),
-            merges: vec![
-                Token::from_slice(b"er"),
-                Token::from_slice(b"er "),
-                Token::from_slice(b"ne"),
-                Token::from_slice(b"new"),
-                Token::from_slice(b"lo"),
-                Token::from_slice(b"low"),
-                Token::from_slice(b"newer "),
-                Token::from_slice(b"low "),
-            ],
-        };
-
-        let model =
-            TokenizerModel::from_bytes(&std::fs::read("target/test/test-tokenizer").unwrap())
-                .unwrap();
-
-        assert_eq!(model, control_model);
-    }
 }

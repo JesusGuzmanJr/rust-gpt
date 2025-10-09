@@ -64,7 +64,7 @@ struct Args {
 
     /// Path to save the tokenizer file.
     #[arg(short, long)]
-    output_file: PathBuf,
+    tokenizer_file: PathBuf,
 
     /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
     /// directly impacts how text is tokenized.
@@ -130,15 +130,18 @@ fn main() -> Result<()> {
     // validate the pre-tokenization regex
     Regex::new(&args.pre_tokenization_regex).context("invalid pre-tokenization regex")?;
 
-    if Path::exists(&args.output_file) {
-        anyhow::bail!("output-file already exists: {}", args.output_file.display());
+    if Path::exists(&args.tokenizer_file) {
+        anyhow::bail!(
+            "output-file already exists: {}",
+            args.tokenizer_file.display()
+        );
     }
 
-    File::create(&args.output_file)?.write_all(
+    File::create(&args.tokenizer_file)?.write_all(
         &TokenizerTrainingConfig {
             hash: rust_gpt::hash::hash_directory(&args.input_dir)?,
             input_dir: args.input_dir,
-            output_file: args.output_file,
+            tokenizer_file: args.tokenizer_file,
             vocab_size: args.vocab_size,
             pre_tokenization_regex: args.pre_tokenization_regex,
             merges: Vec::with_capacity(0), // no need to allocate

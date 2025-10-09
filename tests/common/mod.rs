@@ -2,6 +2,9 @@ use std::process::{Command, Output};
 
 /// Create the test output directory if it doesn't exist.
 pub(crate) fn create_test_output_dir() {
+    if std::fs::metadata("target/test").is_ok() {
+        std::fs::remove_dir_all("target/test").expect("failed to remove test output directory");
+    }
     std::fs::create_dir_all("target/test").expect("failed to create test output directory");
 }
 
