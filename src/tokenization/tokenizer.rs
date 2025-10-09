@@ -83,14 +83,17 @@ impl Tokenizer {
 
     /// Convert token IDs into a string.
     pub fn decode(&self, ids: &[TokenId]) -> String {
-        String::from_utf8_lossy(
-            &ids.iter()
-                .filter_map(|id| self.merges.get(*id as usize).map(Token::as_slice))
-                .flatten()
-                .cloned()
-                .collect::<Vec<_>>(),
-        )
-        .into()
+        let mut buffer = Vec::new();
+
+        for id in ids {
+            if *id < 256 {
+                buffer.push(*id as u8);
+            } else if let Some(merge) = self.merges.get(*id as usize - 256) {
+                buffer.extend(merge.as_slice());
+            }
+        }
+
+        String::from_utf8_lossy(&buffer).into()
     }
 }
 
@@ -99,7 +102,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_encode_decode() {
+    fn test_encode_and_decode() {
         let tokenizer = Tokenizer {
             regex: Regex::new(r"\p{L}+ ?").unwrap(),
             merges: vec![
@@ -114,10 +117,9 @@ mod tests {
             ],
         };
 
-        let ids = tokenizer.encode("Hello world");
         #[rustfmt::skip]
         assert_eq!(
-            ids,
+            tokenizer.encode("Hello world"),
             [
                 'H' as u32,
                 'e' as u32,
@@ -134,5 +136,13 @@ mod tests {
             .map(|id| *id as TokenId)
             .collect::<Vec<_>>()
         );
+
+        assert_eq!(
+            tokenizer.decode(&tokenizer.encode("Hello world")),
+            "Hello world"
+        );
+
+        assert_eq!(tokenizer.encode("newer "), [262 as TokenId]);
+        assert_eq!(tokenizer.encode("lower "), [261 as TokenId, 257 as TokenId]);
     }
 }
