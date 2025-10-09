@@ -302,7 +302,14 @@ fn main() -> Result<()> {
             merges.push((merged_token.clone(), merges_search_start.elapsed()));
         }
 
-        // Track pairs that need to be updated in pair_counts
+        // Before merging, we need to know which pairs are disappearing so we
+        // can update the global pair_counts.
+        //
+        // Example:
+        // Word: ["l", "o", "w"] appears 5 times
+        // We're about to merge ["l", "o"] → ["lo"]
+        // Old pairs: ("l","o") and ("o","w") - each should lose 5 from their counts
+        // New pairs: ("lo","w") - should gain 5
         let pair_deltas: AHashMap<[Token; 2], i64> = word_frequencies
             .par_iter_mut()
             .fold(AHashMap::default, |mut deltas, (word, count)| {
@@ -311,14 +318,14 @@ fn main() -> Result<()> {
                     .windows(2)
                     .any(|w| w[0] == most_frequent[0] && w[1] == most_frequent[1]);
                 if !has_pair {
-                    return deltas;
+                    return deltas; // return empty deltas early
                 }
 
-                // Remove old pairs from deltas
+                // remove old pairs from deltas
                 for window in word.windows(2) {
                     *deltas
                         .entry([window[0].clone(), window[1].clone()])
-                        .or_default() -= *count as i64;
+                        .or_default() -= *count as i64; // u32 to i64 because we will be subtracting
                 }
 
                 // Build new word with merged tokens in-place using efficient iteration
@@ -354,11 +361,11 @@ fn main() -> Result<()> {
                 acc
             });
 
-        // Apply deltas to pair_counts
         for (pair, delta) in pair_deltas {
             if delta < 0 {
                 let entry = pair_counts.entry(pair.clone()).or_default();
-                *entry = entry.saturating_sub((-delta) as u32);
+                // delta is negative, so we negate it and use saturating_sub
+                *entry = entry.saturating_sub((-delta) as u32); // won't wrap around
                 if *entry == 0 {
                     pair_counts.remove(&pair);
                 }
