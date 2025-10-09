@@ -107,9 +107,8 @@ fn main() -> Result<()> {
                 let merges = merges.lock().expect("failed to lock merges");
                 warn!(
                     elapsed = ?start.elapsed(),
-                    current_vocab_size = (merges.len() + 256).separate_with_commas(),
-                    target_vocab_size = config.vocab_size.separate_with_commas(),
-                    "Training interrupted. You may resume it later."
+                    current_vocab_size = %(merges.len() + 256).separate_with_commas(),
+                    target_vocab_size = %config.vocab_size.separate_with_commas(),
                 );
                 save_tokenizer(
                     &TokenizerModel {
@@ -122,7 +121,7 @@ fn main() -> Result<()> {
                     },
                     &tokenizer_file,
                 )?;
-
+                info!("Training interrupted");
                 anyhow::Ok(())
             })() {
                 error!("{error}");
@@ -147,7 +146,7 @@ fn main() -> Result<()> {
 
             save_tokenizer(
                 &TokenizerModel {
-                    pre_tokenization_regex: config.pre_tokenization_regex,
+                    pre_tokenization_regex: config.pre_tokenization_regex.clone(),
                     merges: merges
                         .iter()
                         .map(|(token, _duration)| token)
