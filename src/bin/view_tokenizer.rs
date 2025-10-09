@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     let model = TokenizerModel::from_bytes(&buffer)?;
 
     println!(
-        "Pre-tokenization regex: {:?}\nVocabulary size: {}",
+        "Pre-tokenization regex: {:?}\nCurrent vocabulary size: {}",
         model.pre_tokenization_regex,
         (model.merges.len() + 256).separate_with_commas(),
     );

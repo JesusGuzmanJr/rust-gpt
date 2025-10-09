@@ -1,11 +1,8 @@
 use {
-    ahash::{AHashMap, AHashSet},
+    ahash::AHashMap,
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{
-        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
-        ParallelIterator,
-    },
+    rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::{
         tokenization::{Token, TokenizerModel, TokenizerTrainingConfig},
@@ -218,11 +215,32 @@ fn main() -> Result<()> {
         "Done breaking down words"
     );
 
+    // Build initial pair counts - this is done once at the start
+    info!("Building initial pair frequency map...");
+    let pair_build_start = Instant::now();
+    let mut pair_counts: AHashMap<[Token; 2], u32> = word_frequencies
+        .par_iter()
+        .fold(AHashMap::default, |mut acc, (word, count)| {
+            for pair in word.windows(2) {
+                *acc.entry([pair[0].clone(), pair[1].clone()]).or_default() += count;
+            }
+            acc
+        })
+        .reduce(AHashMap::default, |mut acc, map| {
+            for (pair, count) in map {
+                *acc.entry(pair).or_default() += count;
+            }
+            acc
+        });
+
+    debug!(
+        elapsed = ?pair_build_start.elapsed(),
+        num_unique_pairs = %pair_counts.len().separate_with_commas(),
+        "Built initial pair frequencies"
+    );
+
     info!(num_merges = %num_merges.separate_with_commas(), "Finding merges...");
     for _ in 0..num_merges {
-        // Video lecture by Dan Jurafsky on BPE algorithm will come in handy here
-        // https://www.youtube.com/watch?v=tOMjTCO0htA
-
         let merges_search_start = Instant::now();
         let merges = lock_merges().clone();
 
@@ -246,82 +264,22 @@ fn main() -> Result<()> {
             )?;
         }
 
-        let most_frequent = {
-            // compute the most frequent pair of adjacent tokens from the word frequencies
-            // token -> (count, indices_of_word_frequencies_set)
-            let pair_mapping = word_frequencies
-                .par_iter()
-                .enumerate()
-                .map(|(i, (word, count))| {
-                    // map each word into a mapping of adjacent tokens to counts
-                    // (i, word, count) -> [(pair1: (count, i)), (pair2: (count, i)),
-                    // ...]
-                    //
-                    // i: 0 // index of the word in the word frequencies list
-                    // word: "hello"
-                    // count: 3
-                    //
-                    // pairs: ("h", "e"), ("e", "l"), ("l", "l"), ("l", "o")
-                    //
-                    // pair counts: ("h", "e", 3,), ("e", "l", 3), ("l", "l", 3), ...
-                    //
-                    // (0, "hello", 3) -> [(("h", "e"): (3, 0)), (("e", "l"): (3, 0)), ...]
-                    word.windows(2).fold(
-                        AHashMap::<&[Token], (u32, usize)>::default(),
-                        |mut acc, pair| {
-                            acc.entry(pair).or_insert((0, i)).0 += count;
-                            acc
-                        },
-                    )
+        // Find the most frequent pair using the pre-computed counts
+        let most_frequent_pair = pair_counts
+            .iter()
+            .max_by(|(pair_a, count_a), (pair_b, count_b)| {
+                // Compare by count first, then by lexicographic order for determinism
+                count_a.cmp(count_b).then_with(|| {
+                    (pair_a[0].as_slice(), pair_a[1].as_slice())
+                        .cmp(&(pair_b[0].as_slice(), pair_b[1].as_slice()))
                 })
-                .fold(AHashMap::default, |mut acc, pair_counts| {
-                    // we're working in parallel so we'll have multiple mappings that need merging
-                    // however now the mappings will reduce from (pair, index) to (pair, indices)
-                    for (pair, (count, i)) in pair_counts {
-                        let entry = acc.entry(pair).or_insert((0, AHashSet::default()));
-                        entry.0 += count;
-                        entry.1.insert(i);
-                    }
-                    acc
-                })
-                .reduce(AHashMap::default, |mut acc, pair_counts| {
-                    // we need to reduce the indices into a single set for each pair
-                    for (pair, (count, indices)) in pair_counts {
-                        let entry = acc.entry(pair).or_insert((0, AHashSet::default()));
-                        entry.0 += count;
-                        entry.1.extend(indices);
-                    }
-                    acc
-                });
+            })
+            .context(
+                "Not enough tokens to compute most frequent pair. \
+                You don't have enough text for the desired vocabulary size",
+            )?;
 
-            trace!("Pair mapping:");
-            for (pair, (count, indices)) in &pair_mapping {
-                trace!(
-                    "({:?}, {:?}) → count: {count}, indices: {indices:?}",
-                    pair[0], pair[1],
-                );
-            }
-
-            let (most_frequent, _) = pair_mapping
-                .par_iter()
-                .max_by(|(pair_a, (count_a, _)), (pair_b, (count_b, _))| {
-                    // compare by count, then by lexicographic order of the pair's bytes
-                    // to ensure deterministic results when counts are equal
-                    // this isn't exactly BPE but it's a close enough approximation
-                    count_a.cmp(count_b).then_with(|| {
-                        (pair_a[0].as_slice(), pair_a[1].as_slice())
-                            .cmp(&(pair_b[0].as_slice(), pair_b[1].as_slice()))
-                    })
-                })
-                .context(
-                    "Not enough tokens to compute most frequent pair \
-                    You don't have enough text for the desired vocabulary size",
-                )?;
-
-            // return minimally owned data so we can later mutate word frequencies when
-            // merging the most frequent pair
-            [most_frequent[0].clone(), most_frequent[1].clone()]
-        };
+        let most_frequent = most_frequent_pair.0.clone();
 
         if should_stop.load(Ordering::SeqCst) {
             return anyhow::Ok(());
@@ -333,7 +291,7 @@ fn main() -> Result<()> {
         {
             warn!(
                 "You are attempting to merge a pair of tokens \
-                that is greater than {max_token_size_warning} bytes.\
+                that is greater than {max_token_size_warning} bytes. \
                 Tokens that big are probably not desirable. \
                 Try lowering the vocabulary size."
             );
@@ -346,32 +304,70 @@ fn main() -> Result<()> {
             merges.push((merged_token.clone(), merges_search_start.elapsed()));
         }
 
-        word_frequencies.par_iter_mut().for_each(|(word, _)| {
-            let mut skip = false;
-            let mut new_word = word
-                .windows(2)
-                .filter_map(|window| {
-                    if skip {
-                        skip = false;
-                        return None;
-                    }
+        // Track pairs that need to be updated in pair_counts
+        let pair_deltas: AHashMap<[Token; 2], i64> = word_frequencies
+            .par_iter_mut()
+            .fold(AHashMap::default, |mut deltas, (word, count)| {
+                // Early check: does this word contain the pair to merge?
+                let has_pair = word
+                    .windows(2)
+                    .any(|w| w[0] == most_frequent[0] && w[1] == most_frequent[1]);
+                if !has_pair {
+                    return deltas;
+                }
 
-                    if window[0] == most_frequent[0] && window[1] == most_frequent[1] {
-                        skip = true;
-                        Some(merged_token.clone())
+                // Remove old pairs from deltas
+                for window in word.windows(2) {
+                    *deltas
+                        .entry([window[0].clone(), window[1].clone()])
+                        .or_default() -= *count as i64;
+                }
+
+                // Build new word with merged tokens in-place using efficient iteration
+                let mut new_word = TokenVec::new();
+                let mut i = 0;
+                while i < word.len() {
+                    if i + 1 < word.len()
+                        && word[i] == most_frequent[0]
+                        && word[i + 1] == most_frequent[1]
+                    {
+                        new_word.push(merged_token.clone());
+                        i += 2; // Skip both tokens
                     } else {
-                        Some(window[0].clone())
+                        new_word.push(word[i].clone());
+                        i += 1;
                     }
-                })
-                .collect::<TokenVec>();
+                }
 
-            // need to add the rightmost token if it wasn't part of the merge
-            if !skip {
-                new_word.extend(word.last().cloned());
+                // Add new pairs to deltas
+                for window in new_word.windows(2) {
+                    *deltas
+                        .entry([window[0].clone(), window[1].clone()])
+                        .or_default() += *count as i64;
+                }
+
+                *word = new_word;
+                deltas
+            })
+            .reduce(AHashMap::default, |mut acc, deltas| {
+                for (pair, delta) in deltas {
+                    *acc.entry(pair).or_default() += delta;
+                }
+                acc
+            });
+
+        // Apply deltas to pair_counts
+        for (pair, delta) in pair_deltas {
+            if delta < 0 {
+                let entry = pair_counts.entry(pair.clone()).or_default();
+                *entry = entry.saturating_sub((-delta) as u32);
+                if *entry == 0 {
+                    pair_counts.remove(&pair);
+                }
+            } else if delta > 0 {
+                *pair_counts.entry(pair).or_default() += delta as u32;
             }
-
-            *word = new_word;
-        });
+        }
     }
 
     save_tokenizer(
