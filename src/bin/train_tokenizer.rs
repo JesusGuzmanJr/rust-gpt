@@ -18,7 +18,7 @@ use {
         path::{Path, PathBuf},
         sync::{
             Arc, Mutex,
-            atomic::{AtomicUsize, Ordering},
+            atomic::{AtomicBool, AtomicUsize, Ordering},
         },
         time::{Duration, Instant},
     },
@@ -94,19 +94,22 @@ fn main() -> Result<()> {
     )));
     let lock_merges = || merges.lock().expect("failed to lock merges");
     let pre_tokenization_regex = Regex::new(&config.pre_tokenization_regex)?;
+    let should_stop = Arc::new(AtomicBool::new(false));
 
     ctrlc::set_handler({
         let merges = merges.clone();
         let pre_tokenization_regex = config.pre_tokenization_regex.clone();
         let tokenizer_file = config.tokenizer_file.clone();
+        let should_stop = should_stop.clone();
         move || {
+            should_stop.store(true, Ordering::SeqCst);
             if let Err(error) = (|| {
                 let merges = merges.lock().expect("failed to lock merges");
                 warn!(
                     elapsed = ?start.elapsed(),
                     current_vocab_size = (merges.len() + 256).separate_with_commas(),
                     target_vocab_size = config.vocab_size.separate_with_commas(),
-                    "Training interrupted.\nYou may resume it later."
+                    "Training interrupted. You may resume it later."
                 );
                 save_tokenizer(
                     &TokenizerModel {
@@ -119,20 +122,18 @@ fn main() -> Result<()> {
                     },
                     &tokenizer_file,
                 )?;
-                std::io::stdout().flush()?;
-                std::io::stderr().flush()?;
+
                 anyhow::Ok(())
             })() {
                 error!("{error}");
             }
-
-            std::process::exit(0);
         }
     })
     .expect("error setting Ctrl-C handler");
 
     let mut bytes_read = Some(AtomicUsize::new(0));
 
+    info!(num_merges = %num_merges.separate_with_commas(), "Finding merges...");
     for _ in 0..num_merges {
         let merges_search_start = Instant::now();
         let merges = lock_merges().clone();
@@ -156,6 +157,9 @@ fn main() -> Result<()> {
                 let mut reader = std::io::BufReader::new(zstd::Decoder::new(file)?);
 
                 loop {
+                    if should_stop.load(Ordering::SeqCst) {
+                        return anyhow::Ok((i, pair_frequencies));
+                    }
                     // clearing is O(1).
                     buffer.clear();
 
@@ -227,6 +231,10 @@ fn main() -> Result<()> {
             .sorted_by_key(|(i, _)| *i)
             .flat_map(|(_, pairs)| pairs)
             .collect::<IndexMap<_, _>>();
+
+        if should_stop.load(Ordering::SeqCst) {
+            return anyhow::Ok(());
+        }
 
         if let Some(read) = &bytes_read {
             info!(
