@@ -49,6 +49,7 @@ fn main() -> Result<()> {
     ctrlc::set_handler({
         let r = running.clone();
         move || {
+            info!("Stopping training...");
             r.store(false, Ordering::SeqCst);
         }
     })

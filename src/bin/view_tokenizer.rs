@@ -10,9 +10,9 @@ use {
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Path to the tokenizer file.
+    /// Path to the tokenizer model file.
     #[arg(short, long)]
-    input_file: PathBuf,
+    tokenizer_file: PathBuf,
 }
 
 fn main() -> Result<()> {
@@ -20,7 +20,7 @@ fn main() -> Result<()> {
 
     let mut buffer = Vec::new();
 
-    File::open(args.input_file)?.read_to_end(&mut buffer)?;
+    File::open(args.tokenizer_file)?.read_to_end(&mut buffer)?;
 
     let model = TokenizerModel::from_bytes(&buffer)?;
 
