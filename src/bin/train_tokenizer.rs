@@ -1,5 +1,5 @@
 use {
-    anyhow::Result,
+    anyhow::{Context, Result},
     clap::Parser,
     itertools::Itertools,
     rayon::iter::{
@@ -15,12 +15,12 @@ use {
     std::{
         fs::File,
         io::{BufRead, Seek, Write},
-        path::PathBuf,
+        path::{Path, PathBuf},
         sync::{
-            Arc,
-            atomic::{AtomicBool, AtomicUsize, Ordering},
+            Arc, Mutex,
+            atomic::{AtomicUsize, Ordering},
         },
-        time::Instant,
+        time::{Duration, Instant},
     },
     thousands::Separable,
     tracing::*,
@@ -33,39 +33,24 @@ type TokenVec = SmallVec<[Token; 32]>;
 #[derive(Parser, Debug)]
 #[command(version, long_about)]
 struct Args {
-    /// Path to the tokenizer model file.
+    /// Path to save the training config file.
     #[arg(short, long)]
-    tokenizer_file: PathBuf,
+    training_config_file: PathBuf,
 }
 
 fn main() -> Result<()> {
     let start = Instant::now();
 
     rust_gpt::utils::setup_tracing_subscriber();
-
     let args = Args::parse();
+    let config = TokenizerTrainingConfig::from_bytes(&std::fs::read(&args.training_config_file)?)
+        .context("failed to read tokenizer file")?;
 
-    let running = Arc::new(AtomicBool::new(true));
-    ctrlc::set_handler({
-        let r = running.clone();
-        move || {
-            info!("Stopping training...");
-            r.store(false, Ordering::SeqCst);
-        }
-    })
-    .expect("error setting Ctrl-C handler");
-
-    let config = TokenizerTrainingConfig::from_bytes(&std::fs::read(&args.tokenizer_file)?)?;
-
-    let hash = rust_gpt::hash::hash_directory(&config.input_dir)?;
-
-    if hash != config.hash {
+    if rust_gpt::hash::hash_directory(&config.input_dir)? != config.hash {
         anyhow::bail!(
             "Training data has changed. Re-run create_tokenizer to create a new tokenizer model.",
         );
     }
-
-    let pre_tokenization_regex = Regex::new(&config.pre_tokenization_regex)?;
 
     // open files with advisory that other processes should not modify them while
     // training
@@ -104,19 +89,57 @@ fn main() -> Result<()> {
     // token. A 64 byte token is HUGE and very unlikely.
     //
     // 64 * 399,488 = 25,567,232 bytes or 25.57 MiB.
-    let mut merges = Vec::<Token>::with_capacity(num_merges);
+    let merges = Arc::new(Mutex::new(Vec::<(Token, Duration)>::with_capacity(
+        num_merges,
+    )));
+    let lock_merges = || merges.lock().expect("failed to lock merges");
+    let pre_tokenization_regex = Regex::new(&config.pre_tokenization_regex)?;
+
+    ctrlc::set_handler({
+        let merges = merges.clone();
+        let pre_tokenization_regex = config.pre_tokenization_regex.clone();
+        let tokenizer_file = config.tokenizer_file.clone();
+        move || {
+            if let Err(error) = (|| {
+                let merges = merges.lock().expect("failed to lock merges");
+                warn!(
+                    elapsed = ?start.elapsed(),
+                    current_vocab_size = (merges.len() + 256).separate_with_commas(),
+                    target_vocab_size = config.vocab_size.separate_with_commas(),
+                    "Training interrupted.\nYou may resume it later."
+                );
+                save_tokenizer(
+                    &TokenizerModel {
+                        pre_tokenization_regex: pre_tokenization_regex.clone(),
+                        merges: merges
+                            .clone()
+                            .into_iter()
+                            .map(|(token, _duration)| token)
+                            .collect(),
+                    },
+                    &tokenizer_file,
+                )?;
+
+                anyhow::Ok(())
+            })() {
+                error!("{error}");
+            }
+        }
+    })
+    .expect("error setting Ctrl-C handler");
 
     let mut bytes_read = Some(AtomicUsize::new(0));
 
     for _ in 0..num_merges {
-        if !running.load(Ordering::SeqCst) {
-            warn!(
-                elapsed = ?start.elapsed(),
-                current_vocab_size = (merges.len() + 256).separate_with_commas(),
-                target_vocab_size = config.vocab_size.separate_with_commas(),
-                "Training interrupted.\nYou may resume it later."
+        let merges_search_start = Instant::now();
+        let merges = lock_merges().clone();
+
+        if !merges.is_empty() {
+            info!(
+                current_merges = %merges.len().separate_with_commas(),
+                target_merges = %num_merges.separate_with_commas(),
+                average_duration = ?merges.iter().map(|(_, duration)| *duration).sum::<Duration>() / merges.len() as u32,
             );
-            break;
         }
 
         // we assume that the files are not modified during the training
@@ -154,7 +177,7 @@ fn main() -> Result<()> {
                         })
                         .for_each(|mut tokens| {
                             // need to apply all the merges in order
-                            for merge in &merges {
+                            for (merge, _duration) in &merges {
                                 let mut skip = false;
                                 let mut processed_tokens = tokens
                                     .windows(2)
@@ -234,8 +257,13 @@ fn main() -> Result<()> {
                 count.separate_with_commas()
             );
 
-            merges.push(most_frequent_pair.0.clone() + most_frequent_pair.1.clone());
+            let mut merges = lock_merges();
+            merges.push((
+                most_frequent_pair.0.clone() + most_frequent_pair.1.clone(),
+                merges_search_start.elapsed(),
+            ));
         } else {
+            let merges = lock_merges();
             warn!(
                 target_vocab_size = config.vocab_size.separate_with_commas(),
                 max_possible_vocab_size = (merges.len() + 256).separate_with_commas(),
@@ -244,21 +272,31 @@ fn main() -> Result<()> {
         }
     }
 
-    info!(output_file = %config.tokenizer_file.display(), "Saving tokenizer");
-
-    File::create(config.tokenizer_file)?.write_all(
+    save_tokenizer(
         &TokenizerModel {
             pre_tokenization_regex: config.pre_tokenization_regex,
-            merges,
-        }
-        .to_bytes()?,
+            merges: merges
+                .lock()
+                .expect("failed to lock merges")
+                .clone()
+                .into_iter()
+                .map(|(token, _duration)| token)
+                .collect(),
+        },
+        &config.tokenizer_file,
     )?;
 
-    if running.load(Ordering::SeqCst) {
-        info!(
-            elapsed = ?start.elapsed(),
-            "Done training tokenizer"
-        );
-    }
+    info!(
+        elapsed = ?start.elapsed(),
+        "Done training tokenizer"
+    );
+
+    Ok(())
+}
+
+// Upsert the tokenizer file.
+fn save_tokenizer(tokenizer: &TokenizerModel, tokenizer_file: &Path) -> Result<()> {
+    info!(output_file = %tokenizer_file.display(), "Saving tokenizer");
+    File::create(tokenizer_file)?.write_all(&tokenizer.to_bytes()?)?;
     Ok(())
 }

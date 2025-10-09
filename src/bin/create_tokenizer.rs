@@ -66,6 +66,10 @@ struct Args {
     #[arg(short, long)]
     tokenizer_file: PathBuf,
 
+    /// Path to save the training config file.
+    #[arg(short, long)]
+    training_config_file: PathBuf,
+
     /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
     /// directly impacts how text is tokenized.
     ///
@@ -132,12 +136,12 @@ fn main() -> Result<()> {
 
     if Path::exists(&args.tokenizer_file) {
         anyhow::bail!(
-            "output-file already exists: {}",
+            "tokenizer-file already exists: {}",
             args.tokenizer_file.display()
         );
     }
 
-    File::create(&args.tokenizer_file)?.write_all(
+    File::create(&args.training_config_file)?.write_all(
         &TokenizerTrainingConfig {
             hash: rust_gpt::hash::hash_directory(&args.input_dir)?,
             input_dir: args.input_dir,

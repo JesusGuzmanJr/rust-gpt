@@ -16,6 +16,7 @@ use {
 /// If either the file name or
 /// contents change, the hash will change.
 pub fn hash_directory(input_dir: &Path) -> Result<u64> {
+    debug!(input_dir = %input_dir.display(), "Hashing directory");
     let start = Instant::now();
     let bytes_read = AtomicUsize::new(0);
 
@@ -85,7 +86,7 @@ pub fn hash_directory(input_dir: &Path) -> Result<u64> {
         bytes_read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
             .display()
             .iec(),
-        input_dir = %input_dir.display(),
+
         "Done hashing directory"
     );
 
