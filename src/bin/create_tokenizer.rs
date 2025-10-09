@@ -106,7 +106,7 @@ struct Args {
     /// - GPT-2 has a vocabulary size of 50257
     ///
     /// - GPT-4 has a vocabulary size of ~100,000
-    #[arg(short = 's', long, value_parser=clap::value_parser!(u32).range(256..))]
+    #[arg(short = 's', long)]
     vocab_size: usize,
 
     /// Regex for the initial split of text into words. The regex should capture
@@ -122,16 +122,16 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
 
-    if Path::exists(&args.output_file) {
-        anyhow::bail!("output-file already exists: {}", args.output_file.display());
-    }
-
     if args.vocab_size < 256 {
         anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
     }
 
     // validate the pre-tokenization regex
     Regex::new(&args.pre_tokenization_regex).context("invalid pre-tokenization regex")?;
+
+    if Path::exists(&args.output_file) {
+        anyhow::bail!("output-file already exists: {}", args.output_file.display());
+    }
 
     File::create(&args.output_file)?.write_all(
         &TokenizerTrainingConfig {
