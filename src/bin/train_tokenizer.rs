@@ -28,7 +28,8 @@ use {
 
 type TokenVec = SmallVec<[Token; 32]>;
 
-/// Start or resume training of the tokenizer.
+/// Start or resume training the tokenizer using approximate byte-level byte
+/// pair encoding (BPE).
 #[derive(Parser, Debug)]
 #[command(version, long_about)]
 struct Args {
@@ -303,10 +304,14 @@ fn main() -> Result<()> {
 
             let (most_frequent, _) = pair_mapping
                 .par_iter()
-                .max_by_key(|(_, (count, indices))| {
-                    // if multiple pairs have the same count,
-                    // we sort by the pair to bring it into a deterministic order
-                    (*count, indices.iter().min().expect("indices was empty"))
+                .max_by(|(pair_a, (count_a, _)), (pair_b, (count_b, _))| {
+                    // compare by count, then by lexicographic order of the pair's bytes
+                    // to ensure deterministic results when counts are equal
+                    // this isn't exactly BPE but it's a close enough approximation
+                    count_a.cmp(count_b).then_with(|| {
+                        (pair_a[0].as_slice(), pair_a[1].as_slice())
+                            .cmp(&(pair_b[0].as_slice(), pair_b[1].as_slice()))
+                    })
                 })
                 .context(
                     "Not enough tokens to compute most frequent pair \
@@ -342,22 +347,29 @@ fn main() -> Result<()> {
         }
 
         word_frequencies.par_iter_mut().for_each(|(word, _)| {
-            let mut new_word = TokenVec::new();
-            let mut i = 0;
-            while i < word.len() {
-                // Check if we have a pair that matches most_frequent
-                if i + 1 < word.len()
-                    && word[i] == most_frequent[0]
-                    && word[i + 1] == most_frequent[1]
-                {
-                    // Replace the pair with the merged token
-                    new_word.push(merged_token.clone());
-                    i += 2; // Skip both tokens
-                } else {
-                    new_word.push(word[i].clone());
-                    i += 1;
-                }
+            let mut skip = false;
+            let mut new_word = word
+                .windows(2)
+                .filter_map(|window| {
+                    if skip {
+                        skip = false;
+                        return None;
+                    }
+
+                    if window[0] == most_frequent[0] && window[1] == most_frequent[1] {
+                        skip = true;
+                        Some(merged_token.clone())
+                    } else {
+                        Some(window[0].clone())
+                    }
+                })
+                .collect::<TokenVec>();
+
+            // need to add the rightmost token if it wasn't part of the merge
+            if !skip {
+                new_word.extend(word.last().cloned());
             }
+
             *word = new_word;
         });
     }

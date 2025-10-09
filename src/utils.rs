@@ -1,7 +1,7 @@
 use {
     anyhow::{Context, Result},
     serde::{Serialize, de::DeserializeOwned},
-    std::{io::IsTerminal, path::Path},
+    std::path::Path,
 };
 
 /// Bincode configuration for all serialization and deserialization operations.
@@ -11,7 +11,6 @@ const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard
 pub fn setup_tracing_subscriber() {
     tracing_subscriber::fmt()
         .with_timer(tracing_subscriber::fmt::time::Uptime::default())
-        .with_ansi(std::io::stdout().is_terminal())
         .with_env_filter(
             tracing_subscriber::EnvFilter::builder()
                 .with_default_directive(tracing::level_filters::LevelFilter::INFO.into())
