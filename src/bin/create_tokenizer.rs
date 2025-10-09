@@ -121,6 +121,7 @@ struct Args {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    rust_gpt::utils::setup_tracing_subscriber();
 
     if args.vocab_size < 256 {
         anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
@@ -135,6 +136,7 @@ fn main() -> Result<()> {
 
     File::create(&args.output_file)?.write_all(
         &TokenizerTrainingConfig {
+            hash: rust_gpt::hash::hash_directory(&args.input_dir)?,
             input_dir: args.input_dir,
             output_file: args.output_file,
             vocab_size: args.vocab_size,
