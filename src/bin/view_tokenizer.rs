@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     clap::Parser,
-    rust_gpt::{Bincode, tokenization::TokenizerModel},
+    rust_gpt::{tokenization::TokenizerModel, utils::Bincode},
     std::{fs::File, io::Read, path::PathBuf},
     thousands::Separable,
 };

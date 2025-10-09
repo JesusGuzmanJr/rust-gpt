@@ -5,8 +5,8 @@ use {
     rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::{
-        Bincode,
         tokenization::{Token, TokenizerModel, TokenizerTrainingConfig},
+        utils::{Bincode, Ron},
     },
     smallvec::SmallVec,
     std::{
@@ -39,9 +39,7 @@ fn main() -> Result<()> {
 
     rust_gpt::utils::setup_tracing_subscriber();
 
-    let config =
-        ron::de::from_bytes::<TokenizerTrainingConfig>(&std::fs::read(&Args::parse().config)?)
-            .context("failed to read tokenizer file")?;
+    let config = TokenizerTrainingConfig::from_file_path(&Args::parse().config)?;
 
     if config.vocab_size < 256 {
         anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");

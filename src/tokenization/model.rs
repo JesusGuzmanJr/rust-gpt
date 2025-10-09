@@ -13,4 +13,4 @@ pub struct TokenizerModel {
     pub merges: Vec<Token>,
 }
 
-impl crate::Bincode for TokenizerModel {}
+impl crate::utils::Bincode for TokenizerModel {}

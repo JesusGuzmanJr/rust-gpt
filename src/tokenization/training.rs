@@ -106,3 +106,5 @@ pub struct TokenizerTrainingConfig {
 fn default_pre_tokenization_regex() -> String {
     DEFAULT_PRE_TOKENIZATION_REGEX.to_string()
 }
+
+impl crate::utils::Ron for TokenizerTrainingConfig {}

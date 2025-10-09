@@ -2,7 +2,7 @@
 
 use {
     super::{Token, TokenizerModel},
-    crate::{Bincode, tokenization::TokenId},
+    crate::{tokenization::TokenId, utils::Bincode},
     anyhow::Result,
     regex::Regex,
     smallvec::SmallVec,

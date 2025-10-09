@@ -1,8 +1,8 @@
 use {
     crate::common::assert_success,
     rust_gpt::{
-        Bincode,
         tokenization::{Token, TokenizerModel},
+        utils::Bincode,
     },
     std::process::Command,
 };
