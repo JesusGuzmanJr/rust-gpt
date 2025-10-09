@@ -2,7 +2,10 @@ use {
     ahash::{AHashMap, AHashSet},
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator},
+    rayon::iter::{
+        IndexedParallelIterator, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator,
+    },
     regex::Regex,
     rust_gpt::{
         tokenization::{Token, TokenizerModel, TokenizerTrainingConfig},
@@ -196,7 +199,7 @@ fn main() -> Result<()> {
 
     // We want to split words into tokens to perform merges
     let breakdown_start = Instant::now();
-    let word_frequencies = word_frequencies
+    let mut word_frequencies = word_frequencies
         .par_iter()
         .map(|(word, count)| {
             (
@@ -332,11 +335,31 @@ fn main() -> Result<()> {
         }
 
         debug!("Merging {:?} and {:?}", most_frequent[0], most_frequent[1]);
-        let mut merges = lock_merges();
-        merges.push((
-            most_frequent[0].clone() + most_frequent[1].clone(),
-            merges_search_start.elapsed(),
-        ));
+        let merged_token = most_frequent[0].clone() + most_frequent[1].clone();
+        {
+            let mut merges = lock_merges();
+            merges.push((merged_token.clone(), merges_search_start.elapsed()));
+        }
+
+        word_frequencies.par_iter_mut().for_each(|(word, _)| {
+            let mut new_word = TokenVec::new();
+            let mut i = 0;
+            while i < word.len() {
+                // Check if we have a pair that matches most_frequent
+                if i + 1 < word.len()
+                    && word[i] == most_frequent[0]
+                    && word[i + 1] == most_frequent[1]
+                {
+                    // Replace the pair with the merged token
+                    new_word.push(merged_token.clone());
+                    i += 2; // Skip both tokens
+                } else {
+                    new_word.push(word[i].clone());
+                    i += 1;
+                }
+            }
+            *word = new_word;
+        });
     }
 
     save_tokenizer(

@@ -42,6 +42,6 @@ pub trait Ron: DeserializeOwned {
     /// Serialize the file into `Self`.
     fn from_file_path(file_path: &Path) -> Result<Self> {
         ron::de::from_bytes::<Self>(&std::fs::read(file_path)?)
-            .with_context(|| format!("failed to read .ron file: {}", file_path.display()))
+            .with_context(|| format!("failed to parse: {}", file_path.display()))
     }
 }
