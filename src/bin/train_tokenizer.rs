@@ -29,9 +29,9 @@ type TokenVec = SmallVec<[Token; 32]>;
 #[derive(Parser, Debug)]
 #[command(version, long_about)]
 struct Args {
-    /// Path to save the training config file.
+    /// Path to the tokenizer training config file.
     #[arg(short, long)]
-    training_config_file: PathBuf,
+    config: PathBuf,
 }
 
 fn main() -> Result<()> {
@@ -40,8 +40,24 @@ fn main() -> Result<()> {
     rust_gpt::utils::setup_tracing_subscriber();
 
     let config =
-        TokenizerTrainingConfig::from_bytes(&std::fs::read(&Args::parse().training_config_file)?)
+        ron::de::from_bytes::<TokenizerTrainingConfig>(&std::fs::read(&Args::parse().config)?)
             .context("failed to read tokenizer file")?;
+
+    if config.vocab_size < 256 {
+        anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
+    }
+
+    // validate the pre-tokenization regex
+    let pre_tokenization_regex =
+        Regex::new(&config.pre_tokenization_regex).context("invalid pre-tokenization regex")?;
+
+    // ensure output_file is not a directory
+    if config.output_file.is_dir() {
+        anyhow::bail!(
+            "output-file is a directory: {}",
+            config.output_file.display()
+        );
+    }
 
     let num_merges = config.vocab_size - 256;
 
@@ -64,13 +80,19 @@ fn main() -> Result<()> {
     )));
 
     let lock_merges = || merges.lock().expect("failed to lock merges");
-    let pre_tokenization_regex = Regex::new(&config.pre_tokenization_regex)?;
     let should_stop = Arc::new(AtomicBool::new(false));
+
+    // Upsert the tokenizer file.
+    let save_tokenizer = |tokenizer: &TokenizerModel, tokenizer_file: &Path| -> Result<()> {
+        info!(output_file = %tokenizer_file.display(), "Saving tokenizer");
+        File::create(tokenizer_file)?.write_all(&tokenizer.to_bytes()?)?;
+        Ok(())
+    };
 
     ctrlc::set_handler({
         let merges = merges.clone();
         let pre_tokenization_regex = config.pre_tokenization_regex.clone();
-        let tokenizer_file = config.tokenizer_file.clone();
+        let output_file = config.output_file.clone();
         let should_stop = should_stop.clone();
         move || {
             should_stop.store(true, Ordering::SeqCst);
@@ -90,7 +112,7 @@ fn main() -> Result<()> {
                             .map(|(token, _duration)| token)
                             .collect(),
                     },
-                    &tokenizer_file,
+                    &output_file,
                 )?;
                 info!("Training interrupted");
                 anyhow::Ok(())
@@ -218,7 +240,7 @@ fn main() -> Result<()> {
                         .cloned()
                         .collect(),
                 },
-                &config.tokenizer_file,
+                &config.output_file,
             )?;
         }
 
@@ -273,7 +295,7 @@ fn main() -> Result<()> {
             trace!("Pair mapping:");
             for (pair, (count, indices)) in &pair_mapping {
                 trace!(
-                    "([{:?}], [{:?}]) → count: {count}, indices: {indices:?}",
+                    "({:?}, {:?}) → count: {count}, indices: {indices:?}",
                     pair[0], pair[1],
                 );
             }
@@ -311,6 +333,7 @@ fn main() -> Result<()> {
             );
         }
 
+        debug!("Merging {:?} and {:?}", most_frequent[0], most_frequent[1]);
         let mut merges = lock_merges();
         merges.push((
             most_frequent[0].clone() + most_frequent[1].clone(),
@@ -329,7 +352,7 @@ fn main() -> Result<()> {
                 .map(|(token, _duration)| token)
                 .collect(),
         },
-        &config.tokenizer_file,
+        &config.output_file,
     )?;
 
     info!(
@@ -337,12 +360,5 @@ fn main() -> Result<()> {
         "Done training tokenizer"
     );
 
-    Ok(())
-}
-
-// Upsert the tokenizer file.
-fn save_tokenizer(tokenizer: &TokenizerModel, tokenizer_file: &Path) -> Result<()> {
-    info!(output_file = %tokenizer_file.display(), "Saving tokenizer");
-    File::create(tokenizer_file)?.write_all(&tokenizer.to_bytes()?)?;
     Ok(())
 }

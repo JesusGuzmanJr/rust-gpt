@@ -37,6 +37,7 @@ itertools = "0.14.0"
 parquet = "56.2.0"
 rayon = "1.11.0"
 regex = "1.11.3"
+ron = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 smallvec = { version = "1.15.1", features = ["serde"] }
 thousands = "0.2.0"

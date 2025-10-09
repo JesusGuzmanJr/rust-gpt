@@ -1,13 +1,6 @@
 use {
-    anyhow::{Context, Result},
-    clap::Parser,
-    regex::Regex,
-    rust_gpt::{Bincode, tokenization::TokenizerTrainingConfig},
-    std::{
-        fs::File,
-        io::Write,
-        path::{Path, PathBuf},
-    },
+    serde::{Deserialize, Serialize},
+    std::path::PathBuf,
 };
 
 /// The pre-tokenization regex to use by default.
@@ -47,10 +40,9 @@ use {
 /// of capturing positional information far outweighs the cost.
 const DEFAULT_PRE_TOKENIZATION_REGEX: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
 
-/// Create an empty tokenizer model.
-#[derive(Parser, Debug)]
-#[command(version, long_about)]
-struct Args {
+/// A byte-level BPE trained tokenizer model.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TokenizerTrainingConfig {
     /// Path to the input directory with the normalized, zstd-compressed
     /// preprocessed shards of textual content.
     ///
@@ -59,16 +51,10 @@ struct Args {
     ///
     /// Only *.zst files will be processed. The directory will not be walked
     /// recursively.
-    #[arg(short, long)]
-    input_dir: PathBuf,
+    pub input_dir: PathBuf,
 
     /// Path to save the tokenizer file.
-    #[arg(short, long)]
-    tokenizer_file: PathBuf,
-
-    /// Path to save the training config file.
-    #[arg(short, long)]
-    training_config_file: PathBuf,
+    pub output_file: PathBuf,
 
     /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
     /// directly impacts how text is tokenized.
@@ -109,56 +95,14 @@ struct Args {
     /// - GPT-2 has a vocabulary size of 50257
     ///
     /// - GPT-4 has a vocabulary size of ~100,000
-    #[arg(short = 's', long)]
-    vocab_size: usize,
+    pub vocab_size: usize,
 
     /// Regex for the initial split of text into words. The regex should capture
     /// what you want the words to contain.
-    #[arg(
-        short = 'r',
-        long = "regex",
-        default_value = DEFAULT_PRE_TOKENIZATION_REGEX
-    )]
-    pre_tokenization_regex: String,
+    #[serde(default = "default_pre_tokenization_regex")]
+    pub pre_tokenization_regex: String,
 }
 
-fn main() -> Result<()> {
-    rust_gpt::utils::setup_tracing_subscriber();
-
-    let args = Args::parse();
-
-    if args.vocab_size < 256 {
-        anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
-    }
-
-    // validate the pre-tokenization regex
-    Regex::new(&args.pre_tokenization_regex).context("invalid pre-tokenization regex")?;
-
-    // ensure tokenizer_file is not a directory
-    if args.tokenizer_file.is_dir() {
-        anyhow::bail!(
-            "tokenizer-file is a directory: {}",
-            args.tokenizer_file.display()
-        );
-    }
-
-    if Path::exists(&args.tokenizer_file) {
-        anyhow::bail!(
-            "tokenizer-file already exists: {}",
-            args.tokenizer_file.display()
-        );
-    }
-
-    File::create(&args.training_config_file)?.write_all(
-        &TokenizerTrainingConfig {
-            input_dir: args.input_dir,
-            tokenizer_file: args.tokenizer_file,
-            vocab_size: args.vocab_size,
-            pre_tokenization_regex: args.pre_tokenization_regex,
-            merges: Vec::with_capacity(0), // no need to allocate
-        }
-        .to_bytes()?,
-    )?;
-
-    Ok(())
+fn default_pre_tokenization_regex() -> String {
+    DEFAULT_PRE_TOKENIZATION_REGEX.to_string()
 }

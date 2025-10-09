@@ -3,9 +3,9 @@ use {icu_normalizer::ComposingNormalizerBorrowed, std::sync::LazyLock};
 mod model;
 mod token;
 mod tokenizer;
-mod trainer;
+mod training;
 
-pub use {model::*, token::*, tokenizer::*, trainer::*};
+pub use {model::*, token::*, tokenizer::*, training::*};
 
 /// Unicode NFC normalizer.
 static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
