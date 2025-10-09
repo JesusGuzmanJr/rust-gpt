@@ -82,15 +82,21 @@ fn main() -> Result<()> {
     let should_stop = Arc::new(AtomicBool::new(false));
 
     // Upsert the tokenizer file.
-    let save_tokenizer = |tokenizer: &TokenizerModel, tokenizer_file: &Path| -> Result<()> {
+    let save_tokenizer = move |merges: Vec<Token>, tokenizer_file: &Path| -> Result<()> {
         info!(output_file = %tokenizer_file.display(), "Saving tokenizer");
-        File::create(tokenizer_file)?.write_all(&tokenizer.to_bytes()?)?;
+        File::create(tokenizer_file)?.write_all(
+            &TokenizerModel {
+                pre_tokenization_regex: config.pre_tokenization_regex.clone(),
+                merges,
+            }
+            .to_bytes()?,
+        )?;
         Ok(())
     };
 
     ctrlc::set_handler({
         let merges = merges.clone();
-        let pre_tokenization_regex = config.pre_tokenization_regex.clone();
+        let save_tokenizer = save_tokenizer.clone();
         let output_file = config.output_file.clone();
         let should_stop = should_stop.clone();
         move || {
@@ -103,14 +109,11 @@ fn main() -> Result<()> {
                     target_vocab_size = %config.vocab_size.separate_with_commas(),
                 );
                 save_tokenizer(
-                    &TokenizerModel {
-                        pre_tokenization_regex: pre_tokenization_regex.clone(),
-                        merges: merges
-                            .clone()
-                            .into_iter()
-                            .map(|(token, _duration)| token)
-                            .collect(),
-                    },
+                    merges
+                        .clone()
+                        .into_iter()
+                        .map(|(token, _duration)| token)
+                        .collect(),
                     &output_file,
                 )?;
                 info!("Training interrupted");
@@ -135,7 +138,7 @@ fn main() -> Result<()> {
 
     let bytes_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
-    let word_frequencies = file_paths
+    let mut word_frequencies = file_paths
         .par_iter()
         .map(|file| {
             let file = File::open(file)?;
@@ -146,6 +149,11 @@ fn main() -> Result<()> {
             let mut reader = std::io::BufReader::new(zstd::Decoder::new(file)?);
 
             loop {
+                // short circuit if the user has pressed Ctrl-C
+                if should_stop.load(Ordering::SeqCst) {
+                    return Ok(AHashMap::default()); // identify value to flow fast through
+                }
+
                 // Clearing is O(1).
                 buffer.clear();
 
@@ -180,26 +188,11 @@ fn main() -> Result<()> {
                 *vocab.entry(word).or_default() += count;
             }
             vocab
-        });
-
-    info!(
-        unique_words = %word_frequencies.len().separate_with_commas(),
-        elapsed = ?reading_start.elapsed(),
-        read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
-            .display()
-            .iec(),
-        "Done reading",
-    );
-
-    // Break down words into bytes for byte-level BPE.
-    // b"low" -> [b"l", b"o", b"w"]
-    debug!("Breaking down words into byte tokens");
-
-    // We want to split words into tokens to perform merges
-    let breakdown_start = Instant::now();
-    let mut word_frequencies = word_frequencies
+        })
         .par_iter()
         .map(|(word, count)| {
+            // break down words into byte tokens as starting point for byte-level BPE
+            // b"low" -> [b"l", b"o", b"w"]
             (
                 word.as_slice()
                     .iter()
@@ -210,13 +203,21 @@ fn main() -> Result<()> {
         })
         .collect::<Vec<_>>();
 
-    debug!(
-        elapsed = ?breakdown_start.elapsed(),
-        "Done breaking down words"
+    if should_stop.load(Ordering::SeqCst) {
+        // exit main
+        return Ok(());
+    }
+
+    info!(
+        unique_words = %word_frequencies.len().separate_with_commas(),
+        elapsed = ?reading_start.elapsed(),
+        read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
+            .display()
+            .iec(),
+        "Done reading",
     );
 
-    // Build initial pair counts - this is done once at the start
-    info!("Building initial pair frequency map...");
+    info!("Building pair frequency map...");
     let pair_build_start = Instant::now();
     let mut pair_counts: AHashMap<[Token; 2], u32> = word_frequencies
         .par_iter()
@@ -236,7 +237,7 @@ fn main() -> Result<()> {
     debug!(
         elapsed = ?pair_build_start.elapsed(),
         num_unique_pairs = %pair_counts.len().separate_with_commas(),
-        "Built initial pair frequencies"
+        "Done building pair frequency map"
     );
 
     info!(num_merges = %num_merges.separate_with_commas(), "Finding merges...");
@@ -252,23 +253,20 @@ fn main() -> Result<()> {
             );
 
             save_tokenizer(
-                &TokenizerModel {
-                    pre_tokenization_regex: config.pre_tokenization_regex.clone(),
-                    merges: merges
-                        .iter()
-                        .map(|(token, _duration)| token)
-                        .cloned()
-                        .collect(),
-                },
+                merges
+                    .clone()
+                    .into_iter()
+                    .map(|(token, _duration)| token)
+                    .collect(),
                 &config.output_file,
             )?;
         }
 
-        // Find the most frequent pair using the pre-computed counts
+        // find the most frequent pair using the pair counts
         let most_frequent_pair = pair_counts
             .iter()
             .max_by(|(pair_a, count_a), (pair_b, count_b)| {
-                // Compare by count first, then by lexicographic order for determinism
+                // compare by count first, then by lexicographic order for determinism
                 count_a.cmp(count_b).then_with(|| {
                     (pair_a[0].as_slice(), pair_a[1].as_slice())
                         .cmp(&(pair_b[0].as_slice(), pair_b[1].as_slice()))
@@ -285,13 +283,13 @@ fn main() -> Result<()> {
             return anyhow::Ok(());
         }
 
-        let max_token_size_warning = 64;
+        let max_token_bytes_warning = 64;
         if most_frequent[0].as_slice().len() + most_frequent[1].as_slice().len()
-            > max_token_size_warning
+            > max_token_bytes_warning
         {
             warn!(
                 "You are attempting to merge a pair of tokens \
-                that is greater than {max_token_size_warning} bytes. \
+                that is greater than {max_token_bytes_warning} bytes. \
                 Tokens that big are probably not desirable. \
                 Try lowering the vocabulary size."
             );
@@ -308,7 +306,7 @@ fn main() -> Result<()> {
         let pair_deltas: AHashMap<[Token; 2], i64> = word_frequencies
             .par_iter_mut()
             .fold(AHashMap::default, |mut deltas, (word, count)| {
-                // Early check: does this word contain the pair to merge?
+                // short circuit if the word does not contain the pair to merge
                 let has_pair = word
                     .windows(2)
                     .any(|w| w[0] == most_frequent[0] && w[1] == most_frequent[1]);
@@ -371,16 +369,13 @@ fn main() -> Result<()> {
     }
 
     save_tokenizer(
-        &TokenizerModel {
-            pre_tokenization_regex: config.pre_tokenization_regex,
-            merges: merges
-                .lock()
-                .expect("failed to lock merges")
-                .clone()
-                .into_iter()
-                .map(|(token, _duration)| token)
-                .collect(),
-        },
+        merges
+            .lock()
+            .expect("failed to lock merges")
+            .clone()
+            .into_iter()
+            .map(|(token, _duration)| token)
+            .collect(),
         &config.output_file,
     )?;
 
