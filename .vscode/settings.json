@@ -15,6 +15,7 @@
         "formatcp",
         "Halfaker's",
         "indexmap",
+        "indicatif",
         "itertools",
         "Jurafsky",
         "Karpathy",

@@ -148,6 +148,7 @@ fn main() -> Result<()> {
     let mut word_frequencies = file_paths
         .par_iter()
         .map(|file| {
+            let file_path = file;
             let file = File::open(file)?;
             file.lock_shared()?; // advisory lock, not mandatory
 
@@ -182,6 +183,7 @@ fn main() -> Result<()> {
                     });
             }
 
+            info!(file_path = %file_path.display(), "Finished reading file");
             anyhow::Ok(word_frequencies)
         })
         .filter_map(|result| {
@@ -261,8 +263,8 @@ fn main() -> Result<()> {
         );
         if !durations.is_empty() {
             info!(
-                current_merges = %merges.len().separate_with_commas(),
-                target_merges = %num_merges.separate_with_commas(),
+                current_vocab_size = %(merges.len() + 256).separate_with_commas(),
+                target_vocab_size = %config.vocab_size.separate_with_commas(),
                 average_duration = ?durations.iter().sum::<Duration>() / durations.len() as u32,
             );
 
