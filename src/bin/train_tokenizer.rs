@@ -184,49 +184,24 @@ fn main() -> Result<()> {
                         bytes_read.fetch_add(read, Ordering::Relaxed);
                     }
 
-                    pre_tokenization_regex
-                        .find_iter(&buffer)
-                        .map(|m| {
-                            m.as_str()
-                                .as_bytes()
-                                .iter()
-                                .map(|b| Token::from_slice(&[*b]))
-                                .collect::<TokenVec>()
-                        })
-                        .for_each(|mut tokens| {
-                            // need to apply all the merges in order
-                            for (merge, _duration) in &merges {
-                                let mut skip = false;
-                                let mut processed_tokens = tokens
-                                    .windows(2)
-                                    .filter_map(|window| {
-                                        if skip {
-                                            skip = false;
-                                            return None;
-                                        }
+                    pre_tokenization_regex.find_iter(&buffer).for_each(|m| {
+                        let mut tokens = m
+                            .as_str()
+                            .as_bytes()
+                            .iter()
+                            .map(|b| Token::from_slice(&[*b]))
+                            .collect::<TokenVec>();
 
-                                        // if this is the merge, push the entire merge
-                                        if merge == &(window[0].clone() + window[1].clone()) {
-                                            skip = true;
-                                            Some(merge.clone())
-                                        } else {
-                                            Some(window[0].clone())
-                                        }
-                                    })
-                                    .collect::<TokenVec>();
+                        // Apply all merges efficiently
+                        apply_merges(&mut tokens, &merges);
 
-                                if !skip {
-                                    processed_tokens.extend(tokens.last().cloned());
-                                }
-
-                                tokens = processed_tokens;
-                            }
-                            tokens.windows(2).for_each(|pair| {
-                                *pair_frequencies
-                                    .entry((pair[0].clone(), pair[1].clone()))
-                                    .or_default() += 1;
-                            });
-                        });
+                        // Count pairs
+                        for pair in tokens.windows(2) {
+                            *pair_frequencies
+                                .entry((pair[0].clone(), pair[1].clone()))
+                                .or_default() += 1;
+                        }
+                    });
                 }
 
                 anyhow::Ok((i, pair_frequencies))
@@ -241,7 +216,10 @@ fn main() -> Result<()> {
             .into_iter()
             .sorted_by_key(|(i, _)| *i)
             .flat_map(|(_, pairs)| pairs)
-            .collect::<IndexMap<_, _>>();
+            .fold(IndexMap::<_, u64>::default(), |mut acc, (pair, count)| {
+                *acc.entry(pair).or_default() += count;
+                acc
+            });
 
         if should_stop.load(Ordering::SeqCst) {
             return anyhow::Ok(());
@@ -314,6 +292,21 @@ fn main() -> Result<()> {
     );
 
     Ok(())
+}
+
+// Optimized merge application that modifies tokens in place where possible
+fn apply_merges(tokens: &mut TokenVec, merges: &[(Token, Duration)]) {
+    for (merge, _) in merges {
+        let mut i = 0;
+        while i + 1 < tokens.len() {
+            if merge == &(tokens[i].clone() + tokens[i + 1].clone()) {
+                tokens[i] = merge.clone();
+                tokens.remove(i + 1);
+            } else {
+                i += 1;
+            }
+        }
+    }
 }
 
 // Upsert the tokenizer file.
