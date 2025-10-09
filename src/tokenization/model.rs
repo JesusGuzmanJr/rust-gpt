@@ -5,7 +5,7 @@ use {
 };
 
 /// A byte-level BPE trained tokenizer model.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TokenizerModel {
     /// The regex used to pre-tokenize the text before BPE.
     pub pre_tokenization_regex: String,

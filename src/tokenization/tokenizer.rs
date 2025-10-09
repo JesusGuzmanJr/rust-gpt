@@ -12,7 +12,7 @@ use {
 /// A tokenizer.
 #[derive(Debug)]
 pub struct Tokenizer {
-    regex: Regex,
+    pre_tokenization_regex: Regex,
     merges: Vec<Token>,
 }
 
@@ -29,7 +29,7 @@ impl Tokenizer {
         } = TokenizerModel::from_bytes(&buffer)?;
 
         Ok(Self {
-            regex: Regex::new(&pre_tokenization_regex)?,
+            pre_tokenization_regex: Regex::new(&pre_tokenization_regex)?,
             merges,
         })
     }
@@ -38,7 +38,7 @@ impl Tokenizer {
     pub fn encode(&self, text: &str) -> Vec<TokenId> {
         let text = super::normalize_text(text);
 
-        self.regex
+        self.pre_tokenization_regex
             .find_iter(&text)
             .map(|m| {
                 m.as_str()
@@ -104,7 +104,7 @@ mod tests {
     #[test]
     fn test_encode_and_decode() {
         let tokenizer = Tokenizer {
-            regex: Regex::new(r"\p{L}+ ?").unwrap(),
+            pre_tokenization_regex: Regex::new(r"\p{L}+ ?").unwrap(),
             merges: vec![
                 Token::from_slice(b"er"),     // 256
                 Token::from_slice(b"er "),    // 257
