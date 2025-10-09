@@ -13,7 +13,7 @@ use {
 #[derive(Debug)]
 pub struct Tokenizer {
     pre_tokenization_regex: Regex,
-    merges: Vec<Token>,
+    pub merges: Vec<Token>,
 }
 
 impl Tokenizer {

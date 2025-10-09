@@ -5,7 +5,7 @@ use {
     rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
     regex::Regex,
     rust_gpt::{
-        tokenization::{Token, TokenizerModel, TokenizerTrainingConfig},
+        tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
         utils::{Bincode, Ron},
     },
     smallvec::SmallVec,
@@ -41,6 +41,7 @@ fn main() -> Result<()> {
     rust_gpt::utils::setup_tracing_subscriber();
 
     let config = TokenizerTrainingConfig::from_file_path(&Args::parse().config)?;
+    let tokenizer = Tokenizer::from_file(&config.output_file).ok();
 
     if config.vocab_size < 256 {
         anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
@@ -58,7 +59,15 @@ fn main() -> Result<()> {
         );
     }
 
-    let num_merges = config.vocab_size - 256;
+    let num_merges = config.vocab_size
+        - 256
+        - tokenizer
+            .as_ref()
+            .map(|t| {
+                info!(existing_vocab_size = %(t.merges.len() + 256).separate_with_commas(), "Resuming");
+                t.merges.len()
+            })
+            .unwrap_or(0);
 
     // Note that the model (the merges) will always fit in memory.
     //
@@ -74,9 +83,12 @@ fn main() -> Result<()> {
     // token. A 64 byte token is HUGE and very unlikely.
     //
     // 64 * 399,488 = 25,567,232 bytes or 25.57 MiB.
-    let merges = Arc::new(Mutex::new(Vec::<(Token, Duration)>::with_capacity(
-        num_merges,
-    )));
+    let merges = Arc::new(Mutex::new(
+        tokenizer
+            .as_ref()
+            .map(|t| t.merges.clone())
+            .unwrap_or_else(|| Vec::<_>::with_capacity(num_merges)),
+    ));
 
     let lock_merges = || merges.lock().expect("failed to lock merges");
     let should_stop = Arc::new(AtomicBool::new(false));
@@ -100,22 +112,17 @@ fn main() -> Result<()> {
         let output_file = config.output_file.clone();
         let should_stop = should_stop.clone();
         move || {
-            should_stop.store(true, Ordering::SeqCst);
+            // no racy conditions; flag transitions from false to true only once
+            // and also not synching multiple atomic operations
+            should_stop.store(true, Ordering::Relaxed);
             if let Err(error) = (|| {
-                let merges = merges.lock().expect("failed to lock merges");
+                let merges = merges.lock().expect("failed to lock merges").clone();
                 warn!(
                     elapsed = ?start.elapsed(),
                     current_vocab_size = %(merges.len() + 256).separate_with_commas(),
                     target_vocab_size = %config.vocab_size.separate_with_commas(),
                 );
-                save_tokenizer(
-                    merges
-                        .clone()
-                        .into_iter()
-                        .map(|(token, _duration)| token)
-                        .collect(),
-                    &output_file,
-                )?;
+                save_tokenizer(merges, &output_file)?;
                 info!("Training interrupted");
                 anyhow::Ok(())
             })() {
@@ -150,7 +157,7 @@ fn main() -> Result<()> {
 
             loop {
                 // short circuit if the user has pressed Ctrl-C
-                if should_stop.load(Ordering::SeqCst) {
+                if should_stop.load(Ordering::Relaxed) {
                     return Ok(AHashMap::default()); // identify value to flow fast through
                 }
 
@@ -244,22 +251,22 @@ fn main() -> Result<()> {
     for _ in 0..num_merges {
         let merges_search_start = Instant::now();
         let merges = lock_merges().clone();
+        let mut durations = Vec::with_capacity(merges.len());
 
-        if !merges.is_empty() {
+        assert_eq!(
+            merges.len() - tokenizer.as_ref().map(|t| t.merges.len()).unwrap_or(0),
+            durations.len()
+        );
+        if !durations.is_empty() {
             info!(
                 current_merges = %merges.len().separate_with_commas(),
                 target_merges = %num_merges.separate_with_commas(),
-                average_duration = ?merges.iter().map(|(_, duration)| *duration).sum::<Duration>() / merges.len() as u32,
+                average_duration = ?durations.iter().sum::<Duration>() / durations.len() as u32,
             );
 
-            save_tokenizer(
-                merges
-                    .clone()
-                    .into_iter()
-                    .map(|(token, _duration)| token)
-                    .collect(),
-                &config.output_file,
-            )?;
+            if merges.len().is_multiple_of(100) {
+                save_tokenizer(merges, &config.output_file)?;
+            }
         }
 
         // find the most frequent pair using the pair counts
@@ -299,7 +306,7 @@ fn main() -> Result<()> {
         let merged_token = most_frequent[0].clone() + most_frequent[1].clone();
         {
             let mut merges = lock_merges();
-            merges.push((merged_token.clone(), merges_search_start.elapsed()));
+            merges.push(merged_token.clone());
         }
 
         // Before merging, we need to know which pairs are disappearing so we
@@ -373,16 +380,11 @@ fn main() -> Result<()> {
                 *pair_counts.entry(pair).or_default() += delta as u32;
             }
         }
+        durations.push(merges_search_start.elapsed());
     }
 
     save_tokenizer(
-        merges
-            .lock()
-            .expect("failed to lock merges")
-            .clone()
-            .into_iter()
-            .map(|(token, _duration)| token)
-            .collect(),
+        merges.lock().expect("failed to lock merges").clone(),
         &config.output_file,
     )?;
 
