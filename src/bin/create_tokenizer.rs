@@ -151,7 +151,6 @@ fn main() -> Result<()> {
 
     File::create(&args.training_config_file)?.write_all(
         &TokenizerTrainingConfig {
-            hash: rust_gpt::hash::hash_directory(&args.input_dir)?,
             input_dir: args.input_dir,
             tokenizer_file: args.tokenizer_file,
             vocab_size: args.vocab_size,

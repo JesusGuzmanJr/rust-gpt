@@ -22,9 +22,6 @@ pub struct TokenizerTrainingConfig {
 
     /// The merges learned by BPE.
     pub merges: Vec<Token>,
-
-    /// The hash of the input files.
-    pub hash: u64,
 }
 
 impl crate::Bincode for TokenizerTrainingConfig {}

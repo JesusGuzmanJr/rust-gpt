@@ -1,4 +1,3 @@
-pub mod hash;
 pub mod tokenization;
 pub mod utils;
 

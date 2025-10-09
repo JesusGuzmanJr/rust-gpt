@@ -42,7 +42,6 @@ smallvec = { version = "1.15.1", features = ["serde"] }
 thousands = "0.2.0"
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
-xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
 zstd = "0.13.3"
 
 [dev-dependencies]
