@@ -144,6 +144,18 @@ fn main() -> Result<()> {
                 target_merges = %num_merges.separate_with_commas(),
                 average_duration = ?merges.iter().map(|(_, duration)| *duration).sum::<Duration>() / merges.len() as u32,
             );
+
+            save_tokenizer(
+                &TokenizerModel {
+                    pre_tokenization_regex: config.pre_tokenization_regex,
+                    merges: merges
+                        .iter()
+                        .map(|(token, _duration)| token)
+                        .cloned()
+                        .collect(),
+                },
+                &config.tokenizer_file,
+            )?;
         }
 
         // we assume that the files are not modified during the training
