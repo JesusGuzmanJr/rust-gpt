@@ -47,8 +47,7 @@ use {
 /// of capturing positional information far outweighs the cost.
 const DEFAULT_PRE_TOKENIZATION_REGEX: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
 
-/// Tokenize a directory of normalized, compressed markdown shards using
-/// byte-level byte pair encoding (BPE).
+/// Create an empty tokenizer model.
 #[derive(Parser, Debug)]
 #[command(version, long_about)]
 struct Args {
@@ -120,8 +119,9 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    let args = Args::parse();
     rust_gpt::utils::setup_tracing_subscriber();
+
+    let args = Args::parse();
 
     if args.vocab_size < 256 {
         anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");

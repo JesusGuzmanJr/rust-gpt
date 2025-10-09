@@ -9,14 +9,17 @@ use {
     regex::Regex,
     rust_gpt::{
         Bincode,
-        tokenization::{Token, TokenizerModel},
+        tokenization::{Token, TokenizerModel, TokenizerTrainingConfig},
     },
     smallvec::SmallVec,
     std::{
         fs::File,
         io::{BufRead, Seek, Write},
         path::PathBuf,
-        sync::atomic::{AtomicUsize, Ordering},
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        },
         time::Instant,
     },
     thousands::Separable,
@@ -26,140 +29,50 @@ use {
 type IndexMap<K, V> = indexmap::IndexMap<K, V, ahash::RandomState>;
 type TokenVec = SmallVec<[Token; 32]>;
 
-/// The pre-tokenization regex to use by default.
-///
-/// ---
-///
-/// ## Design
-///
-/// We want to capture a leading space to preserve spacing information.
-/// E.g.
-/// ```txt
-/// "The cat" → ["The", " cat"]
-/// "cat"     → ["cat"]
-/// ```
-/// The token "cat" and " cat" are **different** tokens with different IDs.
-/// This helps the model understand positional context.
-///  During training, neural networks learn embeddings (vector
-/// representations) for each token. The model will learn that:
-/// - "cat" and " cat" have similar meanings (both refer to the animal)
-/// - But they have different positional contexts
-///
-/// Through millions of training examples, the embeddings naturally become
-/// similar:
-/// ```txt
-/// embedding("cat") ≈ embedding(" cat")  (but not identical)
-/// ```
-/// The model learns this relationship automatically from data, just like it
-/// learns that "cat" and "cats" are related.
-///
-/// Having both tokens uses more vocabulary space. But:
-///
-/// Typical vocabulary: 50,000 tokens
-/// - ~256 base bytes
-/// - ~49,744 merged tokens (learned subwords)
-///
-/// Having "cat" and " cat" uses 2 slots, which is negligible. The benefit
-/// of capturing positional information far outweighs the cost.
-const DEFAULT_PRE_TOKENIZATION_REGEX: &str = r" ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+";
-
-/// Tokenize a directory of normalized, compressed markdown shards using
-/// byte-level byte pair encoding (BPE).
+/// Start or resume training of the tokenizer.
 #[derive(Parser, Debug)]
 #[command(version, long_about)]
 struct Args {
-    /// Path to the input directory with the normalized, zstd-compressed
-    /// preprocessed shards of textual content.
-    ///
-    /// A word should not be split across shard boundaries. The shards should
-    /// not be modified during training.
-    ///
-    /// Only *.zst files will be processed. The directory will not be walked
-    /// recursively.
+    /// Path to the tokenizer model file.
     #[arg(short, long)]
-    input_dir: PathBuf,
-
-    /// Path to save the tokenizer file.
-    #[arg(short, long)]
-    output_file: PathBuf,
-
-    /// The target vocabulary size, a hyperparameter of BPE. Vocabulary size
-    /// directly impacts how text is tokenized.
-    ///
-    /// Larger Vocabulary
-    ///
-    /// A larger vocabulary produces bigger pieces per token which means
-    /// fewer tokens per text or shorter token sequences. This translates to
-    /// faster training/inference per sequence at the cost of slower
-    /// tokenization, overfiting, etc.
-    ///
-    /// - Fewer tokens per sentence (longer subwords or even whole words are
-    ///   represented as single tokens).
-    ///
-    /// - Better for capturing rare words or linguistic nuances. Increases
-    ///   memory and computational costs for embedding and training.
-    ///
-    /// - Increases memory and computational costs for embedding and training.
-    ///
-    /// Smaller Vocabulary
-    ///
-    /// A smaller vocabulary produces smaller pieces per token which means more
-    /// tokens per text or longer token sequences. This translates to slower
-    /// training/inference per sequence but with the benefit of better subword
-    /// sharing across rarer forms, smaller embeddings, etc.
-    ///
-    /// - More tokens per sentence (each token represents a smaller unit like a
-    ///   character or short subword).
-    ///
-    /// - Since token length for sentences is very high, the tokens may not fit
-    ///   in context length of models. This may lead to loss of context and poor
-    ///   model training.
-    ///
-    /// Examples in industry
-    ///
-    /// - GPT-2 has a vocabulary size of 50257
-    ///
-    /// - GPT-4 has a vocabulary size of ~100,000
-    #[arg(short = 's', long)]
-    vocab_size: usize,
-
-    /// Regex for the initial split of text into words. The regex should capture
-    /// what you want the words to contain.
-    #[arg(
-        short = 'r',
-        long = "regex",
-        default_value = DEFAULT_PRE_TOKENIZATION_REGEX
-    )]
-    pre_tokenization_regex: String,
+    tokenizer_file: PathBuf,
 }
 
 fn main() -> Result<()> {
     let start = Instant::now();
 
-    let args = Args::parse();
     rust_gpt::utils::setup_tracing_subscriber();
 
-    if args.vocab_size < 256 {
-        anyhow::bail!("vocab-size must be greater than 256 for byte-level BPE");
+    let args = Args::parse();
+
+    let running = Arc::new(AtomicBool::new(true));
+    ctrlc::set_handler({
+        let r = running.clone();
+        move || {
+            r.store(false, Ordering::SeqCst);
+        }
+    })
+    .expect("error setting Ctrl-C handler");
+
+    let config = TokenizerTrainingConfig::from_bytes(&std::fs::read(&args.tokenizer_file)?)?;
+
+    let hash = rust_gpt::hash::hash_directory(&config.input_dir)?;
+
+    if hash != config.hash {
+        anyhow::bail!(
+            "Training data has changed. Re-run create_tokenizer to create a new tokenizer model.",
+        );
     }
 
-    let pre_tokenization_regex = Regex::new(&args.pre_tokenization_regex)?;
-
-    let input_files = std::fs::read_dir(args.input_dir)?
-        .filter_map(|entry| entry.ok())
-        .map(|dir| dir.path())
-        .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
-        .collect::<Vec<_>>();
-
-    info!(
-        num_files = input_files.len().separate_with_commas(),
-        %args.pre_tokenization_regex,
-        "Reading files",
-    );
+    let pre_tokenization_regex = Regex::new(&config.pre_tokenization_regex)?;
 
     // open files with advisory that other processes should not modify them while
     // training
-    let mut input_files = input_files
+    let mut input_files = std::fs::read_dir(config.input_dir)?
+        .filter_map(|entry| entry.ok())
+        .map(|dir| dir.path())
+        .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
+        .collect::<Vec<_>>()
         .par_iter()
         .map(|file_path| {
             let file = File::open(file_path)?;
@@ -174,7 +87,7 @@ fn main() -> Result<()> {
         })
         .collect::<Vec<_>>();
 
-    let num_merges = args.vocab_size - 256;
+    let num_merges = config.vocab_size - 256;
 
     // Note that the model (the merges) will always fit in memory.
     //
@@ -195,6 +108,16 @@ fn main() -> Result<()> {
     let mut bytes_read = Some(AtomicUsize::new(0));
 
     for _ in 0..num_merges {
+        if !running.load(Ordering::SeqCst) {
+            warn!(
+                elapsed = ?start.elapsed(),
+                current_vocab_size = (merges.len() + 256).separate_with_commas(),
+                target_vocab_size = config.vocab_size.separate_with_commas(),
+                "Training interrupted.\nYou may resume it later."
+            );
+            break;
+        }
+
         // we assume that the files are not modified during the training
         let pair_frequencies = input_files
             .par_iter_mut()
@@ -313,28 +236,29 @@ fn main() -> Result<()> {
             merges.push(most_frequent_pair.0.clone() + most_frequent_pair.1.clone());
         } else {
             warn!(
-                target_vocab_size = args.vocab_size.separate_with_commas(),
+                target_vocab_size = config.vocab_size.separate_with_commas(),
                 max_possible_vocab_size = (merges.len() + 256).separate_with_commas(),
                 "Not enough training data to reach the target vocabulary size",
             );
         }
     }
 
-    info!(output_file = %args.output_file.display(), "Saving tokenizer");
+    info!(output_file = %config.output_file.display(), "Saving tokenizer");
 
-    File::create(args.output_file)?.write_all(
+    File::create(config.output_file)?.write_all(
         &TokenizerModel {
-            pre_tokenization_regex: args.pre_tokenization_regex,
+            pre_tokenization_regex: config.pre_tokenization_regex,
             merges,
         }
         .to_bytes()?,
     )?;
 
-    info!(
-        elapsed = ?start.elapsed(),
-        "Done training tokenizer"
-    );
-
+    if running.load(Ordering::SeqCst) {
+        info!(
+            elapsed = ?start.elapsed(),
+            "Done training tokenizer"
+        );
+    }
     Ok(())
 }
 

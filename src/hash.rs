@@ -2,7 +2,12 @@ use {
     anyhow::Result,
     itertools::Itertools,
     rayon::iter::{IntoParallelRefIterator, ParallelIterator},
-    std::{io::BufRead, path::Path},
+    std::{
+        io::BufRead,
+        path::Path,
+        sync::atomic::{AtomicUsize, Ordering},
+        time::Instant,
+    },
     tracing::*,
 };
 
@@ -11,7 +16,10 @@ use {
 /// If either the file name or
 /// contents change, the hash will change.
 pub fn hash_directory(input_dir: &Path) -> Result<u64> {
-    Ok(std::fs::read_dir(input_dir)?
+    let start = Instant::now();
+    let bytes_read = AtomicUsize::new(0);
+
+    let hash = std::fs::read_dir(input_dir)?
         .filter_map(|entry| entry.ok())
         .map(|dir| dir.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
@@ -39,10 +47,13 @@ pub fn hash_directory(input_dir: &Path) -> Result<u64> {
             loop {
                 // clearing is O(1).
                 buffer.clear();
+                let read = reader.read_line(&mut buffer)?;
 
-                if reader.read_line(&mut buffer)? == 0 {
+                if read == 0 {
                     break;
                 }
+
+                bytes_read.fetch_add(read, Ordering::Relaxed);
 
                 hasher.update(buffer.as_bytes());
             }
@@ -67,5 +78,16 @@ pub fn hash_directory(input_dir: &Path) -> Result<u64> {
                 hasher
             },
         )
-        .digest())
+        .digest();
+
+    debug!(
+        elapsed = ?start.elapsed(),
+        bytes_read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
+            .display()
+            .iec(),
+        input_dir = %input_dir.display(),
+        "Done hashing directory"
+    );
+
+    Ok(hash)
 }
