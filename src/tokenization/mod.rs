@@ -5,7 +5,7 @@ mod token;
 mod tokenizer;
 mod trainer;
 
-pub use {model::*, token::*, tokenizer::*};
+pub use {model::*, token::*, tokenizer::*, trainer::*};
 
 /// Unicode NFC normalizer.
 static NFC: LazyLock<ComposingNormalizerBorrowed<'_>> =
