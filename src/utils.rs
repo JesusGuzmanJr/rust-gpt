@@ -1,10 +1,4 @@
-use {
-    anyhow::{Context, Result},
-    std::{
-        io::IsTerminal,
-        path::{Path, PathBuf},
-    },
-};
+use std::io::IsTerminal;
 
 /// Set up tracing subscriber to log with relative time.
 pub fn setup_tracing_subscriber() {

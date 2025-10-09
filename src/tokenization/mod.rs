@@ -3,6 +3,7 @@ use {icu_normalizer::ComposingNormalizerBorrowed, std::sync::LazyLock};
 mod model;
 mod token;
 mod tokenizer;
+mod trainer;
 
 pub use {model::*, token::*, tokenizer::*};
 
