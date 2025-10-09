@@ -134,6 +134,14 @@ fn main() -> Result<()> {
     // validate the pre-tokenization regex
     Regex::new(&args.pre_tokenization_regex).context("invalid pre-tokenization regex")?;
 
+    // ensure tokenizer_file is not a directory
+    if args.tokenizer_file.is_dir() {
+        anyhow::bail!(
+            "tokenizer-file is a directory: {}",
+            args.tokenizer_file.display()
+        );
+    }
+
     if Path::exists(&args.tokenizer_file) {
         anyhow::bail!(
             "tokenizer-file already exists: {}",
