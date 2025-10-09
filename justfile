@@ -9,7 +9,6 @@ default:
 # Run the specified binary
 run bin *args:
     #!/usr/bin/env bash
-    mkdir -p target/logs/{{bin}}
     cargo run --release --bin {{bin}} -- "${@:2}"
 
 # Run tests
