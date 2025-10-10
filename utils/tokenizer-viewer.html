@@ -6,7 +6,7 @@
     <title>Rust GPT Tokenizer Viewer</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -16,37 +16,49 @@
 
         /* Light mode (default) */
         :root {
-            --primary-color: #a51c30;
-            --secondary-color: #8b1526;
-            --accent-color: #4a90e2;
-            --bg-color: #ffffff;
-            --surface-color: #f8f9fa;
-            --surface-hover: #e9ecef;
-            --text-color: #212529;
-            --text-muted: #6c757d;
-            --border-color: #dee2e6;
-            --token-bg: #e3f2fd;
-            --token-text: #1565c0;
-            --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+            --primary-color: #4f46e5;
+            --secondary-color: #4338ca;
+            --accent-color: #06b6d4;
+            --bg-color: #fafafa;
+            --surface-color: #ffffff;
+            --surface-hover: #f5f5f5;
+            --text-color: #18181b;
+            --text-muted: #71717a;
+            --border-color: #e4e4e7;
+            --code-bg: #f8f9fa;
+            --code-text: #18181b;
+            --token-bg: #dbeafe;
+            --token-text: #1e40af;
+            --success-color: #10b981;
+            --error-color: #ef4444;
+            --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         /* Dark mode */
         @media (prefers-color-scheme: dark) {
             :root {
-                --primary-color: #c94b5e;
-                --secondary-color: #a51c30;
-                --accent-color: #5da9f5;
-                --bg-color: #1a1a1a;
-                --surface-color: #2d2d2d;
-                --surface-hover: #3d3d3d;
-                --text-color: #e8e8e8;
-                --text-muted: #a0a0a0;
-                --border-color: #404040;
-                --token-bg: #1e3a5f;
+                --primary-color: #818cf8;
+                --secondary-color: #6366f1;
+                --accent-color: #22d3ee;
+                --bg-color: #0a0a0a;
+                --surface-color: #18181b;
+                --surface-hover: #27272a;
+                --text-color: #fafafa;
+                --text-muted: #a1a1aa;
+                --border-color: #27272a;
+                --code-bg: #09090b;
+                --code-text: #e4e4e7;
+                --token-bg: #1e3a8a;
                 --token-text: #93c5fd;
-                --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-                --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
+                --success-color: #22c55e;
+                --error-color: #f87171;
+                --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+                --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+                --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+                --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
             }
         }
 
@@ -70,44 +82,49 @@
 
         header {
             text-align: center;
-            margin-bottom: 3rem;
-            padding: 2rem 0;
-            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 4rem;
+            padding: 3rem 0 2rem;
         }
 
         h1 {
-            font-size: 2.5rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-            color: var(--primary-color);
-            letter-spacing: -0.5px;
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+            letter-spacing: -1px;
+            line-height: 1.1;
         }
 
         .subtitle {
             color: var(--text-muted);
-            font-size: 1.1rem;
+            font-size: 1.25rem;
             font-weight: 400;
+            max-width: 600px;
+            margin: 0 auto;
         }
 
         .upload-section {
             background-color: var(--surface-color);
-            border-radius: 8px;
-            padding: 2rem;
-            margin-bottom: 2rem;
-            border: 2px dashed var(--border-color);
+            border-radius: 12px;
+            padding: 3rem 2rem;
+            margin-bottom: 3rem;
+            border: 1px solid var(--border-color);
             text-align: center;
             transition: all 0.3s ease;
+            box-shadow: var(--shadow);
         }
 
         .upload-section:hover {
             border-color: var(--primary-color);
-            box-shadow: var(--shadow);
+            box-shadow: var(--shadow-md);
+            transform: translateY(-2px);
         }
 
         .upload-section h3 {
             color: var(--text-color);
             font-weight: 600;
-            margin-bottom: 0.5rem;
+            margin-bottom: 0.75rem;
+            font-size: 1.125rem;
         }
 
         .file-input-wrapper {
@@ -123,20 +140,25 @@
 
         .file-input-label {
             display: inline-block;
-            padding: 0.75rem 2rem;
+            padding: 0.875rem 2rem;
             background-color: var(--primary-color);
             color: white;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: 500;
-            transition: all 0.3s ease;
-            box-shadow: var(--shadow);
+            font-weight: 600;
+            transition: all 0.2s ease;
+            box-shadow: var(--shadow-md);
+            font-size: 0.95rem;
         }
 
         .file-input-label:hover {
             background-color: var(--secondary-color);
-            transform: translateY(-1px);
+            transform: translateY(-2px);
             box-shadow: var(--shadow-lg);
+        }
+
+        .file-input-label:active {
+            transform: translateY(0);
         }
 
         .status {
@@ -146,23 +168,13 @@
         }
 
         .status.success {
-            color: #198754;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .status.success {
-                color: #4ade80;
-            }
+            color: var(--success-color);
+            font-weight: 500;
         }
 
         .status.error {
-            color: #dc3545;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .status.error {
-                color: #f87171;
-            }
+            color: var(--error-color);
+            font-weight: 500;
         }
 
         .main-content {
@@ -172,15 +184,16 @@
 
         .card {
             background-color: var(--surface-color);
-            border-radius: 8px;
-            padding: 1.5rem;
+            border-radius: 12px;
+            padding: 1.75rem;
             box-shadow: var(--shadow);
             border: 1px solid var(--border-color);
-            transition: box-shadow 0.3s ease;
+            transition: all 0.3s ease;
         }
 
         .card:hover {
-            box-shadow: var(--shadow-lg);
+            box-shadow: var(--shadow-md);
+            border-color: var(--border-color);
         }
 
         .card-header {
@@ -199,71 +212,90 @@
         }
 
         .token-count {
-            background-color: var(--token-bg);
-            color: var(--token-text);
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
             padding: 0.5rem 1rem;
-            border-radius: 16px;
-            font-weight: 500;
-            font-size: 0.9rem;
-            border: 1px solid var(--token-text);
-            opacity: 0.9;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.875rem;
+            border: none;
+            box-shadow: var(--shadow-md);
         }
 
         textarea {
             width: 100%;
             min-height: 150px;
-            padding: 1rem;
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
-            color: var(--text-color);
-            font-family: 'Space Mono', 'Courier New', monospace;
-            font-size: 0.95rem;
+            padding: 1.25rem;
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--code-text);
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            font-weight: 400;
             resize: vertical;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
+            line-height: 1.7;
+            letter-spacing: -0.01em;
+            font-variant-ligatures: common-ligatures;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         textarea:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(165, 28, 48, 0.1);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
         @media (prefers-color-scheme: dark) {
             textarea:focus {
-                box-shadow: 0 0 0 3px rgba(201, 75, 94, 0.2);
+                box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
             }
         }
 
         .tokens-display {
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
-            padding: 1rem;
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.25rem;
             min-height: 150px;
-            font-family: 'Space Mono', 'Courier New', monospace;
-            font-size: 0.9rem;
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            font-size: 0.85rem;
+            font-weight: 400;
             line-height: 2;
             overflow-wrap: break-word;
+            letter-spacing: -0.01em;
+            text-rendering: optimizeLegibility;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .token {
             display: inline-block;
             background-color: var(--token-bg);
             color: var(--token-text);
-            padding: 0.25rem 0.5rem;
+            padding: 0.35rem 0.65rem;
             margin: 0.25rem;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: all 0.15s ease;
             position: relative;
             border: 1px solid transparent;
+            font-weight: 500;
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            letter-spacing: -0.01em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .token:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow);
-            border-color: var(--token-text);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+            background-color: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
         }
 
         .token-id {
@@ -277,9 +309,10 @@
             bottom: 100%;
             left: 50%;
             transform: translateX(-50%);
-            background-color: var(--surface-hover);
-            padding: 0.5rem;
-            border-radius: 4px;
+            background-color: var(--text-color);
+            color: var(--bg-color);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
             font-size: 0.75rem;
             white-space: nowrap;
             opacity: 0;
@@ -287,6 +320,8 @@
             transition: opacity 0.2s;
             margin-bottom: 0.5rem;
             z-index: 10;
+            box-shadow: var(--shadow-lg);
+            font-weight: 500;
         }
 
         .token:hover .token-tooltip {
@@ -301,30 +336,52 @@
         }
 
         .stat-box {
-            background-color: var(--bg-color);
-            padding: 1.25rem;
-            border-radius: 6px;
+            background: linear-gradient(135deg, var(--surface-color) 0%, var(--surface-hover) 100%);
+            padding: 1.5rem;
+            border-radius: 10px;
             text-align: center;
             border: 1px solid var(--border-color);
             transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
         .stat-box:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-lg);
             border-color: var(--primary-color);
-            box-shadow: var(--shadow);
+        }
+
+        .stat-box::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .stat-box:hover::before {
+            opacity: 1;
         }
 
         .stat-value {
-            font-size: 2rem;
-            font-weight: 600;
+            font-size: 2.25rem;
+            font-weight: 700;
             color: var(--primary-color);
+            letter-spacing: -0.5px;
         }
 
         .stat-label {
             color: var(--text-muted);
-            font-size: 0.9rem;
-            margin-top: 0.25rem;
-            font-weight: 400;
+            font-size: 0.875rem;
+            margin-top: 0.5rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .vocab-section {
@@ -333,47 +390,61 @@
 
         .vocab-search {
             width: 100%;
-            padding: 0.75rem;
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
+            padding: 0.875rem 1rem;
+            background-color: var(--surface-hover);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
             color: var(--text-color);
             margin-bottom: 1rem;
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             font-size: 0.95rem;
         }
 
         .vocab-search:focus {
             outline: none;
             border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(165, 28, 48, 0.1);
+            background-color: var(--surface-color);
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
         }
 
         @media (prefers-color-scheme: dark) {
             .vocab-search:focus {
-                box-shadow: 0 0 0 3px rgba(201, 75, 94, 0.2);
+                box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
             }
         }
 
         .vocab-list {
             max-height: 400px;
             overflow-y: auto;
-            background-color: var(--bg-color);
-            border: 2px solid var(--border-color);
-            border-radius: 6px;
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
         }
 
         .vocab-item {
             display: flex;
             justify-content: space-between;
-            padding: 0.75rem 1rem;
-            border-bottom: 1px solid var(--border-color);
-            transition: all 0.2s ease;
+            align-items: center;
+            padding: 0.875rem 1.25rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.15s ease;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .vocab-item {
+                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            }
         }
 
         .vocab-item:hover {
-            background-color: var(--surface-hover);
-            padding-left: 1.25rem;
+            background-color: rgba(79, 70, 229, 0.1);
+            padding-left: 1.5rem;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .vocab-item:hover {
+                background-color: rgba(129, 140, 248, 0.15);
+            }
         }
 
         .vocab-item:last-child {
@@ -381,59 +452,85 @@
         }
 
         .vocab-token {
-            font-family: 'Space Mono', 'Courier New', monospace;
-            color: var(--token-text);
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
+            color: var(--code-text);
+            font-size: 0.875rem;
+            font-weight: 400;
+            letter-spacing: -0.01em;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
         .vocab-id {
-            color: var(--text-muted);
-            font-size: 0.9rem;
+            background-color: rgba(79, 70, 229, 0.1);
+            color: var(--primary-color);
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', monospace;
+            letter-spacing: 0;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .vocab-id {
+                background-color: rgba(129, 140, 248, 0.15);
+            }
         }
 
         .empty-state {
             text-align: center;
-            padding: 3rem;
+            padding: 4rem 2rem;
             color: var(--text-muted);
         }
 
         .empty-state-icon {
-            font-size: 4rem;
+            font-size: 3rem;
             margin-bottom: 1rem;
-            opacity: 0.3;
+            opacity: 0.4;
+        }
+
+        .empty-state p {
+            font-size: 0.95rem;
         }
 
         footer {
             text-align: center;
-            margin-top: 4rem;
-            padding: 2rem 0;
-            border-top: 2px solid var(--border-color);
+            margin-top: 5rem;
+            padding: 2.5rem 0;
+            border-top: 1px solid var(--border-color);
             color: var(--text-muted);
-            font-size: 0.9rem;
+            font-size: 0.875rem;
         }
 
         footer p {
             margin: 0;
+            font-weight: 500;
         }
 
         /* Scrollbar styling */
         ::-webkit-scrollbar {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
         }
 
         ::-webkit-scrollbar-track {
-            background: var(--surface-color);
-            border-radius: 5px;
+            background: transparent;
         }
 
         ::-webkit-scrollbar-thumb {
             background: var(--border-color);
-            border-radius: 5px;
-            transition: background 0.3s ease;
+            border-radius: 4px;
+            transition: background 0.2s ease;
         }
 
         ::-webkit-scrollbar-thumb:hover {
             background: var(--text-muted);
+        }
+
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--border-color) transparent;
         }
 
         @media (max-width: 768px) {
@@ -443,10 +540,28 @@
 
             h1 {
                 font-size: 2rem;
+                letter-spacing: -0.5px;
+            }
+
+            .subtitle {
+                font-size: 1rem;
+            }
+
+            .upload-section {
+                padding: 2rem 1.5rem;
             }
 
             .stats-grid {
-                grid-template-columns: 1fr;
+                grid-template-columns: 1fr 1fr;
+                gap: 0.75rem;
+            }
+
+            .stat-value {
+                font-size: 1.75rem;
+            }
+
+            .card {
+                padding: 1.25rem;
             }
         }
     </style>
@@ -454,7 +569,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>Rust GPT Tokenizer Viewer</h1>
+            <h1>Tokenizer Viewer</h1>
             <p class="subtitle">Visualize and explore your BPE tokenizer</p>
         </header>
 
@@ -524,7 +639,7 @@
         </div>
 
         <footer>
-            <p>Rust GPT Tokenizer Viewer</p>
+            <p>Tokenizer Viewer</p>
         </footer>
     </div>
 
