@@ -54,6 +54,7 @@ struct Section {
 }
 
 fn main() -> Result<()> {
+    println!("Starting preprocess/stanford_oval_wikipedia");
     let args = Args::parse();
 
     // create the output directory if it doesn't exist
