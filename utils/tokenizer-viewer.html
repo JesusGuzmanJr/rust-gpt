@@ -1,900 +1,833 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Rust GPT Tokenizer Viewer</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap"
+      rel="stylesheet"
+    />
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
 
-        /* Light mode (default) */
+      :root {
+        --primary-color: #0070f3;
+        --secondary-color: #0060df;
+        --accent-color: #0070f3;
+        --bg-color: #ffffff;
+        --surface-color: #fafafa;
+        --surface-hover: #f5f5f5;
+        --text-color: #171717;
+        --text-muted: #737373;
+        --border-color: #e5e5e5;
+        --code-bg: #fafafa;
+        --code-text: #171717;
+        --token-bg: #f0f0f0;
+        --token-text: #171717;
+        --success-color: #16a34a;
+        --error-color: #dc2626;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+        --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.06);
+        --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.08);
+        --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.1);
+      }
+
+      @media (prefers-color-scheme: dark) {
         :root {
-            --primary-color: #4f46e5;
-            --secondary-color: #4338ca;
-            --accent-color: #06b6d4;
-            --bg-color: #fafafa;
-            --surface-color: #ffffff;
-            --surface-hover: #f5f5f5;
-            --text-color: #18181b;
-            --text-muted: #71717a;
-            --border-color: #e4e4e7;
-            --code-bg: #f8f9fa;
-            --code-text: #18181b;
-            --token-bg: #dbeafe;
-            --token-text: #1e40af;
-            --success-color: #10b981;
-            --error-color: #ef4444;
-            --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+          --primary-color: #3b82f6;
+          --secondary-color: #2563eb;
+          --accent-color: #3b82f6;
+          --bg-color: #0a0a0a;
+          --surface-color: #171717;
+          --surface-hover: #262626;
+          --text-color: #fafafa;
+          --text-muted: #a3a3a3;
+          --border-color: #262626;
+          --code-bg: #171717;
+          --code-text: #fafafa;
+          --token-bg: #262626;
+          --token-text: #fafafa;
+          --success-color: #22c55e;
+          --error-color: #ef4444;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+          --shadow-md: 0 2px 4px rgba(0, 0, 0, 0.3);
+          --shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.4);
+          --shadow-xl: 0 8px 16px rgba(0, 0, 0, 0.5);
         }
+      }
 
-        /* Dark mode */
-        @media (prefers-color-scheme: dark) {
-            :root {
-                --primary-color: #818cf8;
-                --secondary-color: #6366f1;
-                --accent-color: #22d3ee;
-                --bg-color: #0a0a0a;
-                --surface-color: #18181b;
-                --surface-hover: #27272a;
-                --text-color: #fafafa;
-                --text-muted: #a1a1aa;
-                --border-color: #27272a;
-                --code-bg: #09090b;
-                --code-text: #e4e4e7;
-                --token-bg: #1e3a8a;
-                --token-text: #93c5fd;
-                --success-color: #22c55e;
-                --error-color: #f87171;
-                --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-                --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
-                --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
-                --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
-            }
-        }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+          "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+          "Helvetica Neue", sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        line-height: 1.6;
+        transition: background-color 0.3s ease, color 0.3s ease;
+      }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-                sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            line-height: 1.6;
-            transition: background-color 0.3s ease, color 0.3s ease;
-        }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 2rem;
+      }
 
+      header {
+        text-align: center;
+        margin-bottom: 3rem;
+        padding: 2rem 0 1.5rem;
+      }
+
+      h1 {
+        font-size: 2.5rem;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        color: var(--text-color);
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+      }
+
+      .subtitle {
+        color: var(--text-muted);
+        font-size: 1.125rem;
+        font-weight: 400;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      .upload-section {
+        background-color: var(--surface-color);
+        border-radius: 6px;
+        padding: 2.5rem 2rem;
+        margin-bottom: 2.5rem;
+        border: 1px solid var(--border-color);
+        text-align: center;
+        transition: border-color 0.2s ease;
+        box-shadow: none;
+      }
+
+      .upload-section:hover {
+        border-color: var(--primary-color);
+      }
+
+      .upload-section h3 {
+        color: var(--text-color);
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        font-size: 1rem;
+      }
+
+      .file-input-wrapper {
+        position: relative;
+        display: inline-block;
+        margin: 1rem 0;
+      }
+
+      .file-input {
+        position: absolute;
+        left: -9999px;
+      }
+
+      .file-input-label {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        background-color: var(--primary-color);
+        color: white;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: background-color 0.2s ease;
+        box-shadow: none;
+        font-size: 0.875rem;
+      }
+
+      .file-input-label:hover {
+        background-color: var(--secondary-color);
+      }
+
+      .status {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        color: var(--text-muted);
+      }
+
+      .status.success {
+        color: var(--success-color);
+        font-weight: 500;
+      }
+
+      .status.error {
+        color: var(--error-color);
+        font-weight: 500;
+      }
+
+      .main-content {
+        display: grid;
+        gap: 3.5rem;
+      }
+
+      .card {
+        background-color: var(--surface-color);
+        border-radius: 6px;
+        padding: 1.5rem;
+        box-shadow: none;
+        border: 1px solid var(--border-color);
+        margin-bottom: 2.5rem;
+      }
+
+      .card:last-child {
+        margin-bottom: 0;
+      }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+      }
+
+      .card-title {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--text-color);
+      }
+
+      .token-count {
+        font-size: 0.875rem;
+        color: var(--text-muted);
+        font-weight: 500;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 150px;
+        padding: 1rem;
+        background-color: var(--code-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--code-text);
+        font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New",
+          monospace;
+        font-size: 0.875rem;
+        resize: vertical;
+        transition: border-color 0.2s ease;
+        line-height: 1.6;
+      }
+
+      textarea:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+      }
+
+      .tokens-display {
+        background-color: var(--code-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        padding: 1rem;
+        min-height: 150px;
+        font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New",
+          monospace;
+        font-size: 0.8125rem;
+        line-height: 1.8;
+        overflow-wrap: break-word;
+      }
+
+      .token {
+        display: inline-block;
+        background-color: var(--token-bg);
+        color: var(--token-text);
+        padding: 0.25rem 0.5rem;
+        margin: 0.25rem;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+        position: relative;
+        border: 1px solid var(--border-color);
+        font-family: "JetBrains Mono", monospace;
+      }
+
+      .token:hover {
+        background-color: var(--primary-color);
+        color: white;
+        border-color: var(--primary-color);
+      }
+
+      .token-id {
+        font-size: 0.7rem;
+        opacity: 0.6;
+        margin-left: 0.25rem;
+      }
+
+      .token-tooltip {
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: var(--text-color);
+        color: var(--bg-color);
+        padding: 0.375rem 0.625rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s;
+        margin-bottom: 0.5rem;
+        z-index: 10;
+        font-weight: 500;
+      }
+
+      .token:hover .token-tooltip {
+        opacity: 1;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-top: 1rem;
+      }
+
+      .stat-box {
+        background: var(--surface-color);
+        padding: 1.25rem;
+        border-radius: 6px;
+        text-align: center;
+        border: 1px solid var(--border-color);
+        transition: border-color 0.2s ease;
+      }
+
+      .stat-box:hover {
+        border-color: var(--primary-color);
+      }
+
+      .stat-value {
+        font-size: 2rem;
+        font-weight: 600;
+        color: var(--text-color);
+      }
+
+      .stat-label {
+        color: var(--text-muted);
+        font-size: 0.8125rem;
+        margin-top: 0.375rem;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .vocab-section {
+        margin-top: 1rem;
+      }
+
+      .vocab-search {
+        width: 100%;
+        padding: 0.75rem 0.875rem;
+        background-color: var(--code-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+        color: var(--text-color);
+        margin-bottom: 1rem;
+        transition: border-color 0.2s ease;
+        font-size: 0.875rem;
+      }
+
+      .vocab-search:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+      }
+
+      .vocab-list {
+        max-height: 400px;
+        overflow-y: auto;
+        background-color: var(--code-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 6px;
+      }
+
+      .vocab-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--border-color);
+        transition: background-color 0.15s ease;
+      }
+
+      .vocab-item:hover {
+        background-color: var(--surface-hover);
+      }
+
+      .vocab-item:last-child {
+        border-bottom: none;
+      }
+
+      .vocab-token {
+        font-family: "JetBrains Mono", monospace;
+        color: var(--code-text);
+        font-size: 0.8125rem;
+      }
+
+      .vocab-id {
+        background-color: var(--token-bg);
+        color: var(--text-color);
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        font-family: "JetBrains Mono", monospace;
+        border: 1px solid var(--border-color);
+      }
+
+      .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--text-muted);
+      }
+
+      .empty-state-icon {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        opacity: 0.3;
+      }
+
+      .empty-state p {
+        font-size: 0.875rem;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 4rem;
+        padding: 2rem 0;
+        border-top: 1px solid var(--border-color);
+        color: var(--text-muted);
+        font-size: 0.8125rem;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      ::-webkit-scrollbar-thumb {
+        background: var(--border-color);
+        border-radius: 4px;
+      }
+
+      ::-webkit-scrollbar-thumb:hover {
+        background: var(--text-muted);
+      }
+
+      @media (max-width: 768px) {
         .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        header {
-            text-align: center;
-            margin-bottom: 4rem;
-            padding: 3rem 0 2rem;
+          padding: 1rem;
         }
 
         h1 {
-            font-size: 3rem;
-            font-weight: 700;
-            margin-bottom: 1rem;
-            color: var(--text-color);
-            letter-spacing: -1px;
-            line-height: 1.1;
+          font-size: 2rem;
         }
 
         .subtitle {
-            color: var(--text-muted);
-            font-size: 1.25rem;
-            font-weight: 400;
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
-        .upload-section {
-            background-color: var(--surface-color);
-            border-radius: 12px;
-            padding: 3rem 2rem;
-            margin-bottom: 3rem;
-            border: 1px solid var(--border-color);
-            text-align: center;
-            transition: all 0.3s ease;
-            box-shadow: var(--shadow);
-        }
-
-        .upload-section:hover {
-            border-color: var(--primary-color);
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px);
-        }
-
-        .upload-section h3 {
-            color: var(--text-color);
-            font-weight: 600;
-            margin-bottom: 0.75rem;
-            font-size: 1.125rem;
-        }
-
-        .file-input-wrapper {
-            position: relative;
-            display: inline-block;
-            margin: 1rem 0;
-        }
-
-        .file-input {
-            position: absolute;
-            left: -9999px;
-        }
-
-        .file-input-label {
-            display: inline-block;
-            padding: 0.875rem 2rem;
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 8px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.2s ease;
-            box-shadow: var(--shadow-md);
-            font-size: 0.95rem;
-        }
-
-        .file-input-label:hover {
-            background-color: var(--secondary-color);
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-lg);
-        }
-
-        .file-input-label:active {
-            transform: translateY(0);
-        }
-
-        .status {
-            margin-top: 1rem;
-            font-size: 0.9rem;
-            color: var(--text-muted);
-        }
-
-        .status.success {
-            color: var(--success-color);
-            font-weight: 500;
-        }
-
-        .status.error {
-            color: var(--error-color);
-            font-weight: 500;
-        }
-
-        .main-content {
-            display: grid;
-            gap: 2rem;
-        }
-
-        .card {
-            background-color: var(--surface-color);
-            border-radius: 12px;
-            padding: 1.75rem;
-            box-shadow: var(--shadow);
-            border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
-        }
-
-        .card:hover {
-            box-shadow: var(--shadow-md);
-            border-color: var(--border-color);
-        }
-
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .card-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--text-color);
-        }
-
-        .token-count {
-            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
-            font-size: 0.875rem;
-            border: none;
-            box-shadow: var(--shadow-md);
-        }
-
-        textarea {
-            width: 100%;
-            min-height: 150px;
-            padding: 1.25rem;
-            background-color: var(--code-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--code-text);
-            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-            font-size: 0.9rem;
-            font-weight: 400;
-            resize: vertical;
-            transition: all 0.2s ease;
-            line-height: 1.7;
-            letter-spacing: -0.01em;
-            font-variant-ligatures: common-ligatures;
-            text-rendering: optimizeLegibility;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        textarea:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            textarea:focus {
-                box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
-            }
-        }
-
-        .tokens-display {
-            background-color: var(--code-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 1.25rem;
-            min-height: 150px;
-            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-            font-size: 0.85rem;
-            font-weight: 400;
-            line-height: 2;
-            overflow-wrap: break-word;
-            letter-spacing: -0.01em;
-            text-rendering: optimizeLegibility;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        .token {
-            display: inline-block;
-            background-color: var(--token-bg);
-            color: var(--token-text);
-            padding: 0.35rem 0.65rem;
-            margin: 0.25rem;
-            border-radius: 6px;
-            cursor: pointer;
-            transition: all 0.15s ease;
-            position: relative;
-            border: 1px solid transparent;
-            font-weight: 500;
-            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-            letter-spacing: -0.01em;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        .token:hover {
-            transform: translateY(-2px);
-            box-shadow: var(--shadow-md);
-            background-color: var(--primary-color);
-            color: white;
-            border-color: var(--primary-color);
-        }
-
-        .token-id {
-            font-size: 0.7rem;
-            opacity: 0.7;
-            margin-left: 0.25rem;
-        }
-
-        .token-tooltip {
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: var(--text-color);
-            color: var(--bg-color);
-            padding: 0.5rem 0.75rem;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.2s;
-            margin-bottom: 0.5rem;
-            z-index: 10;
-            box-shadow: var(--shadow-lg);
-            font-weight: 500;
-        }
-
-        .token:hover .token-tooltip {
-            opacity: 1;
+          font-size: 1rem;
         }
 
         .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
-            margin-top: 1rem;
+          grid-template-columns: 1fr 1fr;
         }
-
-        .stat-box {
-            background: linear-gradient(135deg, var(--surface-color) 0%, var(--surface-hover) 100%);
-            padding: 1.5rem;
-            border-radius: 10px;
-            text-align: center;
-            border: 1px solid var(--border-color);
-            transition: all 0.3s ease;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .stat-box:hover {
-            transform: translateY(-4px);
-            box-shadow: var(--shadow-lg);
-            border-color: var(--primary-color);
-        }
-
-        .stat-box::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--primary-color), var(--accent-color));
-            opacity: 0;
-            transition: opacity 0.3s ease;
-        }
-
-        .stat-box:hover::before {
-            opacity: 1;
-        }
-
-        .stat-value {
-            font-size: 2.25rem;
-            font-weight: 700;
-            color: var(--primary-color);
-            letter-spacing: -0.5px;
-        }
-
-        .stat-label {
-            color: var(--text-muted);
-            font-size: 0.875rem;
-            margin-top: 0.5rem;
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        .vocab-section {
-            margin-top: 1rem;
-        }
-
-        .vocab-search {
-            width: 100%;
-            padding: 0.875rem 1rem;
-            background-color: var(--surface-hover);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            color: var(--text-color);
-            margin-bottom: 1rem;
-            transition: all 0.2s ease;
-            font-size: 0.95rem;
-        }
-
-        .vocab-search:focus {
-            outline: none;
-            border-color: var(--primary-color);
-            background-color: var(--surface-color);
-            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .vocab-search:focus {
-                box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.2);
-            }
-        }
-
-        .vocab-list {
-            max-height: 400px;
-            overflow-y: auto;
-            background-color: var(--code-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-        }
-
-        .vocab-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.875rem 1.25rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            transition: all 0.15s ease;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .vocab-item {
-                border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            }
-        }
-
-        .vocab-item:hover {
-            background-color: rgba(79, 70, 229, 0.1);
-            padding-left: 1.5rem;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .vocab-item:hover {
-                background-color: rgba(129, 140, 248, 0.15);
-            }
-        }
-
-        .vocab-item:last-child {
-            border-bottom: none;
-        }
-
-        .vocab-token {
-            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
-            color: var(--code-text);
-            font-size: 0.875rem;
-            font-weight: 400;
-            letter-spacing: -0.01em;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-        }
-
-        .vocab-id {
-            background-color: rgba(79, 70, 229, 0.1);
-            color: var(--primary-color);
-            padding: 0.25rem 0.5rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            font-family: 'JetBrains Mono', 'Menlo', 'Monaco', monospace;
-            letter-spacing: 0;
-        }
-
-        @media (prefers-color-scheme: dark) {
-            .vocab-id {
-                background-color: rgba(129, 140, 248, 0.15);
-            }
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: var(--text-muted);
-        }
-
-        .empty-state-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.4;
-        }
-
-        .empty-state p {
-            font-size: 0.95rem;
-        }
-
-        footer {
-            text-align: center;
-            margin-top: 5rem;
-            padding: 2.5rem 0;
-            border-top: 1px solid var(--border-color);
-            color: var(--text-muted);
-            font-size: 0.875rem;
-        }
-
-        footer p {
-            margin: 0;
-            font-weight: 500;
-        }
-
-        /* Scrollbar styling */
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border-color);
-            border-radius: 4px;
-            transition: background 0.2s ease;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--text-muted);
-        }
-
-        * {
-            scrollbar-width: thin;
-            scrollbar-color: var(--border-color) transparent;
-        }
-
-        @media (max-width: 768px) {
-            .container {
-                padding: 1rem;
-            }
-
-            h1 {
-                font-size: 2rem;
-                letter-spacing: -0.5px;
-            }
-
-            .subtitle {
-                font-size: 1rem;
-            }
-
-            .upload-section {
-                padding: 2rem 1.5rem;
-            }
-
-            .stats-grid {
-                grid-template-columns: 1fr 1fr;
-                gap: 0.75rem;
-            }
-
-            .stat-value {
-                font-size: 1.75rem;
-            }
-
-            .card {
-                padding: 1.25rem;
-            }
-        }
+      }
     </style>
-</head>
-<body>
+  </head>
+  <body>
     <div class="container">
-        <header>
-            <h1>Tokenizer Viewer</h1>
-            <p class="subtitle">Visualize and explore your BPE tokenizer</p>
-        </header>
+      <header>
+        <h1>Tokenizer Viewer</h1>
+        <p class="subtitle">Visualize and explore your BPE tokenizer</p>
+      </header>
 
-        <div class="upload-section">
-            <h3>Load Tokenizer Model</h3>
-            <p class="status" id="uploadStatus">Upload a tokenizer JSON file to begin</p>
-            <div class="file-input-wrapper">
-                <input type="file" id="tokenizerFile" class="file-input" accept=".json">
-                <label for="tokenizerFile" class="file-input-label">Choose File</label>
-            </div>
+      <div class="upload-section">
+        <h3>Load Tokenizer Model</h3>
+        <p class="status" id="uploadStatus">
+          Upload a tokenizer JSON file to begin
+        </p>
+        <div class="file-input-wrapper">
+          <input
+            type="file"
+            id="tokenizerFile"
+            class="file-input"
+            accept=".json"
+          />
+          <label for="tokenizerFile" class="file-input-label"
+            >Choose File</label
+          >
+        </div>
+      </div>
+
+      <div class="main-content" id="mainContent" style="display: none">
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Input Text</h2>
+            <span class="token-count" id="tokenCount">0 tokens</span>
+          </div>
+          <textarea
+            id="inputText"
+            placeholder="Type or paste text here to see how it gets tokenized..."
+          >
+Hello world</textarea
+          >
         </div>
 
-        <div class="main-content" id="mainContent" style="display: none;">
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Input Text</h2>
-                    <span class="token-count" id="tokenCount">0 tokens</span>
-                </div>
-                <textarea id="inputText" placeholder="Type or paste text here to see how it gets tokenized...">Hello world</textarea>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Tokenized Output</h2>
+          </div>
+          <div class="tokens-display" id="tokensDisplay">
+            <div class="empty-state">
+              <div class="empty-state-icon">🔤</div>
+              <p>Enter text above to see tokens</p>
             </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Tokenized Output</h2>
-                </div>
-                <div class="tokens-display" id="tokensDisplay">
-                    <div class="empty-state">
-                        <div class="empty-state-icon">🔤</div>
-                        <p>Enter text above to see tokens</p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Statistics</h2>
-                </div>
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div class="stat-value" id="statVocabSize">0</div>
-                        <div class="stat-label">Vocabulary Size</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="statCharCount">0</div>
-                        <div class="stat-label">Characters</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="statTokens">0</div>
-                        <div class="stat-label">Tokens</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-value" id="statRatio">0.0</div>
-                        <div class="stat-label">Chars/Token</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <h2 class="card-title">Vocabulary</h2>
-                </div>
-                <div class="vocab-section">
-                    <input type="text" class="vocab-search" id="vocabSearch" placeholder="Search vocabulary...">
-                    <div class="vocab-list" id="vocabList"></div>
-                </div>
-            </div>
+          </div>
         </div>
 
-        <footer>
-            <p>Tokenizer Viewer</p>
-        </footer>
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Statistics</h2>
+          </div>
+          <div class="stats-grid">
+            <div class="stat-box">
+              <div class="stat-value" id="statVocabSize">0</div>
+              <div class="stat-label">Vocabulary Size</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value" id="statCharCount">0</div>
+              <div class="stat-label">Characters</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value" id="statTokens">0</div>
+              <div class="stat-label">Tokens</div>
+            </div>
+            <div class="stat-box">
+              <div class="stat-value" id="statRatio">0.0</div>
+              <div class="stat-label">Chars/Token</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Vocabulary</h2>
+          </div>
+          <div class="vocab-section">
+            <input
+              type="text"
+              class="vocab-search"
+              id="vocabSearch"
+              placeholder="Search vocabulary..."
+            />
+            <div class="vocab-list" id="vocabList"></div>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        <p>Tokenizer Viewer</p>
+      </footer>
     </div>
 
     <script>
-        class Tokenizer {
-            constructor(data) {
-                this.preTokenizationRegex = new RegExp(data.pre_tokenization_regex, 'gu');
-                this.merges = data.merges;
-                this.vocabSize = 256 + this.merges.length;
-            }
-
-            normalizeText(text) {
-                // Remove control characters except newlines
-                return text.split('').filter(c => {
-                    const code = c.charCodeAt(0);
-                    return !((code < 32 && c !== '\n') || (code >= 127 && code <= 159));
-                }).join('').normalize('NFC');
-            }
-
-            encode(text) {
-                const normalized = this.normalizeText(text);
-                const matches = [...normalized.matchAll(this.preTokenizationRegex)];
-                const allTokens = [];
-
-                for (const match of matches) {
-                    const word = match[0];
-                    const bytes = new TextEncoder().encode(word);
-
-                    // Start with individual bytes as tokens
-                    let tokens = Array.from(bytes).map(b => ({
-                        token: new Uint8Array([b]),
-                        id: b
-                    }));
-
-                    // Apply merges
-                    for (let i = 0; i < this.merges.length; i++) {
-                        const mergeToken = this.merges[i];
-                        const mergeId = 256 + i;
-                        let skip = false;
-                        const newTokens = [];
-
-                        for (let j = 0; j < tokens.length; j++) {
-                            if (skip) {
-                                skip = false;
-                                continue;
-                            }
-
-                            if (j + 1 < tokens.length) {
-                                const combined = new Uint8Array([
-                                    ...tokens[j].token,
-                                    ...tokens[j + 1].token
-                                ]);
-
-                                if (this.arraysEqual(combined, mergeToken)) {
-                                    newTokens.push({
-                                        token: combined,
-                                        id: mergeId
-                                    });
-                                    skip = true;
-                                    continue;
-                                }
-                            }
-
-                            newTokens.push(tokens[j]);
-                        }
-
-                        tokens = newTokens;
-                    }
-
-                    allTokens.push(...tokens);
-                }
-
-                return allTokens;
-            }
-
-            decode(tokenIds) {
-                const bytes = [];
-                for (const id of tokenIds) {
-                    if (id < 256) {
-                        bytes.push(id);
-                    } else {
-                        const merge = this.merges[id - 256];
-                        bytes.push(...merge);
-                    }
-                }
-                return new TextDecoder().decode(new Uint8Array(bytes));
-            }
-
-            arraysEqual(a, b) {
-                if (a.length !== b.length) return false;
-                for (let i = 0; i < a.length; i++) {
-                    if (a[i] !== b[i]) return false;
-                }
-                return true;
-            }
-
-            getVocabulary() {
-                const vocab = [];
-
-                // Add byte tokens (0-255)
-                for (let i = 0; i < 256; i++) {
-                    vocab.push({
-                        id: i,
-                        token: new Uint8Array([i]),
-                        display: this.tokenToDisplay(new Uint8Array([i]))
-                    });
-                }
-
-                // Add merge tokens
-                for (let i = 0; i < this.merges.length; i++) {
-                    vocab.push({
-                        id: 256 + i,
-                        token: this.merges[i],
-                        display: this.tokenToDisplay(this.merges[i])
-                    });
-                }
-
-                return vocab;
-            }
-
-            tokenToDisplay(bytes) {
-                try {
-                    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-                } catch {
-                    return Array.from(bytes).map(b => `\\x${b.toString(16).padStart(2, '0')}`).join('');
-                }
-            }
+      class Tokenizer {
+        constructor(data) {
+          this.preTokenizationRegex = new RegExp(
+            data.pre_tokenization_regex,
+            "gu"
+          );
+          this.merges = data.merges;
+          this.vocabSize = 256 + this.merges.length;
         }
 
-        let tokenizer = null;
+        normalizeText(text) {
+          // Remove control characters except newlines
+          return text
+            .split("")
+            .filter((c) => {
+              const code = c.charCodeAt(0);
+              return !(
+                (code < 32 && c !== "\n") ||
+                (code >= 127 && code <= 159)
+              );
+            })
+            .join("")
+            .normalize("NFC");
+        }
 
-        // File upload handling
-        document.getElementById('tokenizerFile').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
+        encode(text) {
+          const normalized = this.normalizeText(text);
+          const matches = [...normalized.matchAll(this.preTokenizationRegex)];
+          const allTokens = [];
 
-            const statusEl = document.getElementById('uploadStatus');
-            statusEl.textContent = 'Loading tokenizer...';
-            statusEl.className = 'status';
+          for (const match of matches) {
+            const word = match[0];
+            const bytes = new TextEncoder().encode(word);
 
-            try {
-                const text = await file.text();
-                const data = JSON.parse(text);
+            // Start with individual bytes as tokens
+            let tokens = Array.from(bytes).map((b) => ({
+              token: new Uint8Array([b]),
+              id: b,
+            }));
 
-                tokenizer = new Tokenizer(data);
+            // Apply merges
+            for (let i = 0; i < this.merges.length; i++) {
+              const mergeToken = this.merges[i];
+              const mergeId = 256 + i;
+              let skip = false;
+              const newTokens = [];
 
-                statusEl.textContent = `✓ Loaded tokenizer with ${tokenizer.vocabSize.toLocaleString()} tokens`;
-                statusEl.className = 'status success';
+              for (let j = 0; j < tokens.length; j++) {
+                if (skip) {
+                  skip = false;
+                  continue;
+                }
 
-                document.getElementById('mainContent').style.display = 'block';
-                document.getElementById('statVocabSize').textContent = tokenizer.vocabSize.toLocaleString();
+                if (j + 1 < tokens.length) {
+                  const combined = new Uint8Array([
+                    ...tokens[j].token,
+                    ...tokens[j + 1].token,
+                  ]);
 
-                // Initialize vocabulary display
-                displayVocabulary();
+                  if (this.arraysEqual(combined, mergeToken)) {
+                    newTokens.push({
+                      token: combined,
+                      id: mergeId,
+                    });
+                    skip = true;
+                    continue;
+                  }
+                }
 
-                // Trigger initial tokenization
-                updateTokenization();
-            } catch (error) {
-                statusEl.textContent = `✗ Error: ${error.message}`;
-                statusEl.className = 'status error';
-                console.error(error);
+                newTokens.push(tokens[j]);
+              }
+
+              tokens = newTokens;
             }
+
+            allTokens.push(...tokens);
+          }
+
+          return allTokens;
+        }
+
+        decode(tokenIds) {
+          const bytes = [];
+          for (const id of tokenIds) {
+            if (id < 256) {
+              bytes.push(id);
+            } else {
+              const merge = this.merges[id - 256];
+              bytes.push(...merge);
+            }
+          }
+          return new TextDecoder().decode(new Uint8Array(bytes));
+        }
+
+        arraysEqual(a, b) {
+          if (a.length !== b.length) return false;
+          for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) return false;
+          }
+          return true;
+        }
+
+        getVocabulary() {
+          const vocab = [];
+
+          // Add byte tokens (0-255)
+          for (let i = 0; i < 256; i++) {
+            vocab.push({
+              id: i,
+              token: new Uint8Array([i]),
+              display: this.tokenToDisplay(new Uint8Array([i])),
+            });
+          }
+
+          // Add merge tokens
+          for (let i = 0; i < this.merges.length; i++) {
+            vocab.push({
+              id: 256 + i,
+              token: this.merges[i],
+              display: this.tokenToDisplay(this.merges[i]),
+            });
+          }
+
+          return vocab;
+        }
+
+        tokenToDisplay(bytes) {
+          try {
+            return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          } catch {
+            return Array.from(bytes)
+              .map((b) => `\\x${b.toString(16).padStart(2, "0")}`)
+              .join("");
+          }
+        }
+      }
+
+      let tokenizer = null;
+
+      // File upload handling
+      document
+        .getElementById("tokenizerFile")
+        .addEventListener("change", async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          const statusEl = document.getElementById("uploadStatus");
+          statusEl.textContent = "Loading tokenizer...";
+          statusEl.className = "status";
+
+          try {
+            const text = await file.text();
+            const data = JSON.parse(text);
+
+            tokenizer = new Tokenizer(data);
+
+            statusEl.textContent = `✓ Loaded tokenizer with ${tokenizer.vocabSize.toLocaleString()} tokens`;
+            statusEl.className = "status success";
+
+            document.getElementById("mainContent").style.display = "block";
+            document.getElementById("statVocabSize").textContent =
+              tokenizer.vocabSize.toLocaleString();
+
+            // Initialize vocabulary display
+            displayVocabulary();
+
+            // Trigger initial tokenization
+            updateTokenization();
+          } catch (error) {
+            statusEl.textContent = `✗ Error: ${error.message}`;
+            statusEl.className = "status error";
+            console.error(error);
+          }
         });
 
-        // Text input handling
-        document.getElementById('inputText').addEventListener('input', updateTokenization);
+      // Text input handling
+      document
+        .getElementById("inputText")
+        .addEventListener("input", updateTokenization);
 
-        function updateTokenization() {
-            if (!tokenizer) return;
+      function updateTokenization() {
+        if (!tokenizer) return;
 
-            const text = document.getElementById('inputText').value;
-            const tokens = tokenizer.encode(text);
+        const text = document.getElementById("inputText").value;
+        const tokens = tokenizer.encode(text);
 
-            // Update token count
-            document.getElementById('tokenCount').textContent = `${tokens.length} tokens`;
-            document.getElementById('statTokens').textContent = tokens.length.toLocaleString();
+        // Update token count
+        document.getElementById(
+          "tokenCount"
+        ).textContent = `${tokens.length} tokens`;
+        document.getElementById("statTokens").textContent =
+          tokens.length.toLocaleString();
 
-            // Update character count
-            const charCount = text.length;
-            document.getElementById('statCharCount').textContent = charCount.toLocaleString();
+        // Update character count
+        const charCount = text.length;
+        document.getElementById("statCharCount").textContent =
+          charCount.toLocaleString();
 
-            // Update ratio
-            const ratio = tokens.length > 0 ? (charCount / tokens.length).toFixed(2) : '0.0';
-            document.getElementById('statRatio').textContent = ratio;
+        // Update ratio
+        const ratio =
+          tokens.length > 0 ? (charCount / tokens.length).toFixed(2) : "0.0";
+        document.getElementById("statRatio").textContent = ratio;
 
-            // Display tokens
-            const display = document.getElementById('tokensDisplay');
-            if (tokens.length === 0) {
-                display.innerHTML = `
+        // Display tokens
+        const display = document.getElementById("tokensDisplay");
+        if (tokens.length === 0) {
+          display.innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">🔤</div>
                         <p>Enter text above to see tokens</p>
                     </div>
                 `;
-            } else {
-                display.innerHTML = tokens.map(t => {
-                    const displayText = tokenizer.tokenToDisplay(t.token);
-                    const escaped = displayText
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#039;')
-                        .replace(/\n/g, '\\n')
-                        .replace(/\t/g, '\\t');
+        } else {
+          display.innerHTML = tokens
+            .map((t) => {
+              const displayText = tokenizer.tokenToDisplay(t.token);
+              const escaped = displayText
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;")
+                .replace(/\n/g, "\\n")
+                .replace(/\t/g, "\\t");
 
-                    return `<span class="token">
+              return `<span class="token">
                         ${escaped}<span class="token-id">[${t.id}]</span>
                         <span class="token-tooltip">Token ID: ${t.id}</span>
                     </span>`;
-                }).join('');
-            }
+            })
+            .join("");
         }
+      }
 
-        function displayVocabulary(filter = '') {
-            if (!tokenizer) return;
+      function displayVocabulary(filter = "") {
+        if (!tokenizer) return;
 
-            const vocab = tokenizer.getVocabulary();
-            const filtered = filter
-                ? vocab.filter(v =>
-                    v.display.toLowerCase().includes(filter.toLowerCase()) ||
-                    v.id.toString().includes(filter)
-                  )
-                : vocab;
+        const vocab = tokenizer.getVocabulary();
+        const filtered = filter
+          ? vocab.filter(
+              (v) =>
+                v.display.toLowerCase().includes(filter.toLowerCase()) ||
+                v.id.toString().includes(filter)
+            )
+          : vocab;
 
-            const listEl = document.getElementById('vocabList');
-            listEl.innerHTML = filtered.slice(0, 500).map(v => {
-                const escaped = v.display
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/\n/g, '\\n')
-                    .replace(/\t/g, '\\t');
+        const listEl = document.getElementById("vocabList");
+        listEl.innerHTML = filtered
+          .slice(0, 500)
+          .map((v) => {
+            const escaped = v.display
+              .replace(/&/g, "&amp;")
+              .replace(/</g, "&lt;")
+              .replace(/>/g, "&gt;")
+              .replace(/\n/g, "\\n")
+              .replace(/\t/g, "\\t");
 
-                return `
+            return `
                     <div class="vocab-item">
                         <span class="vocab-token">${escaped}</span>
                         <span class="vocab-id">${v.id}</span>
                     </div>
                 `;
-            }).join('');
+          })
+          .join("");
 
-            if (filtered.length > 500) {
-                listEl.innerHTML += `
+        if (filtered.length > 500) {
+          listEl.innerHTML += `
                     <div class="vocab-item" style="justify-content: center; color: var(--text-muted);">
                         Showing first 500 of ${filtered.length.toLocaleString()} results
                     </div>
                 `;
-            }
         }
+      }
 
-        // Vocabulary search
-        document.getElementById('vocabSearch').addEventListener('input', (e) => {
-            displayVocabulary(e.target.value);
-        });
+      // Vocabulary search
+      document.getElementById("vocabSearch").addEventListener("input", (e) => {
+        displayVocabulary(e.target.value);
+      });
     </script>
-</body>
+  </body>
 </html>
