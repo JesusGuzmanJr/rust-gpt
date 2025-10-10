@@ -828,8 +828,8 @@ Hello world</textarea
             return new TextDecoder("utf-8", { fatal: true }).decode(byteArray);
           } catch {
             return Array.from(bytes)
-              .map((b) => `\\x${b.toString(16).padStart(2, "0")}`)
-              .join("");
+              .map((b) => `0x${b.toString(16).padStart(2, "0").toUpperCase()}`)
+              .join(" ");
           }
         }
       }
@@ -1001,10 +1001,15 @@ Hello world</textarea
               .replace(/\n/g, "\\n")
               .replace(/\t/g, "\\t");
 
+            // Only add quotes if it's valid UTF-8 (doesn't start with 0x)
+            const displayString = v.display.startsWith("0x")
+              ? escaped
+              : `"${escaped}"`;
+
             return `
                     <div class="vocab-item">
                         <span class="vocab-bytes">[${bytesHex}]</span>
-                        <span class="vocab-token">"${escaped}"</span>
+                        <span class="vocab-token">${displayString}</span>
                         <span class="vocab-id">${v.id}</span>
                     </div>
                 `;
