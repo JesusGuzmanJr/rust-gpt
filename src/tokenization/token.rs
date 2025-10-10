@@ -33,8 +33,10 @@ impl Token {
 impl std::ops::Add for Token {
     type Output = Self;
 
-    fn add(self, other: Self) -> Self {
-        Self(self.0.into_iter().chain(other.0).collect())
+    fn add(mut self, other: Self) -> Self {
+        // Extend in place to avoid unnecessary allocations
+        self.0.extend(other.0);
+        self
     }
 }
 
