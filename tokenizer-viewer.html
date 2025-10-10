@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rust GPT Tokenizer Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #10a37f;
+            --secondary-color: #1a7f64;
+            --bg-color: #0f172a;
+            --surface-color: #1e293b;
+            --surface-hover: #334155;
+            --text-color: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: #334155;
+            --token-bg: #312e81;
+            --token-text: #c7d2fe;
+            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+                'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+                sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+            padding: 2rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, var(--primary-color) 0%, #06b6d4 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .upload-section {
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            border: 2px dashed var(--border-color);
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+
+        .upload-section:hover {
+            border-color: var(--primary-color);
+        }
+
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+            margin: 1rem 0;
+        }
+
+        .file-input {
+            position: absolute;
+            left: -9999px;
+        }
+
+        .file-input-label {
+            display: inline-block;
+            padding: 0.75rem 2rem;
+            background-color: var(--primary-color);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.3s;
+        }
+
+        .file-input-label:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .status {
+            margin-top: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .status.success {
+            color: var(--primary-color);
+        }
+
+        .status.error {
+            color: #ef4444;
+        }
+
+        .main-content {
+            display: grid;
+            gap: 2rem;
+        }
+
+        .card {
+            background-color: var(--surface-color);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .card-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .token-count {
+            background-color: var(--token-bg);
+            color: var(--token-text);
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 1rem;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .tokens-display {
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem;
+            min-height: 150px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 2;
+            overflow-wrap: break-word;
+        }
+
+        .token {
+            display: inline-block;
+            background-color: var(--token-bg);
+            color: var(--token-text);
+            padding: 0.25rem 0.5rem;
+            margin: 0.25rem;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .token:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .token-id {
+            font-size: 0.7rem;
+            opacity: 0.7;
+            margin-left: 0.25rem;
+        }
+
+        .token-tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--surface-hover);
+            padding: 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            margin-bottom: 0.5rem;
+            z-index: 10;
+        }
+
+        .token:hover .token-tooltip {
+            opacity: 1;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-box {
+            background-color: var(--bg-color);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0.25rem;
+        }
+
+        .vocab-section {
+            margin-top: 1rem;
+        }
+
+        .vocab-search {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-color);
+            margin-bottom: 1rem;
+        }
+
+        .vocab-search:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .vocab-list {
+            max-height: 400px;
+            overflow-y: auto;
+            background-color: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+
+        .vocab-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border-color);
+            transition: background-color 0.2s;
+        }
+
+        .vocab-item:hover {
+            background-color: var(--surface-hover);
+        }
+
+        .vocab-item:last-child {
+            border-bottom: none;
+        }
+
+        .vocab-token {
+            font-family: 'Courier New', monospace;
+            color: var(--token-text);
+        }
+
+        .vocab-id {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+            opacity: 0.3;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🦀 Rust GPT Tokenizer Viewer</h1>
+            <p class="subtitle">Visualize and explore your BPE tokenizer</p>
+        </header>
+
+        <div class="upload-section">
+            <h3>Load Tokenizer Model</h3>
+            <p class="status" id="uploadStatus">Upload a tokenizer JSON file to begin</p>
+            <div class="file-input-wrapper">
+                <input type="file" id="tokenizerFile" class="file-input" accept=".json">
+                <label for="tokenizerFile" class="file-input-label">Choose File</label>
+            </div>
+        </div>
+
+        <div class="main-content" id="mainContent" style="display: none;">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Input Text</h2>
+                    <span class="token-count" id="tokenCount">0 tokens</span>
+                </div>
+                <textarea id="inputText" placeholder="Type or paste text here to see how it gets tokenized...">Hello world</textarea>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Tokenized Output</h2>
+                </div>
+                <div class="tokens-display" id="tokensDisplay">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔤</div>
+                        <p>Enter text above to see tokens</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Statistics</h2>
+                </div>
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-value" id="statVocabSize">0</div>
+                        <div class="stat-label">Vocabulary Size</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="statCharCount">0</div>
+                        <div class="stat-label">Characters</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="statTokens">0</div>
+                        <div class="stat-label">Tokens</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="statRatio">0.0</div>
+                        <div class="stat-label">Chars/Token</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Vocabulary</h2>
+                </div>
+                <div class="vocab-section">
+                    <input type="text" class="vocab-search" id="vocabSearch" placeholder="Search vocabulary...">
+                    <div class="vocab-list" id="vocabList"></div>
+                </div>
+            </div>
+        </div>
+
+        <footer>
+            <p>Built with ❤️ for Rust GPT • Tokenizer Viewer</p>
+        </footer>
+    </div>
+
+    <script>
+        class Tokenizer {
+            constructor(data) {
+                this.preTokenizationRegex = new RegExp(data.pre_tokenization_regex, 'gu');
+                this.merges = data.merges;
+                this.vocabSize = 256 + this.merges.length;
+            }
+
+            normalizeText(text) {
+                // Remove control characters except newlines
+                return text.split('').filter(c => {
+                    const code = c.charCodeAt(0);
+                    return !((code < 32 && c !== '\n') || (code >= 127 && code <= 159));
+                }).join('').normalize('NFC');
+            }
+
+            encode(text) {
+                const normalized = this.normalizeText(text);
+                const matches = [...normalized.matchAll(this.preTokenizationRegex)];
+                const allTokens = [];
+
+                for (const match of matches) {
+                    const word = match[0];
+                    const bytes = new TextEncoder().encode(word);
+
+                    // Start with individual bytes as tokens
+                    let tokens = Array.from(bytes).map(b => ({
+                        token: new Uint8Array([b]),
+                        id: b
+                    }));
+
+                    // Apply merges
+                    for (let i = 0; i < this.merges.length; i++) {
+                        const mergeToken = this.merges[i];
+                        const mergeId = 256 + i;
+                        let skip = false;
+                        const newTokens = [];
+
+                        for (let j = 0; j < tokens.length; j++) {
+                            if (skip) {
+                                skip = false;
+                                continue;
+                            }
+
+                            if (j + 1 < tokens.length) {
+                                const combined = new Uint8Array([
+                                    ...tokens[j].token,
+                                    ...tokens[j + 1].token
+                                ]);
+
+                                if (this.arraysEqual(combined, mergeToken)) {
+                                    newTokens.push({
+                                        token: combined,
+                                        id: mergeId
+                                    });
+                                    skip = true;
+                                    continue;
+                                }
+                            }
+
+                            newTokens.push(tokens[j]);
+                        }
+
+                        tokens = newTokens;
+                    }
+
+                    allTokens.push(...tokens);
+                }
+
+                return allTokens;
+            }
+
+            decode(tokenIds) {
+                const bytes = [];
+                for (const id of tokenIds) {
+                    if (id < 256) {
+                        bytes.push(id);
+                    } else {
+                        const merge = this.merges[id - 256];
+                        bytes.push(...merge);
+                    }
+                }
+                return new TextDecoder().decode(new Uint8Array(bytes));
+            }
+
+            arraysEqual(a, b) {
+                if (a.length !== b.length) return false;
+                for (let i = 0; i < a.length; i++) {
+                    if (a[i] !== b[i]) return false;
+                }
+                return true;
+            }
+
+            getVocabulary() {
+                const vocab = [];
+
+                // Add byte tokens (0-255)
+                for (let i = 0; i < 256; i++) {
+                    vocab.push({
+                        id: i,
+                        token: new Uint8Array([i]),
+                        display: this.tokenToDisplay(new Uint8Array([i]))
+                    });
+                }
+
+                // Add merge tokens
+                for (let i = 0; i < this.merges.length; i++) {
+                    vocab.push({
+                        id: 256 + i,
+                        token: this.merges[i],
+                        display: this.tokenToDisplay(this.merges[i])
+                    });
+                }
+
+                return vocab;
+            }
+
+            tokenToDisplay(bytes) {
+                try {
+                    return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+                } catch {
+                    return Array.from(bytes).map(b => `\\x${b.toString(16).padStart(2, '0')}`).join('');
+                }
+            }
+        }
+
+        let tokenizer = null;
+
+        // File upload handling
+        document.getElementById('tokenizerFile').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const statusEl = document.getElementById('uploadStatus');
+            statusEl.textContent = 'Loading tokenizer...';
+            statusEl.className = 'status';
+
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+
+                tokenizer = new Tokenizer(data);
+
+                statusEl.textContent = `✓ Loaded tokenizer with ${tokenizer.vocabSize.toLocaleString()} tokens`;
+                statusEl.className = 'status success';
+
+                document.getElementById('mainContent').style.display = 'block';
+                document.getElementById('statVocabSize').textContent = tokenizer.vocabSize.toLocaleString();
+
+                // Initialize vocabulary display
+                displayVocabulary();
+
+                // Trigger initial tokenization
+                updateTokenization();
+            } catch (error) {
+                statusEl.textContent = `✗ Error: ${error.message}`;
+                statusEl.className = 'status error';
+                console.error(error);
+            }
+        });
+
+        // Text input handling
+        document.getElementById('inputText').addEventListener('input', updateTokenization);
+
+        function updateTokenization() {
+            if (!tokenizer) return;
+
+            const text = document.getElementById('inputText').value;
+            const tokens = tokenizer.encode(text);
+
+            // Update token count
+            document.getElementById('tokenCount').textContent = `${tokens.length} tokens`;
+            document.getElementById('statTokens').textContent = tokens.length.toLocaleString();
+
+            // Update character count
+            const charCount = text.length;
+            document.getElementById('statCharCount').textContent = charCount.toLocaleString();
+
+            // Update ratio
+            const ratio = tokens.length > 0 ? (charCount / tokens.length).toFixed(2) : '0.0';
+            document.getElementById('statRatio').textContent = ratio;
+
+            // Display tokens
+            const display = document.getElementById('tokensDisplay');
+            if (tokens.length === 0) {
+                display.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">🔤</div>
+                        <p>Enter text above to see tokens</p>
+                    </div>
+                `;
+            } else {
+                display.innerHTML = tokens.map(t => {
+                    const displayText = tokenizer.tokenToDisplay(t.token);
+                    const escaped = displayText
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;')
+                        .replace(/\n/g, '\\n')
+                        .replace(/\t/g, '\\t');
+
+                    return `<span class="token">
+                        ${escaped}<span class="token-id">[${t.id}]</span>
+                        <span class="token-tooltip">Token ID: ${t.id}</span>
+                    </span>`;
+                }).join('');
+            }
+        }
+
+        function displayVocabulary(filter = '') {
+            if (!tokenizer) return;
+
+            const vocab = tokenizer.getVocabulary();
+            const filtered = filter
+                ? vocab.filter(v =>
+                    v.display.toLowerCase().includes(filter.toLowerCase()) ||
+                    v.id.toString().includes(filter)
+                  )
+                : vocab;
+
+            const listEl = document.getElementById('vocabList');
+            listEl.innerHTML = filtered.slice(0, 500).map(v => {
+                const escaped = v.display
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/\n/g, '\\n')
+                    .replace(/\t/g, '\\t');
+
+                return `
+                    <div class="vocab-item">
+                        <span class="vocab-token">${escaped}</span>
+                        <span class="vocab-id">${v.id}</span>
+                    </div>
+                `;
+            }).join('');
+
+            if (filtered.length > 500) {
+                listEl.innerHTML += `
+                    <div class="vocab-item" style="justify-content: center; color: var(--text-muted);">
+                        Showing first 500 of ${filtered.length.toLocaleString()} results
+                    </div>
+                `;
+            }
+        }
+
+        // Vocabulary search
+        document.getElementById('vocabSearch').addEventListener('input', (e) => {
+            displayVocabulary(e.target.value);
+        });
+    </script>
+</body>
+</html>
