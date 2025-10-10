@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rust GPT Tokenizer Viewer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -11,18 +14,40 @@
             box-sizing: border-box;
         }
 
+        /* Light mode (default) */
         :root {
-            --primary-color: #10a37f;
-            --secondary-color: #1a7f64;
-            --bg-color: #0f172a;
-            --surface-color: #1e293b;
-            --surface-hover: #334155;
-            --text-color: #e2e8f0;
-            --text-muted: #94a3b8;
-            --border-color: #334155;
-            --token-bg: #312e81;
-            --token-text: #c7d2fe;
-            --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --primary-color: #a51c30;
+            --secondary-color: #8b1526;
+            --accent-color: #4a90e2;
+            --bg-color: #ffffff;
+            --surface-color: #f8f9fa;
+            --surface-hover: #e9ecef;
+            --text-color: #212529;
+            --text-muted: #6c757d;
+            --border-color: #dee2e6;
+            --token-bg: #e3f2fd;
+            --token-text: #1565c0;
+            --shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        /* Dark mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary-color: #c94b5e;
+                --secondary-color: #a51c30;
+                --accent-color: #5da9f5;
+                --bg-color: #1a1a1a;
+                --surface-color: #2d2d2d;
+                --surface-hover: #3d3d3d;
+                --text-color: #e8e8e8;
+                --text-muted: #a0a0a0;
+                --border-color: #404040;
+                --token-bg: #1e3a5f;
+                --token-text: #93c5fd;
+                --shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+                --shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.5);
+            }
         }
 
         body {
@@ -34,6 +59,7 @@
             background-color: var(--bg-color);
             color: var(--text-color);
             line-height: 1.6;
+            transition: background-color 0.3s ease, color 0.3s ease;
         }
 
         .container {
@@ -46,36 +72,42 @@
             text-align: center;
             margin-bottom: 3rem;
             padding: 2rem 0;
-            border-bottom: 1px solid var(--border-color);
+            border-bottom: 2px solid var(--border-color);
         }
 
         h1 {
             font-size: 2.5rem;
-            font-weight: 700;
+            font-weight: 600;
             margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, var(--primary-color) 0%, #06b6d4 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--primary-color);
+            letter-spacing: -0.5px;
         }
 
         .subtitle {
             color: var(--text-muted);
             font-size: 1.1rem;
+            font-weight: 400;
         }
 
         .upload-section {
             background-color: var(--surface-color);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 2rem;
             margin-bottom: 2rem;
             border: 2px dashed var(--border-color);
             text-align: center;
-            transition: border-color 0.3s;
+            transition: all 0.3s ease;
         }
 
         .upload-section:hover {
             border-color: var(--primary-color);
+            box-shadow: var(--shadow);
+        }
+
+        .upload-section h3 {
+            color: var(--text-color);
+            font-weight: 600;
+            margin-bottom: 0.5rem;
         }
 
         .file-input-wrapper {
@@ -94,14 +126,17 @@
             padding: 0.75rem 2rem;
             background-color: var(--primary-color);
             color: white;
-            border-radius: 8px;
+            border-radius: 6px;
             cursor: pointer;
-            font-weight: 600;
-            transition: background-color 0.3s;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: var(--shadow);
         }
 
         .file-input-label:hover {
             background-color: var(--secondary-color);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
         }
 
         .status {
@@ -111,11 +146,23 @@
         }
 
         .status.success {
-            color: var(--primary-color);
+            color: #198754;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .status.success {
+                color: #4ade80;
+            }
         }
 
         .status.error {
-            color: #ef4444;
+            color: #dc3545;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .status.error {
+                color: #f87171;
+            }
         }
 
         .main-content {
@@ -125,9 +172,15 @@
 
         .card {
             background-color: var(--surface-color);
-            border-radius: 12px;
+            border-radius: 8px;
             padding: 1.5rem;
             box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            transition: box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            box-shadow: var(--shadow-lg);
         }
 
         .card-header {
@@ -142,15 +195,18 @@
         .card-title {
             font-size: 1.25rem;
             font-weight: 600;
+            color: var(--text-color);
         }
 
         .token-count {
             background-color: var(--token-bg);
             color: var(--token-text);
             padding: 0.5rem 1rem;
-            border-radius: 20px;
-            font-weight: 600;
+            border-radius: 16px;
+            font-weight: 500;
             font-size: 0.9rem;
+            border: 1px solid var(--token-text);
+            opacity: 0.9;
         }
 
         textarea {
@@ -158,27 +214,34 @@
             min-height: 150px;
             padding: 1rem;
             background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
             color: var(--text-color);
-            font-family: 'Courier New', monospace;
+            font-family: 'Space Mono', 'Courier New', monospace;
             font-size: 0.95rem;
             resize: vertical;
-            transition: border-color 0.3s;
+            transition: all 0.3s ease;
         }
 
         textarea:focus {
             outline: none;
             border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(165, 28, 48, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            textarea:focus {
+                box-shadow: 0 0 0 3px rgba(201, 75, 94, 0.2);
+            }
         }
 
         .tokens-display {
             background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
             padding: 1rem;
             min-height: 150px;
-            font-family: 'Courier New', monospace;
+            font-family: 'Space Mono', 'Courier New', monospace;
             font-size: 0.9rem;
             line-height: 2;
             overflow-wrap: break-word;
@@ -192,13 +255,15 @@
             margin: 0.25rem;
             border-radius: 4px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.2s ease;
             position: relative;
+            border: 1px solid transparent;
         }
 
         .token:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transform: translateY(-1px);
+            box-shadow: var(--shadow);
+            border-color: var(--token-text);
         }
 
         .token-id {
@@ -237,14 +302,21 @@
 
         .stat-box {
             background-color: var(--bg-color);
-            padding: 1rem;
-            border-radius: 8px;
+            padding: 1.25rem;
+            border-radius: 6px;
             text-align: center;
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+
+        .stat-box:hover {
+            border-color: var(--primary-color);
+            box-shadow: var(--shadow);
         }
 
         .stat-value {
             font-size: 2rem;
-            font-weight: 700;
+            font-weight: 600;
             color: var(--primary-color);
         }
 
@@ -252,6 +324,7 @@
             color: var(--text-muted);
             font-size: 0.9rem;
             margin-top: 0.25rem;
+            font-weight: 400;
         }
 
         .vocab-section {
@@ -262,23 +335,32 @@
             width: 100%;
             padding: 0.75rem;
             background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
             color: var(--text-color);
             margin-bottom: 1rem;
+            transition: all 0.3s ease;
+            font-size: 0.95rem;
         }
 
         .vocab-search:focus {
             outline: none;
             border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(165, 28, 48, 0.1);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .vocab-search:focus {
+                box-shadow: 0 0 0 3px rgba(201, 75, 94, 0.2);
+            }
         }
 
         .vocab-list {
             max-height: 400px;
             overflow-y: auto;
             background-color: var(--bg-color);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
+            border: 2px solid var(--border-color);
+            border-radius: 6px;
         }
 
         .vocab-item {
@@ -286,11 +368,12 @@
             justify-content: space-between;
             padding: 0.75rem 1rem;
             border-bottom: 1px solid var(--border-color);
-            transition: background-color 0.2s;
+            transition: all 0.2s ease;
         }
 
         .vocab-item:hover {
             background-color: var(--surface-hover);
+            padding-left: 1.25rem;
         }
 
         .vocab-item:last-child {
@@ -298,7 +381,7 @@
         }
 
         .vocab-token {
-            font-family: 'Courier New', monospace;
+            font-family: 'Space Mono', 'Courier New', monospace;
             color: var(--token-text);
         }
 
@@ -322,10 +405,35 @@
         footer {
             text-align: center;
             margin-top: 4rem;
-            padding-top: 2rem;
-            border-top: 1px solid var(--border-color);
+            padding: 2rem 0;
+            border-top: 2px solid var(--border-color);
             color: var(--text-muted);
             font-size: 0.9rem;
+        }
+
+        footer p {
+            margin: 0;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--surface-color);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 5px;
+            transition: background 0.3s ease;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
         }
 
         @media (max-width: 768px) {
@@ -346,7 +454,7 @@
 <body>
     <div class="container">
         <header>
-            <h1>🦀 Rust GPT Tokenizer Viewer</h1>
+            <h1>Rust GPT Tokenizer Viewer</h1>
             <p class="subtitle">Visualize and explore your BPE tokenizer</p>
         </header>
 
@@ -416,7 +524,7 @@
         </div>
 
         <footer>
-            <p>Built with ❤️ for Rust GPT • Tokenizer Viewer</p>
+            <p>Rust GPT Tokenizer Viewer</p>
         </footer>
     </div>
 
