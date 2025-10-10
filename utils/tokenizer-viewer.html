@@ -207,26 +207,97 @@
         font-weight: 500;
       }
 
+      .input-wrapper {
+        position: relative;
+        width: 100%;
+      }
+
       textarea {
         width: 100%;
         min-height: 150px;
         padding: 1rem;
-        background-color: var(--code-bg);
+        background-color: transparent;
         border: 1px solid var(--border-color);
         border-radius: 6px;
         color: var(--code-text);
         font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New",
           monospace;
-        font-size: 0.875rem;
+        font-size: 1.125rem;
         resize: vertical;
         transition: border-color 0.2s ease;
         line-height: 1.6;
+        position: relative;
+        z-index: 2;
       }
 
       textarea:focus {
         outline: none;
         border-color: var(--primary-color);
         box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+      }
+
+      .input-highlights {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        min-height: 150px;
+        padding: 1rem;
+        background-color: var(--code-bg);
+        border: 1px solid transparent;
+        border-radius: 6px;
+        font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New",
+          monospace;
+        font-size: 1.125rem;
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+        pointer-events: none;
+        z-index: 1;
+        color: transparent;
+      }
+
+      .highlight-token-0 {
+        background-color: rgba(255, 182, 193, 0.6);
+      }
+
+      .highlight-token-1 {
+        background-color: rgba(173, 216, 230, 0.6);
+      }
+
+      .highlight-token-2 {
+        background-color: rgba(144, 238, 144, 0.6);
+      }
+
+      .highlight-token-3 {
+        background-color: rgba(255, 218, 185, 0.6);
+      }
+
+      .highlight-token-4 {
+        background-color: rgba(221, 160, 221, 0.6);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .highlight-token-0 {
+          background-color: rgba(255, 105, 180, 0.4);
+        }
+
+        .highlight-token-1 {
+          background-color: rgba(100, 149, 237, 0.4);
+        }
+
+        .highlight-token-2 {
+          background-color: rgba(50, 205, 50, 0.4);
+        }
+
+        .highlight-token-3 {
+          background-color: rgba(255, 165, 0, 0.4);
+        }
+
+        .highlight-token-4 {
+          background-color: rgba(186, 85, 211, 0.4);
+        }
       }
 
       .tokens-display {
@@ -237,7 +308,7 @@
         min-height: 150px;
         font-family: "JetBrains Mono", "Menlo", "Monaco", "Courier New",
           monospace;
-        font-size: 0.8125rem;
+        font-size: 1rem;
         line-height: 1.8;
         overflow-wrap: break-word;
       }
@@ -246,7 +317,7 @@
         display: inline-block;
         background-color: var(--token-bg);
         color: var(--token-text);
-        padding: 0.25rem 0.5rem;
+        padding: 0.375rem 0.625rem;
         margin: 0.25rem;
         border-radius: 4px;
         cursor: pointer;
@@ -254,12 +325,69 @@
         position: relative;
         border: 1px solid var(--border-color);
         font-family: "JetBrains Mono", monospace;
+        font-size: 1rem;
       }
 
-      .token:hover {
-        background-color: var(--primary-color);
-        color: white;
-        border-color: var(--primary-color);
+      .token.token-color-0:hover {
+        background-color: rgba(255, 182, 193, 1);
+        color: var(--text-color);
+        border-color: rgba(255, 182, 193, 1);
+      }
+
+      .token.token-color-1:hover {
+        background-color: rgba(173, 216, 230, 1);
+        color: var(--text-color);
+        border-color: rgba(173, 216, 230, 1);
+      }
+
+      .token.token-color-2:hover {
+        background-color: rgba(144, 238, 144, 1);
+        color: var(--text-color);
+        border-color: rgba(144, 238, 144, 1);
+      }
+
+      .token.token-color-3:hover {
+        background-color: rgba(255, 218, 185, 1);
+        color: var(--text-color);
+        border-color: rgba(255, 218, 185, 1);
+      }
+
+      .token.token-color-4:hover {
+        background-color: rgba(221, 160, 221, 1);
+        color: var(--text-color);
+        border-color: rgba(221, 160, 221, 1);
+      }
+
+      @media (prefers-color-scheme: dark) {
+        .token.token-color-0:hover {
+          background-color: rgba(255, 105, 180, 1);
+          color: var(--bg-color);
+          border-color: rgba(255, 105, 180, 1);
+        }
+
+        .token.token-color-1:hover {
+          background-color: rgba(100, 149, 237, 1);
+          color: var(--bg-color);
+          border-color: rgba(100, 149, 237, 1);
+        }
+
+        .token.token-color-2:hover {
+          background-color: rgba(50, 205, 50, 1);
+          color: var(--bg-color);
+          border-color: rgba(50, 205, 50, 1);
+        }
+
+        .token.token-color-3:hover {
+          background-color: rgba(255, 165, 0, 1);
+          color: var(--bg-color);
+          border-color: rgba(255, 165, 0, 1);
+        }
+
+        .token.token-color-4:hover {
+          background-color: rgba(186, 85, 211, 1);
+          color: var(--bg-color);
+          border-color: rgba(186, 85, 211, 1);
+        }
       }
 
       .token-id {
@@ -483,12 +611,15 @@
             <h2 class="card-title">Input Text</h2>
             <span class="token-count" id="tokenCount">0 tokens</span>
           </div>
-          <textarea
-            id="inputText"
-            placeholder="Type or paste text here to see how it gets tokenized..."
-          >
+          <div class="input-wrapper">
+            <div class="input-highlights" id="inputHighlights"></div>
+            <textarea
+              id="inputText"
+              placeholder="Type or paste text here to see how it gets tokenized..."
+            >
 Hello world</textarea
-          >
+            >
+          </div>
         </div>
 
         <div class="card">
@@ -752,6 +883,9 @@ Hello world</textarea
           tokens.length > 0 ? (charCount / tokens.length).toFixed(2) : "0.0";
         document.getElementById("statRatio").textContent = ratio;
 
+        // Update input highlights
+        updateInputHighlights(text, tokens);
+
         // Display tokens
         const display = document.getElementById("tokensDisplay");
         if (tokens.length === 0) {
@@ -763,7 +897,7 @@ Hello world</textarea
                 `;
         } else {
           display.innerHTML = tokens
-            .map((t) => {
+            .map((t, i) => {
               const displayText = tokenizer.tokenToDisplay(t.token);
               const escaped = displayText
                 .replace(/&/g, "&amp;")
@@ -774,13 +908,51 @@ Hello world</textarea
                 .replace(/\n/g, "\\n")
                 .replace(/\t/g, "\\t");
 
-              return `<span class="token">
+              const colorClass = `token-color-${i % 5}`;
+
+              return `<span class="token ${colorClass}">
                         ${escaped}<span class="token-id">[${t.id}]</span>
                         <span class="token-tooltip">Token ID: ${t.id}</span>
                     </span>`;
             })
             .join("");
         }
+      }
+
+      function updateInputHighlights(text, tokens) {
+        const highlightsEl = document.getElementById("inputHighlights");
+
+        if (tokens.length === 0 || text.length === 0) {
+          highlightsEl.innerHTML = text
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;");
+          return;
+        }
+
+        // Reconstruct the text with highlighting
+        let highlightedHtml = "";
+        let textPosition = 0;
+
+        for (let i = 0; i < tokens.length; i++) {
+          const tokenBytes = tokens[i].token;
+          const tokenText = new TextDecoder().decode(tokenBytes);
+          const colorClass = `highlight-token-${i % 5}`;
+
+          // Find where this token appears in the original text
+          const tokenLength = tokenText.length;
+
+          const escaped = tokenText
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/ /g, "&nbsp;");
+
+          highlightedHtml += `<span class="${colorClass}">${escaped}</span>`;
+          textPosition += tokenLength;
+        }
+
+        highlightsEl.innerHTML = highlightedHtml;
       }
 
       function displayVocabulary(filter = "") {
