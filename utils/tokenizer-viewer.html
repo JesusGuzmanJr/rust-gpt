@@ -822,7 +822,10 @@ Hello world</textarea
 
         tokenToDisplay(bytes) {
           try {
-            return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+            // Ensure bytes is a Uint8Array
+            const byteArray =
+              bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+            return new TextDecoder("utf-8", { fatal: true }).decode(byteArray);
           } catch {
             return Array.from(bytes)
               .map((b) => `\\x${b.toString(16).padStart(2, "0")}`)
