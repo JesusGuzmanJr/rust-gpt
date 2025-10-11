@@ -17,6 +17,7 @@ use {
         },
     },
     thousands::Separable,
+    tracing::*,
 };
 
 /// Parse a Stanford Oval Wikipedia parquet file creating shards of normalized,
@@ -56,7 +57,7 @@ struct Section {
 }
 
 fn main() -> Result<()> {
-    println!("Starting preprocess/stanford_oval_wikipedia");
+    rust_gpt::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
     // create the output directory if it doesn't exist
@@ -77,13 +78,13 @@ fn main() -> Result<()> {
         .with_batch_size(batch_size)
         .build()?;
 
-    println!("Reading batches of {batch_size} rows from the parquet file...");
+    info!(batch_size = %batch_size.separate_with_commas(), "Reading batched rows from the parquet file...");
 
     rayon::spawn(move || {
         reader
             .filter_map(|batch| {
                 if let Err(error) = &batch {
-                    eprintln!("{error}");
+                    error!("{error}");
                 }
                 batch.ok()
             })
@@ -132,7 +133,7 @@ fn main() -> Result<()> {
                     })
                     .filter_map(|result| {
                         if let Err(error) = &result {
-                            eprintln!("{error}");
+                            error!("{error}");
                         }
                         result.ok()
                     })
@@ -142,7 +143,7 @@ fn main() -> Result<()> {
             })
             .filter_map(|result| {
                 if let Err(error) = &result {
-                    eprintln!("{error}");
+                    error!("{error}");
                 }
                 result.ok()
             })
@@ -166,7 +167,7 @@ fn main() -> Result<()> {
                 // Block until the channel is ready to receive the article
                 tx.send(article).expect("channel is not open");
             });
-        println!("Finished reading parquet file");
+        info!("Finished reading parquet file");
     });
 
     let encoders = Arc::new(Mutex::new(
@@ -183,7 +184,7 @@ fn main() -> Result<()> {
             let processed = article_count.fetch_add(1, Ordering::Relaxed) + 1;
 
             if processed.is_multiple_of(1000) {
-                println!("Processed {} articles...", processed.separate_with_commas());
+                info!("Processed {} articles...", processed.separate_with_commas());
             }
 
             let markdown = article.to_markdown()?;
@@ -193,7 +194,7 @@ fn main() -> Result<()> {
             let mut encoders = encoders.lock().expect("failed to lock encoders");
             if encoders[thread_idx].is_none() {
                 let file_name = format!("shard-{}.md.zst", thread_idx);
-                println!("Writing to {file_name}...");
+                info!("Writing to {file_name}...");
                 let encoder = Box::new(
                     zstd::Encoder::new(
                         File::create(args.output_dir.join(file_name))?,
@@ -221,7 +222,7 @@ fn main() -> Result<()> {
             Ok(())
         })?;
 
-    println!(
+    info!(
         "Finished processing {} articles",
         article_count.load(Ordering::Relaxed).separate_with_commas()
     );
