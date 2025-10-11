@@ -21,8 +21,10 @@ use {
 
 /// Parse a Stanford Oval Wikipedia parquet file creating shards of normalized,
 /// compressed markdown.
+///
+/// Dataset: https://huggingface.co/datasets/stanford-oval/wikipedia
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Args {
     /// Path to the Stanford Oval Wikipedia parquet file.
     #[arg(short, long)]
@@ -214,7 +216,7 @@ fn main() -> Result<()> {
 
             // Add end-of-text character
             // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
-            encoder.write_all("\u{3}".as_bytes())?;
+            encoder.write_all(rust_gpt::utils::END_OF_TEXT)?;
 
             Ok(())
         })?;

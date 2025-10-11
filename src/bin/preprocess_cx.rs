@@ -19,10 +19,13 @@ use {
     thousands::Separable,
 };
 
-/// Parse a Stanford Oval Wikipedia parquet file creating shards of normalized,
+/// Parse CulturaX parquet files creating shards of normalized,
 /// compressed markdown.
+///
+/// Dataset: https://huggingface.co/datasets/uonlp/CulturaX
+/// Paper: https://arxiv.org/abs/2309.09400
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about)]
 struct Args {
     /// Path to the Stanford Oval Wikipedia parquet file.
     #[arg(short, long)]

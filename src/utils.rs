@@ -4,6 +4,11 @@ use {
     std::path::Path,
 };
 
+/// End of text character U+0003 as UTF-8 encoded bytes.
+///
+/// https://en.wikipedia.org/wiki/C0_and_C1_control_codes
+pub const END_OF_TEXT: &[u8] = "\u{3}".as_bytes();
+
 /// Bincode configuration for all serialization and deserialization operations.
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 
