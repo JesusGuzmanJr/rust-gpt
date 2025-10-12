@@ -60,7 +60,7 @@ fn main() -> Result<()> {
         })?;
     }
 
-    let regex = regex::bytes::Regex::new(r"shard-(\d+)\.md\.zst").expect("invalid regex");
+    let regex = regex::bytes::Regex::new(r"shard-(\d+)\.zst").expect("invalid regex");
 
     // The English dataset is 7.54 TB and it's split into ~2.5 GB files so that's
     // ~3016 files whose paths fit in memory.
@@ -68,7 +68,7 @@ fn main() -> Result<()> {
         .par_bridge()
         .filter_map(|result| result.ok())
         .map(|entry| entry.path())
-        .filter(|path| path.is_file() && path.extension() == Some(std::ffi::OsStr::new("parquet")))
+        .filter(|path| path.is_file() && path.extension() == Some(std::ffi::OsStr::new("zst")))
         .filter_map(|path| {
             if let Some(captures) = regex.captures(path.as_os_str().as_bytes()) {
                 match String::from_utf8_lossy(&captures[1]).parse::<usize>() {
@@ -200,7 +200,7 @@ fn main() -> Result<()> {
             // Get or create encoder for this thread
             let mut encoders = encoders.lock().expect("failed to lock encoders");
             if encoders[thread_idx].is_none() {
-                let file_name = format!("shard-{i}.md.zst");
+                let file_name = format!("shard-{i}.zst");
                 info!("Writing to {file_name}...");
                 let encoder = Box::new(
                     zstd::Encoder::new(
