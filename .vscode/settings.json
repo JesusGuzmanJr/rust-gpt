@@ -27,8 +27,10 @@
         "nullptr",
         "nvcc",
         "oding",
+        "oneshot",
         "overfiting",
         "Pretokenize",
+        "reqwest",
         "serde",
         "smallvec",
         "subword",
@@ -51,5 +53,8 @@
     "rust-analyzer.check.command": "clippy",
     "rust-analyzer.rustfmt.extraArgs": [
         "+nightly",
+    ],
+    "cSpell.ignorePaths": [
+        "Cargo.lock"
     ]
 }

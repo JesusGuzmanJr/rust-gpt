@@ -134,7 +134,7 @@ fn main() -> Result<()> {
 
     let file_paths = std::fs::read_dir(config.input_dir)?
         .filter_map(|entry| entry.ok())
-        .map(|dir| dir.path())
+        .map(|entry| entry.path())
         .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
         .collect::<Vec<_>>();
 

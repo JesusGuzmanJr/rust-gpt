@@ -1,36 +1,35 @@
 use {
+    ahash::AHashSet,
     anyhow::{Context, Result},
-    arrow_array::{GenericByteArray, RecordBatch, StringArray, types::GenericStringType},
     clap::Parser,
-    itertools::Itertools,
-    parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
+    futures::StreamExt,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
-    regex::Regex,
     rust_gpt::tokenization::normalize_text,
-    std::{
-        fs::File,
-        io::Write,
-        path::PathBuf,
-        sync::{
-            Arc, LazyLock, Mutex,
-            atomic::{AtomicU32, Ordering},
-        },
-    },
-    thousands::Separable,
+    std::{io::Write, os::unix::ffi::OsStrExt, path::PathBuf},
+    tracing::*,
 };
 
-/// Parse CulturaX parquet files creating shards of normalized,
-/// compressed markdown.
+/// The maximum number of concurrent downloads.
+///
+/// Each parquet file is ~2.5 GB.
+///
+/// The Parquet stream reader requires a cursor (random access) so the
+/// entire file needs to be downloaded. For the sake of simplicity, we'll load
+/// the entire file in memory instead of saving it to disk.
+const DOWNLOAD_CONCURRENCY: usize = 10;
+
+/// The number of rows to read at a time from the parquet file.
+const BATCH_SIZE: usize = 16;
+
+/// Download, parse and preprocess CulturaX parquet files
+/// creating shards of normalized, compressed markdown.
 ///
 /// Dataset: https://huggingface.co/datasets/uonlp/CulturaX
+///
 /// Paper: https://arxiv.org/abs/2309.09400
 #[derive(Parser, Debug)]
 #[command(version, about)]
 struct Args {
-    /// Path to the Stanford Oval Wikipedia parquet file.
-    #[arg(short, long)]
-    input_file: PathBuf,
-
     /// Path to the output directory for the shards.
     ///
     /// If the directory does not exist, it will be created.
@@ -38,26 +37,9 @@ struct Args {
     output_dir: PathBuf,
 }
 
-/// A Wikipedia article.
-struct Article {
-    /// The title of the article.
-    document_title: String,
-
-    /// The sections of the article.
-    sections: Vec<Section>,
-}
-
-/// A section of a Wikipedia article.
-struct Section {
-    /// The title of the section. This may be None.
-    title: Option<String>,
-
-    /// The content of the section.
-    content: String,
-}
-
-fn main() -> Result<()> {
-    println!("Starting preprocess/stanford_oval_wikipedia");
+#[tokio::main]
+async fn main() -> Result<()> {
+    rust_gpt::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
     // create the output directory if it doesn't exist
@@ -70,241 +52,175 @@ fn main() -> Result<()> {
         })?;
     }
 
-    let batch_size = rayon::current_num_threads() * 64;
-
-    let (tx, rx) = crossbeam_channel::bounded(batch_size);
-
-    let reader = ParquetRecordBatchReaderBuilder::try_new(File::open(&args.input_file)?)?
-        .with_batch_size(batch_size)
-        .build()?;
-
-    println!("Reading batches of {batch_size} rows from the parquet file...");
-
-    rayon::spawn(move || {
-        reader
-            .filter_map(|batch| {
-                if let Err(error) = &batch {
-                    eprintln!("{error}");
-                }
-                batch.ok()
-            })
-            .map(|batch| {
-                // see dataset card for column names
-                // https://huggingface.co/datasets/stanford-oval/wikipedia
-                let document_title = column(&batch, "document_title")?;
-                let section_title = column(&batch, "section_title")?;
-                let content = column(&batch, "content")?;
-
-                let rows = (0..batch.num_rows())
-                    .map(|i| {
-                        let document_title = document_title.value(i);
-                        let section_title = section_title.value(i);
-                        let content = content.value(i);
-                        (document_title, section_title, content)
-                    })
-                    .filter(|(document_title, _, content)| {
-                        !document_title.is_empty() && !content.is_empty()
-                    })
-                    .map(|(document_title, section_title, content)| {
-                        (
-                            document_title,
-                            if section_title.is_empty() {
-                                None
-                            } else {
-                                Some(section_title)
-                            },
-                            content,
-                        )
-                    })
-                    .collect::<Vec<_>>();
-
-                let rows = rows
-                    .par_iter()
-                    .map(|(document_title, section_title, content)| {
-                        anyhow::Ok((
-                            clean_text(document_title)?,
-                            if let Some(section_title) = section_title {
-                                Some(clean_text(section_title)?)
-                            } else {
-                                None
-                            },
-                            clean_text(content)?,
-                        ))
-                    })
-                    .filter_map(|result| {
-                        if let Err(error) = &result {
-                            eprintln!("{error}");
-                        }
-                        result.ok()
-                    })
-                    .collect::<Vec<_>>();
-
-                anyhow::Ok(rows)
-            })
-            .filter_map(|result| {
-                if let Err(error) = &result {
-                    eprintln!("{error}");
-                }
-                result.ok()
-            })
-            .flatten()
-            .chunk_by(
-                // Groups consecutive rows that have the same document_title
-                |(document_title, ..)| document_title.to_owned(),
-            )
-            .into_iter()
-            .for_each(move |(document_title, group)| {
-                let article = Article {
-                    document_title,
-                    sections: group
-                        .map(|(_, section_title, content)| Section {
-                            title: section_title,
-                            content,
-                        })
-                        .collect::<Vec<_>>(),
-                };
-
-                // Block until the channel is ready to receive the article
-                tx.send(article).expect("channel is not open");
-            });
-        println!("Finished reading parquet file");
-    });
-
-    let encoders = Arc::new(Mutex::new(
-        (0..rayon::current_num_threads())
-            .map(|_| None)
-            .collect::<Vec<_>>(),
-    ));
-
-    let article_count = AtomicU32::new(0);
-
-    rx.into_iter()
+    // The English dataset is 7.54 TB and it's split into ~2.5 GB files so thats
+    // ~3016 files whose paths fit in memory.
+    let processed_file_numbers = std::fs::read_dir(&args.output_dir)?
         .par_bridge()
-        .try_for_each(|article| -> Result<()> {
-            let processed = article_count.fetch_add(1, Ordering::Relaxed) + 1;
+        .filter_map(|result| result.ok())
+        .map(|entry| entry.path())
+        .filter(|path| path.is_file() && path.extension() == Some(std::ffi::OsStr::new("parquet")))
+        .filter_map(|path| {
+            // path ends with "en_part_XXXXX.parquet"
+            // split and get the last bytes corresponding to "XXXXX.parquet"
+            path.as_os_str()
+                .as_bytes()
+                .split_last_chunk::<13>()
+                .and_then(|(_, ending)| {
+                    // ending is bytes corresponding to "XXXXX.parquet"
+                    // split and get the first bytes corresponding to "XXXXX"
+                    ending.split_last_chunk::<8>().map(|(number, _)| number)
+                })
+                .and_then(|number| String::from_utf8_lossy(number).parse::<usize>().ok())
+        })
+        .fold(AHashSet::default, |mut set, number| {
+            set.insert(number);
+            set
+        })
+        .reduce(AHashSet::default, |mut curr, other| {
+            curr.extend(other);
+            curr
+        });
 
-            if processed.is_multiple_of(1000) {
-                println!("Processed {} articles...", processed.separate_with_commas());
+    // Larger than projected number of files but we'll handle 404s gracefully.
+    const HIGHEST_FILE_NUMBER: usize = 0; // TODO: change back to 3500;
+
+    let client = reqwest::ClientBuilder::new()
+        .default_headers({
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.append(
+                "Authorization",
+                format!(
+                    "Bearer {}",
+                    std::env::var("HUGGING_FACE_TOKEN")
+                        .context("HUGGING_FACE_TOKEN environment variable is not set")?
+                )
+                .parse()
+                .expect("bad header"),
+            );
+            headers
+        })
+        .build()
+        .expect("failed to build client");
+
+    futures::stream::iter(
+        (0..=HIGHEST_FILE_NUMBER)
+            .filter(|number| !processed_file_numbers.contains(number))
+            .map(|file_number| (file_number, url(file_number)))
+            .map(|(file_number, url)| {
+                let client = client.clone();
+                async move {
+                    let file_name = url.split('/').next_back().expect("invalid URL");
+                    info!(%file_name, "Downloading parquet...");
+                    (file_number, client.get(&url).send().await)
+                }
+            }),
+    )
+    .buffer_unordered(DOWNLOAD_CONCURRENCY)
+    .filter_map(|(file_number, result)| async move {
+        match result {
+            Ok(response) => Some((file_number, response)),
+            Err(error) => {
+                error!(file_number, "{error}");
+                None
             }
-
-            let markdown = article.to_markdown()?;
-            let thread_idx = rayon::current_thread_index().expect("thread index is not available");
-
-            // Get or create encoder for this thread
-            let mut encoders = encoders.lock().expect("failed to lock encoders");
-            if encoders[thread_idx].is_none() {
-                let file_name = format!("shard-{}.md.zst", thread_idx);
-                println!("Writing to {file_name}...");
-                let encoder = Box::new(
-                    zstd::Encoder::new(
-                        File::create(args.output_dir.join(file_name))?,
-                        // The compression level for the zstd encoder.
-                        // The higher the level, the more compressed the data will be.
-                        // Decompressing is same speed regardless of the level.
-                        19,
-                    )?
-                    .auto_finish(),
-                );
-                encoders[thread_idx] = Some(encoder);
+        }
+    })
+    .filter_map(|(file_number, response)| async move {
+        if response.status() == reqwest::StatusCode::NOT_FOUND {
+            info!(file_number, url = %response.url(), "Not found");
+            None
+        } else if !response.status().is_success() {
+            let status_code = response.status();
+            let url = response.url().clone();
+            let error = response.text().await.expect("failed to get error response");
+            error!(%status_code, %url, error);
+            None
+        } else {
+            Some((file_number, response.bytes().await))
+        }
+    })
+    .then(|(file_number, bytes)| async move {
+        anyhow::Ok((
+            file_number,
+            parquet::arrow::ParquetRecordBatchStreamBuilder::new(std::io::Cursor::new(bytes?))
+                .await?
+                .with_batch_size(BATCH_SIZE)
+                .build()?,
+        ))
+    })
+    .filter_map(|result| async move {
+        match result {
+            Ok((file_number, stream)) => Some((file_number, stream)),
+            Err(error) => {
+                error!("{error}");
+                None
             }
+        }
+    })
+    .map(|(file_number, mut stream)| {
+        let output_dir = args.output_dir.clone();
+        async move {
+            let (tx, rx) = tokio::sync::oneshot::channel();
+            rayon::spawn({
+                let file_number = file_number;
 
-            let encoder = encoders[thread_idx]
-                .as_mut()
-                .expect("encoder is not available")
-                .as_mut();
+                move || {
+                    let result = || async move {
+                        let file_name = format!("shard-{file_number}.md.zst");
+                        info!("Writing to {file_name}...");
+                        let mut encoder = Box::new(
+                            zstd::Encoder::new(
+                                std::fs::File::create(output_dir.join(file_name))?,
+                                // The compression level for the zstd encoder.
+                                // The higher the level, the more compressed the data will be.
+                                // Decompressing is same speed regardless of the level.
+                                19,
+                            )?
+                            .auto_finish(),
+                        );
 
-            encoder.write_all(markdown.as_bytes())?;
+                        while let Some(batch) = stream.next().await {
+                            let batch = batch?;
+                            let text = rust_gpt::utils::get_parquet_column(&batch, "text")?;
+                            let bytes = (0..batch.num_rows())
+                                .map(|i| text.value(i))
+                                .collect::<Vec<_>>()
+                                .par_iter()
+                                .map(|text| {
+                                    normalize_text(text)
+                                        .as_bytes()
+                                        .iter()
+                                        .chain(rust_gpt::utils::END_OF_TEXT.iter())
+                                        .cloned()
+                                        .collect::<Vec<_>>()
+                                })
+                                .flatten()
+                                .collect::<Vec<_>>();
 
-            // Add end-of-text character
-            // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
-            encoder.write_all("\u{3}".as_bytes())?;
-
-            Ok(())
-        })?;
-
-    println!(
-        "Finished processing {} articles",
-        article_count.load(Ordering::Relaxed).separate_with_commas()
-    );
+                            encoder.write_all(&bytes)?;
+                        }
+                        anyhow::Ok(())
+                    };
+                    drop(tx.send(result()));
+                }
+            });
+            rx.await.expect("channel is closed").await
+        }
+    })
+    .for_each(|result| async {
+        if let Err(error) = result.await {
+            error!("{error}");
+        }
+    })
+    .await;
 
     Ok(())
 }
 
-/// Get a reference to a column's array by name.
-fn column<'a>(
-    record_batch: &'a RecordBatch,
-    column: &'static str,
-) -> Result<&'a GenericByteArray<GenericStringType<i32>>> {
-    record_batch
-        .column_by_name(column)
-        .with_context(|| format!("missing {column} column"))?
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .context("content is not a StringArray")
-}
-
-fn clean_text(text: &str) -> Result<String> {
-    Ok(remove_tables(&normalize_text(text)))
-}
-
-fn remove_tables(text: &str) -> String {
-    static TABLE_RE: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"(?s)<Table>.*?</Table>").expect("invalid regex"));
-
-    TABLE_RE.replace_all(text, " ").to_string()
-}
-
-impl Article {
-    /// Return a string of properly formatted markdown.
-    fn to_markdown(&self) -> Result<String> {
-        // Add 20% extra
-        let mut markdown = String::with_capacity(self.len() + self.len() / 5);
-
-        // Add document title as H1
-        markdown.push_str("# ");
-        markdown.push_str(&self.document_title);
-        markdown.push_str("\n\n");
-
-        // Add each section
-        for section in &self.sections {
-            // Add section title as H2 if it exists and is not empty
-            if let Some(title) = &section.title
-                && !title.is_empty()
-            {
-                markdown.push_str("## ");
-                markdown.push_str(title);
-                markdown.push_str("\n\n");
-            }
-
-            // Add section content
-            markdown.push_str(&section.content);
-            markdown.push_str("\n\n");
-        }
-
-        let arena = comrak::Arena::new();
-        let options = comrak::Options::default();
-        let root = comrak::parse_document(&arena, &markdown, &options);
-
-        let mut formatted = String::with_capacity((markdown.len() as f32 * 1.2) as usize);
-        comrak::format_commonmark(root, &options, &mut formatted)?;
-
-        Ok(formatted)
-    }
-
-    /// Get the byte length of the article.
-    fn len(&self) -> usize {
-        self.document_title.len()
-            + self
-                .sections
-                .iter()
-                .map(|section| section.len())
-                .sum::<usize>()
-    }
-}
-
-impl Section {
-    /// Get the byte length of the section.
-    fn len(&self) -> usize {
-        self.title.as_ref().map(|title| title.len()).unwrap_or(0) + self.content.len()
-    }
+/// Get the URL of the CulturaX parquet file.
+fn url(file_number: usize) -> String {
+    // https://huggingface.co/datasets/uonlp/CulturaX
+    format!(
+        "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{file_number:05}.parquet",
+    )
 }

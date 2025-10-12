@@ -1,12 +1,11 @@
 use {
     anyhow::{Context, Result},
-    arrow_array::{GenericByteArray, RecordBatch, StringArray, types::GenericStringType},
     clap::Parser,
     itertools::Itertools,
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
-    rust_gpt::tokenization::normalize_text,
+    rust_gpt::{tokenization::normalize_text, utils::get_parquet_column},
     std::{
         fs::File,
         io::Write,
@@ -91,9 +90,9 @@ fn main() -> Result<()> {
             .map(|batch| {
                 // see dataset card for column names
                 // https://huggingface.co/datasets/stanford-oval/wikipedia
-                let document_title = column(&batch, "document_title")?;
-                let section_title = column(&batch, "section_title")?;
-                let content = column(&batch, "content")?;
+                let document_title = get_parquet_column(&batch, "document_title")?;
+                let section_title = get_parquet_column(&batch, "section_title")?;
+                let content = get_parquet_column(&batch, "content")?;
 
                 let rows = (0..batch.num_rows())
                     .map(|i| {
@@ -228,19 +227,6 @@ fn main() -> Result<()> {
     );
 
     Ok(())
-}
-
-/// Get a reference to a column's array by name.
-fn column<'a>(
-    record_batch: &'a RecordBatch,
-    column: &'static str,
-) -> Result<&'a GenericByteArray<GenericStringType<i32>>> {
-    record_batch
-        .column_by_name(column)
-        .with_context(|| format!("missing {column} column"))?
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .context("content is not a StringArray")
 }
 
 fn clean_text(text: &str) -> Result<String> {

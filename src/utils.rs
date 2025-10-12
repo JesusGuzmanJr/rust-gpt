@@ -1,5 +1,6 @@
 use {
     anyhow::{Context, Result},
+    arrow_array::{GenericByteArray, RecordBatch, types::GenericStringType},
     serde::{Serialize, de::DeserializeOwned},
     std::path::Path,
 };
@@ -8,6 +9,19 @@ use {
 ///
 /// https://en.wikipedia.org/wiki/C0_and_C1_control_codes
 pub const END_OF_TEXT: &[u8] = "\u{3}".as_bytes();
+
+/// Get a reference to a column's array by name.
+pub fn get_parquet_column<'a>(
+    record_batch: &'a RecordBatch,
+    column: &'static str,
+) -> Result<&'a GenericByteArray<GenericStringType<i32>>> {
+    record_batch
+        .column_by_name(column)
+        .with_context(|| format!("missing {column} column"))?
+        .as_any()
+        .downcast_ref::<arrow_array::StringArray>()
+        .context("content is not a StringArray")
+}
 
 /// Bincode configuration for all serialization and deserialization operations.
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
