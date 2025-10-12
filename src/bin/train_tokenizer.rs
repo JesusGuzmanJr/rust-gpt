@@ -6,7 +6,7 @@ use {
     regex::Regex,
     rust_gpt::{
         tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
-        utils::{Bincode, Ron},
+        utils::{Bincode, Ron, byte_size},
     },
     smallvec::SmallVec,
     std::{
@@ -220,9 +220,7 @@ fn main() -> Result<()> {
     info!(
         unique_words = %word_frequencies.len().separate_with_commas(),
         elapsed = ?reading_start.elapsed(),
-        read = %bytesize::ByteSize::b(bytes_read.load(Ordering::Relaxed) as u64)
-            .display()
-            .iec(),
+        read = %byte_size(bytes_read.load(Ordering::Relaxed)),
         "Done reading",
     );
 

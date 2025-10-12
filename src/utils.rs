@@ -23,6 +23,11 @@ pub fn get_parquet_column<'a>(
         .context("content is not a StringArray")
 }
 
+/// Format the byte size as a human readable string.
+pub fn byte_size(bytes: usize) -> impl std::fmt::Display {
+    bytesize::ByteSize::b(bytes as _).display().iec()
+}
+
 /// Bincode configuration for all serialization and deserialization operations.
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
 

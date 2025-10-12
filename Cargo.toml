@@ -35,7 +35,7 @@ futures = "0.3.31"
 icu_normalizer = "2.0.0"
 indexmap = "2.11.4"
 itertools = "0.14.0"
-parquet = { version = "56.2.0", features = ["async"] }
+parquet = "56.2.0"
 rayon = "1.11.0"
 regex = "1.12.1"
 reqwest = "0.12.23"

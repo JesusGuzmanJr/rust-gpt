@@ -4,7 +4,7 @@ use {
     clap::Parser,
     futures::StreamExt,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
-    rust_gpt::tokenization::normalize_text,
+    rust_gpt::{tokenization::normalize_text, utils::byte_size},
     std::{io::Write, os::unix::ffi::OsStrExt, path::PathBuf},
     tracing::*,
 };
@@ -12,11 +12,7 @@ use {
 /// The maximum number of concurrent downloads.
 ///
 /// Each parquet file is ~2.5 GB.
-///
-/// The Parquet stream reader requires a cursor (random access) so the
-/// entire file needs to be downloaded. For the sake of simplicity, we'll load
-/// the entire file in memory instead of saving it to disk.
-const DOWNLOAD_CONCURRENCY: usize = 10;
+const DOWNLOAD_CONCURRENCY: usize = 8;
 
 /// The number of rows to read at a time from the parquet file.
 const BATCH_SIZE: usize = 32;
@@ -107,12 +103,11 @@ async fn main() -> Result<()> {
     futures::stream::iter(
         (0..=HIGHEST_FILE_INDEX)
             .filter(|i| !processed_file_indices.contains(i))
-            .map(|i| (i, url(i)))
-            .map(|(i, url)| {
+            .map(|i| {
                 let client = client.clone();
                 async move {
                     info!(i, "Downloading parquet...");
-                    (i, client.get(&url).send().await)
+                    (i, client.get(url(i)).send().await)
                 }
             }),
     )
@@ -137,16 +132,20 @@ async fn main() -> Result<()> {
             error!(%status_code, %url, error);
             None
         } else {
+            // Parquet isn't a stream based format.
+            // It was designed to be written like so: content then metadata (in a footer).
+            // This means the entire parquet file must be known before any data can be processed.
+            // The "async" of it just means we don't have to load the entire file into memory but we need random access to the ENTIRE file.
+            // Certain Cloud providers support random access of object files (with added network latencies)
+            // For maximal efficiency, we'll download the entire file in memory and work with batches of rows.
+            // University of Oregon NLP group chose an appropriate file size to make this approach possible.
             Some((i, response.bytes().await))
         }
     })
     .then(|(i, bytes)| async move {
-        let bytes = bytes?;
-        info!(i, "Done downloading parquet");
         anyhow::Ok((
             i,
-            parquet::arrow::ParquetRecordBatchStreamBuilder::new(std::io::Cursor::new(bytes))
-                .await?
+            parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(bytes?)?
                 .with_batch_size(BATCH_SIZE)
                 .build()?,
         ))
@@ -160,17 +159,18 @@ async fn main() -> Result<()> {
             }
         }
     })
-    .map(|(i, mut stream)| {
+    .map(|(i, reader)| {
         let output_dir = args.output_dir.clone();
         async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
+            // bridge from IO world to CPU world
             rayon::spawn({
                 let i = i;
 
                 move || {
                     let result = || async move {
                         let file_name = format!("shard-{i}.md.zst");
-                        info!("Writing to {file_name}...");
+                        info!(i, "Writing to {file_name}...");
                         let mut encoder = Box::new(
                             zstd::Encoder::new(
                                 std::fs::File::create(output_dir.join(file_name))?,
@@ -182,26 +182,56 @@ async fn main() -> Result<()> {
                             .auto_finish(),
                         );
 
-                        while let Some(batch) = stream.next().await {
-                            let batch = batch?;
-                            let text = rust_gpt::utils::get_parquet_column(&batch, "text")?;
-                            let bytes = (0..batch.num_rows())
-                                .map(|i| text.value(i))
-                                .collect::<Vec<_>>()
-                                .par_iter()
-                                .map(|text| {
-                                    normalize_text(text)
-                                        .as_bytes()
-                                        .iter()
-                                        .chain(rust_gpt::utils::END_OF_TEXT.iter())
-                                        .cloned()
-                                        .collect::<Vec<_>>()
-                                })
-                                .flatten()
-                                .collect::<Vec<_>>();
+                        let mut written = 0;
+                        reader
+                            .filter_map(|batch| {
+                                if let Err(error) = &batch {
+                                    error!("{error}");
+                                }
+                                batch.ok()
+                            })
+                            .map(|batch| {
+                                let text = rust_gpt::utils::get_parquet_column(&batch, "text")?;
 
-                            encoder.write_all(&bytes)?;
-                        }
+                                // parallel process the strings of text and collect as bytes
+                                let bytes = (0..batch.num_rows())
+                                    .map(|i| text.value(i))
+                                    .collect::<Vec<_>>()
+                                    .par_iter()
+                                    .map(|text| {
+                                        normalize_text(text)
+                                            .as_bytes()
+                                            .iter()
+                                            .chain(rust_gpt::utils::END_OF_TEXT.iter())
+                                            .cloned()
+                                            .collect::<Vec<_>>()
+                                    })
+                                    .flatten()
+                                    .collect::<Vec<_>>();
+
+                                encoder.write_all(&bytes)?;
+                                written += bytes.len();
+
+                                if written.is_multiple_of(1000) {
+                                    info!(
+                                        i,
+                                        written = %byte_size(written)
+                                    );
+                                }
+
+                                anyhow::Ok(())
+                            })
+                            .for_each(|result| {
+                                if let Err(error) = result {
+                                    error!("{error}");
+                                }
+                            });
+
+                        info!(
+                            i,
+                            written = %byte_size(written),
+                            "Done writing"
+                        );
                         anyhow::Ok(())
                     };
                     drop(tx.send(result()));
@@ -221,9 +251,9 @@ async fn main() -> Result<()> {
 }
 
 /// Get the URL of the CulturaX parquet file.
-fn url(file_number: usize) -> String {
+fn url(index: usize) -> String {
     // https://huggingface.co/datasets/uonlp/CulturaX
     format!(
-        "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{file_number:05}.parquet",
+        "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{index:05}.parquet",
     )
 }
