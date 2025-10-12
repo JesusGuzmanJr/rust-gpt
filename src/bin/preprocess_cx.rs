@@ -3,19 +3,11 @@ use {
     anyhow::{Context, Result},
     clap::Parser,
     futures::StreamExt,
-    rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
+    rayon::iter::{ParallelBridge, ParallelIterator},
     rust_gpt::{tokenization::normalize_text, utils::byte_size},
     std::{io::Write, os::unix::ffi::OsStrExt, path::PathBuf},
     tracing::*,
 };
-
-/// The maximum number of concurrent downloads.
-///
-/// Each parquet file is ~2.5 GB.
-const DOWNLOAD_CONCURRENCY: usize = 8;
-
-/// The number of rows to read at a time from the parquet file.
-const BATCH_SIZE: usize = 32;
 
 /// Download, parse and preprocess CulturaX parquet files
 /// creating shards of normalized, compressed markdown.
@@ -111,7 +103,10 @@ async fn main() -> Result<()> {
                 }
             }),
     )
-    .buffer_unordered(DOWNLOAD_CONCURRENCY)
+    .buffer_unordered(
+        // download concurrency
+        10,
+    )
     .filter_map(|(i, result)| async move {
         match result {
             Ok(response) => Some((i, response)),
@@ -143,10 +138,16 @@ async fn main() -> Result<()> {
         }
     })
     .then(|(i, bytes)| async move {
+        let bytes = bytes?;
+        info!(
+            i,
+            size = %byte_size(bytes.len()),
+            "Done downloading"
+        );
         anyhow::Ok((
             i,
-            parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(bytes?)?
-                .with_batch_size(BATCH_SIZE)
+            parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(bytes)?
+                .with_batch_size(1024)
                 .build()?,
         ))
     })
@@ -168,7 +169,7 @@ async fn main() -> Result<()> {
                 let i = i;
 
                 move || {
-                    let result = || async move {
+                    let result = || {
                         let file_name = format!("shard-{i}.md.zst");
                         info!(i, "Writing to {file_name}...");
                         let mut encoder = Box::new(
@@ -196,23 +197,21 @@ async fn main() -> Result<()> {
                                 // parallel process the strings of text and collect as bytes
                                 let bytes = (0..batch.num_rows())
                                     .map(|i| text.value(i))
-                                    .collect::<Vec<_>>()
-                                    .par_iter()
-                                    .map(|text| {
-                                        normalize_text(text)
-                                            .as_bytes()
-                                            .iter()
-                                            .chain(rust_gpt::utils::END_OF_TEXT.iter())
-                                            .cloned()
-                                            .collect::<Vec<_>>()
+                                    .par_bridge()
+                                    .fold(Vec::new, |mut acc, text| {
+                                        acc.extend(normalize_text(text).as_bytes());
+                                        acc.extend(rust_gpt::utils::END_OF_TEXT);
+                                        acc
                                     })
-                                    .flatten()
-                                    .collect::<Vec<_>>();
+                                    .reduce(Vec::new, |mut curr, other| {
+                                        curr.extend(other);
+                                        curr
+                                    });
 
                                 encoder.write_all(&bytes)?;
                                 written += bytes.len();
 
-                                if written.is_multiple_of(1000) {
+                                if written.is_multiple_of(100 * 1024 * 1024) {
                                     info!(
                                         i,
                                         written = %byte_size(written)
@@ -237,7 +236,7 @@ async fn main() -> Result<()> {
                     drop(tx.send(result()));
                 }
             });
-            rx.await.expect("channel is closed").await
+            rx.await.expect("channel is closed")
         }
     })
     .for_each(|result| async {
