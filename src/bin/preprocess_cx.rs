@@ -19,10 +19,12 @@ use {
 const DOWNLOAD_CONCURRENCY: usize = 10;
 
 /// The number of rows to read at a time from the parquet file.
-const BATCH_SIZE: usize = 16;
+const BATCH_SIZE: usize = 32;
 
 /// Download, parse and preprocess CulturaX parquet files
 /// creating shards of normalized, compressed markdown.
+///
+/// Requires the HUGGING_FACE_TOKEN environment variable to be set.
 ///
 /// Dataset: https://huggingface.co/datasets/uonlp/CulturaX
 ///
@@ -54,7 +56,7 @@ async fn main() -> Result<()> {
 
     // The English dataset is 7.54 TB and it's split into ~2.5 GB files so thats
     // ~3016 files whose paths fit in memory.
-    let processed_file_numbers = std::fs::read_dir(&args.output_dir)?
+    let processed_file_indices = std::fs::read_dir(&args.output_dir)?
         .par_bridge()
         .filter_map(|result| result.ok())
         .map(|entry| entry.path())
@@ -82,7 +84,7 @@ async fn main() -> Result<()> {
         });
 
     // Larger than projected number of files but we'll handle 404s gracefully.
-    const HIGHEST_FILE_NUMBER: usize = 0; // TODO: change back to 3500;
+    const HIGHEST_FILE_INDEX: usize = 2; // TODO: change back to 3500;
 
     let client = reqwest::ClientBuilder::new()
         .default_headers({
@@ -103,31 +105,30 @@ async fn main() -> Result<()> {
         .expect("failed to build client");
 
     futures::stream::iter(
-        (0..=HIGHEST_FILE_NUMBER)
-            .filter(|number| !processed_file_numbers.contains(number))
-            .map(|file_number| (file_number, url(file_number)))
-            .map(|(file_number, url)| {
+        (0..=HIGHEST_FILE_INDEX)
+            .filter(|i| !processed_file_indices.contains(i))
+            .map(|i| (i, url(i)))
+            .map(|(i, url)| {
                 let client = client.clone();
                 async move {
-                    let file_name = url.split('/').next_back().expect("invalid URL");
-                    info!(%file_name, "Downloading parquet...");
-                    (file_number, client.get(&url).send().await)
+                    info!(i, "Downloading parquet...");
+                    (i, client.get(&url).send().await)
                 }
             }),
     )
     .buffer_unordered(DOWNLOAD_CONCURRENCY)
-    .filter_map(|(file_number, result)| async move {
+    .filter_map(|(i, result)| async move {
         match result {
-            Ok(response) => Some((file_number, response)),
+            Ok(response) => Some((i, response)),
             Err(error) => {
-                error!(file_number, "{error}");
+                error!(i, "{error}");
                 None
             }
         }
     })
-    .filter_map(|(file_number, response)| async move {
+    .filter_map(|(i, response)| async move {
         if response.status() == reqwest::StatusCode::NOT_FOUND {
-            info!(file_number, url = %response.url(), "Not found");
+            info!(i, url = %response.url(), "Not found");
             None
         } else if !response.status().is_success() {
             let status_code = response.status();
@@ -136,13 +137,15 @@ async fn main() -> Result<()> {
             error!(%status_code, %url, error);
             None
         } else {
-            Some((file_number, response.bytes().await))
+            Some((i, response.bytes().await))
         }
     })
-    .then(|(file_number, bytes)| async move {
+    .then(|(i, bytes)| async move {
+        let bytes = bytes?;
+        info!(i, "Done downloading parquet");
         anyhow::Ok((
-            file_number,
-            parquet::arrow::ParquetRecordBatchStreamBuilder::new(std::io::Cursor::new(bytes?))
+            i,
+            parquet::arrow::ParquetRecordBatchStreamBuilder::new(std::io::Cursor::new(bytes))
                 .await?
                 .with_batch_size(BATCH_SIZE)
                 .build()?,
@@ -150,23 +153,23 @@ async fn main() -> Result<()> {
     })
     .filter_map(|result| async move {
         match result {
-            Ok((file_number, stream)) => Some((file_number, stream)),
+            Ok((i, stream)) => Some((i, stream)),
             Err(error) => {
                 error!("{error}");
                 None
             }
         }
     })
-    .map(|(file_number, mut stream)| {
+    .map(|(i, mut stream)| {
         let output_dir = args.output_dir.clone();
         async move {
             let (tx, rx) = tokio::sync::oneshot::channel();
             rayon::spawn({
-                let file_number = file_number;
+                let i = i;
 
                 move || {
                     let result = || async move {
-                        let file_name = format!("shard-{file_number}.md.zst");
+                        let file_name = format!("shard-{i}.md.zst");
                         info!("Writing to {file_name}...");
                         let mut encoder = Box::new(
                             zstd::Encoder::new(
