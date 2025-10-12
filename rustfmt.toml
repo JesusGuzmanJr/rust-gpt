@@ -29,4 +29,7 @@ use_field_init_shorthand = true
 # Replace uses of the try! macro by the ? shorthand
 use_try_shorthand = true
 
+# Break comments to fit on the line
+wrap_comments = true
+
 edition = "2024"

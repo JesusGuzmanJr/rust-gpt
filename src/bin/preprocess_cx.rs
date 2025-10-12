@@ -1,13 +1,32 @@
 use {
     ahash::AHashSet,
     anyhow::{Context, Result},
+    bytes::Bytes,
     clap::Parser,
-    futures::StreamExt,
+    parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{ParallelBridge, ParallelIterator},
-    rust_gpt::{tokenization::normalize_text, utils::byte_size},
-    std::{io::Write, os::unix::ffi::OsStrExt, path::PathBuf},
+    reqwest::Client,
+    rust_gpt::{
+        tokenization::normalize_text,
+        utils::{END_OF_TEXT, byte_size, get_parquet_column},
+    },
+    std::{
+        fs::File,
+        io::Write,
+        os::unix::ffi::OsStrExt,
+        path::PathBuf,
+        sync::{
+            Arc,
+            atomic::{AtomicBool, AtomicUsize, Ordering},
+        },
+    },
+    thousands::Separable,
+    tokio::sync::Mutex,
     tracing::*,
 };
+
+/// The number of parquet files to process concurrently.
+const PARQUET_FILE_CONCURRENCY: usize = 16;
 
 /// Download, parse and preprocess CulturaX parquet files
 /// creating shards of normalized, compressed markdown.
@@ -27,8 +46,7 @@ struct Args {
     output_dir: PathBuf,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() -> Result<()> {
     rust_gpt::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
@@ -42,7 +60,9 @@ async fn main() -> Result<()> {
         })?;
     }
 
-    // The English dataset is 7.54 TB and it's split into ~2.5 GB files so thats
+    let regex = regex::bytes::Regex::new(r"shard-(\d+)\.md\.zst").expect("invalid regex");
+
+    // The English dataset is 7.54 TB and it's split into ~2.5 GB files so that's
     // ~3016 files whose paths fit in memory.
     let processed_file_indices = std::fs::read_dir(&args.output_dir)?
         .par_bridge()
@@ -50,17 +70,17 @@ async fn main() -> Result<()> {
         .map(|entry| entry.path())
         .filter(|path| path.is_file() && path.extension() == Some(std::ffi::OsStr::new("parquet")))
         .filter_map(|path| {
-            // path ends with "en_part_XXXXX.parquet"
-            // split and get the last bytes corresponding to "XXXXX.parquet"
-            path.as_os_str()
-                .as_bytes()
-                .split_last_chunk::<13>()
-                .and_then(|(_, ending)| {
-                    // ending is bytes corresponding to "XXXXX.parquet"
-                    // split and get the first bytes corresponding to "XXXXX"
-                    ending.split_last_chunk::<8>().map(|(number, _)| number)
-                })
-                .and_then(|number| String::from_utf8_lossy(number).parse::<usize>().ok())
+            if let Some(captures) = regex.captures(path.as_os_str().as_bytes()) {
+                match String::from_utf8_lossy(&captures[1]).parse::<usize>() {
+                    Ok(number) => Some(number),
+                    Err(error) => {
+                        error!(?path, %error, "invalid file index");
+                        None
+                    }
+                }
+            } else {
+                None
+            }
         })
         .fold(AHashSet::default, |mut set, number| {
             set.insert(number);
@@ -70,9 +90,6 @@ async fn main() -> Result<()> {
             curr.extend(other);
             curr
         });
-
-    // Larger than projected number of files but we'll handle 404s gracefully.
-    const HIGHEST_FILE_INDEX: usize = 2; // TODO: change back to 3500;
 
     let client = reqwest::ClientBuilder::new()
         .default_headers({
@@ -92,167 +109,203 @@ async fn main() -> Result<()> {
         .build()
         .expect("failed to build client");
 
-    futures::stream::iter(
-        (0..=HIGHEST_FILE_INDEX)
-            .filter(|i| !processed_file_indices.contains(i))
-            .map(|i| {
+    let (tx, rx) = crossbeam_channel::bounded(PARQUET_FILE_CONCURRENCY);
+
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("failed to build tokio runtime")
+        .spawn(async move {
+            // index of the current file
+            let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
+
+            // indices of the files that are missing for some reason
+            let missing = (0..=current_index)
+                .filter(|i| !processed_file_indices.contains(i))
+                .collect::<Vec<_>>();
+
+            if !missing.is_empty() {
+                warn!(
+                    current_index,
+                    num_missing = missing.len().separate_with_commas(),
+                    "Found missing files",
+                );
+            }
+
+            let missing = Arc::new(Mutex::new(missing));
+            let should_stop = Arc::new(AtomicBool::new(false));
+            let current_index = Arc::new(AtomicUsize::new(current_index));
+            let downloaded_bytes = Arc::new(AtomicUsize::new(0));
+
+            for _ in 0..PARQUET_FILE_CONCURRENCY {
+                let tx = tx.clone();
                 let client = client.clone();
-                async move {
-                    info!(i, "Downloading parquet...");
-                    (i, client.get(url(i)).send().await)
-                }
-            }),
-    )
-    .buffer_unordered(
-        // download concurrency
-        10,
-    )
-    .filter_map(|(i, result)| async move {
-        match result {
-            Ok(response) => Some((i, response)),
-            Err(error) => {
-                error!(i, "{error}");
-                None
-            }
-        }
-    })
-    .filter_map(|(i, response)| async move {
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            info!(i, url = %response.url(), "Not found");
-            None
-        } else if !response.status().is_success() {
-            let status_code = response.status();
-            let url = response.url().clone();
-            let error = response.text().await.expect("failed to get error response");
-            error!(%status_code, %url, error);
-            None
-        } else {
-            // Parquet isn't a stream based format.
-            // It was designed to be written like so: content then metadata (in a footer).
-            // This means the entire parquet file must be known before any data can be processed.
-            // The "async" of it just means we don't have to load the entire file into memory but we need random access to the ENTIRE file.
-            // Certain Cloud providers support random access of object files (with added network latencies)
-            // For maximal efficiency, we'll download the entire file in memory and work with batches of rows.
-            // University of Oregon NLP group chose an appropriate file size to make this approach possible.
-            Some((i, response.bytes().await))
-        }
-    })
-    .then(|(i, bytes)| async move {
-        let bytes = bytes?;
-        info!(
-            i,
-            size = %byte_size(bytes.len()),
-            "Done downloading"
-        );
-        anyhow::Ok((
-            i,
-            parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(bytes)?
-                .with_batch_size(1024)
-                .build()?,
-        ))
-    })
-    .filter_map(|result| async move {
-        match result {
-            Ok((i, stream)) => Some((i, stream)),
-            Err(error) => {
-                error!("{error}");
-                None
-            }
-        }
-    })
-    .map(|(i, reader)| {
-        let output_dir = args.output_dir.clone();
-        async move {
-            let (tx, rx) = tokio::sync::oneshot::channel();
-            // bridge from IO world to CPU world
-            rayon::spawn({
-                let i = i;
+                let should_stop = should_stop.clone();
+                let current_index = current_index.clone();
+                let missing = missing.clone();
+                let downloaded_bytes = downloaded_bytes.clone();
 
-                move || {
-                    let result = || {
-                        let file_name = format!("shard-{i}.md.zst");
-                        info!(i, "Writing to {file_name}...");
-                        let mut encoder = Box::new(
-                            zstd::Encoder::new(
-                                std::fs::File::create(output_dir.join(file_name))?,
-                                // The compression level for the zstd encoder.
-                                // The higher the level, the more compressed the data will be.
-                                // Decompressing is same speed regardless of the level.
-                                19,
-                            )?
-                            .auto_finish(),
-                        );
+                // launch PARQUET_FILE_CONCURRENCY IO threads to continuously download parquet
+                // files
+                tokio::spawn(async move {
+                    while !should_stop.load(Ordering::Relaxed) {
+                        let i = {
+                            if let Some(i) = missing.lock().await.pop() {
+                                i
+                            } else {
+                                current_index.fetch_add(1, Ordering::Relaxed)
+                            }
+                        };
 
-                        let mut written = 0;
-                        reader
-                            .filter_map(|batch| {
-                                if let Err(error) = &batch {
-                                    error!("{error}");
-                                }
-                                batch.ok()
-                            })
-                            .map(|batch| {
-                                let text = rust_gpt::utils::get_parquet_column(&batch, "text")?;
+                        match download_parquet(i, client.clone()).await {
+                            Ok(bytes) => {
+                                let downloaded = downloaded_bytes
+                                    .fetch_add(bytes.len(), Ordering::Relaxed)
+                                    + bytes.len();
 
-                                // parallel process the strings of text and collect as bytes
-                                let bytes = (0..batch.num_rows())
-                                    .map(|i| text.value(i))
-                                    .par_bridge()
-                                    .fold(Vec::new, |mut acc, text| {
-                                        acc.extend(normalize_text(text).as_bytes());
-                                        acc.extend(rust_gpt::utils::END_OF_TEXT);
-                                        acc
-                                    })
-                                    .reduce(Vec::new, |mut curr, other| {
-                                        curr.extend(other);
-                                        curr
-                                    });
-
-                                encoder.write_all(&bytes)?;
-                                written += bytes.len();
-
-                                if written.is_multiple_of(100 * 1024 * 1024) {
+                                if downloaded.is_multiple_of(100 * 1024 * 1024) {
                                     info!(
                                         i,
-                                        written = %byte_size(written)
+                                        downloaded = %byte_size(downloaded)
                                     );
                                 }
 
-                                anyhow::Ok(())
-                            })
-                            .for_each(|result| {
-                                if let Err(error) = result {
-                                    error!("{error}");
+                                if tx.send((i, bytes)).is_err() {
+                                    should_stop.store(true, Ordering::Relaxed);
+                                    break;
                                 }
-                            });
+                            }
+                            Err(error) => {
+                                error!(%error, i);
+                                should_stop.store(true, Ordering::Relaxed);
+                                break;
+                            }
+                        }
+                    }
+                });
+            }
+        });
 
-                        info!(
-                            i,
-                            written = %byte_size(written),
-                            "Done writing"
-                        );
-                        anyhow::Ok(())
-                    };
-                    drop(tx.send(result()));
-                }
-            });
-            rx.await.expect("channel is closed")
-        }
-    })
-    .for_each(|result| async {
-        if let Err(error) = result.await {
-            error!("{error}");
-        }
-    })
-    .await;
+    let encoders = Arc::new(std::sync::Mutex::new(
+        (0..rayon::current_num_threads())
+            .map(|_| None)
+            .collect::<Vec<_>>(),
+    ));
+
+    rx.into_iter()
+        .par_bridge()
+        .try_for_each(|(i, bytes)| -> Result<()> {
+            info!(i, "Processing shard...");
+            let thread_idx = rayon::current_thread_index().expect("thread index is not available");
+
+            // Get or create encoder for this thread
+            let mut encoders = encoders.lock().expect("failed to lock encoders");
+            if encoders[thread_idx].is_none() {
+                let file_name = format!("shard-{i}.md.zst");
+                info!("Writing to {file_name}...");
+                let encoder = Box::new(
+                    zstd::Encoder::new(
+                        File::create(args.output_dir.join(file_name))?,
+                        // The compression level for the zstd encoder.
+                        // The higher the level, the more compressed the data will be.
+                        // Decompressing is same speed regardless of the level.
+                        19,
+                    )?
+                    .auto_finish(),
+                );
+                encoders[thread_idx] = Some(encoder);
+            }
+
+            let encoder = encoders[thread_idx]
+                .as_mut()
+                .expect("encoder is not available")
+                .as_mut();
+
+            ParquetRecordBatchReaderBuilder::try_new(bytes)?
+                .with_batch_size(1024)
+                .build()?
+                .filter_map(|batch| {
+                    if let Err(error) = &batch {
+                        error!(%error);
+                    }
+                    batch.ok()
+                })
+                .map(|batch| {
+                    // see dataset card for column names
+                    // https://huggingface.co/datasets/uonlp/CulturaX
+                    let text = get_parquet_column(&batch, "text")?;
+
+                    let rows = (0..batch.num_rows())
+                        .map(|i| text.value(i))
+                        .par_bridge()
+                        .fold(Vec::<u8>::new, |mut buffer, text| {
+                            buffer.extend(normalize_text(text).as_bytes());
+
+                            // Add end-of-text character
+                            // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
+                            buffer.extend(END_OF_TEXT);
+
+                            buffer
+                        })
+                        .reduce(Vec::new, |mut curr, other| {
+                            curr.extend(other);
+                            curr
+                        });
+
+                    anyhow::Ok(rows)
+                })
+                .filter_map(|result| {
+                    if let Err(error) = &result {
+                        error!(%error);
+                    }
+                    result.ok()
+                })
+                .map(move |bytes| {
+                    encoder.write_all(&bytes)?;
+                    anyhow::Ok(())
+                })
+                .for_each(|result| {
+                    if let Err(error) = result {
+                        error!(%error);
+                    }
+                });
+
+            info!(i, "Finished writing shard");
+
+            Ok(())
+        })?;
 
     Ok(())
 }
 
-/// Get the URL of the CulturaX parquet file.
-fn url(index: usize) -> String {
+/// Download the parquet file in its entirety.
+///
+/// ---
+///
+/// Parquet isn't a stream based format.
+/// It was designed to be written like so: content, then metadata (in a footer).
+/// This means the entire parquet file must be known before any data can be
+/// processed. The "async" option just means we don't have to load the entire
+/// file into memory but we do need random access to the entire file.
+///
+/// Certain Cloud providers support random access of object files (with added
+/// network latencies).
+///
+/// For maximal efficiency, we'll download the entire file in memory
+/// and work with batches of rows.
+///
+/// University of Oregon NLP group chose an
+/// appropriate file size to make this approach possible.
+async fn download_parquet(i: usize, client: Client) -> Result<Bytes> {
     // https://huggingface.co/datasets/uonlp/CulturaX
-    format!(
-        "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{index:05}.parquet",
-    )
+    match client
+        .get(format!(
+            "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{i:05}.parquet",
+        ))
+        .send()
+        .await?
+        .error_for_status()
+    {
+        Ok(response) => Ok(response.bytes().await?),
+        Err(error) => Err(error.into()),
+    }
 }

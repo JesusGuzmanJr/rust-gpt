@@ -83,7 +83,7 @@ fn main() -> Result<()> {
         reader
             .filter_map(|batch| {
                 if let Err(error) = &batch {
-                    error!("{error}");
+                    error!(%error);
                 }
                 batch.ok()
             })
@@ -132,7 +132,7 @@ fn main() -> Result<()> {
                     })
                     .filter_map(|result| {
                         if let Err(error) = &result {
-                            error!("{error}");
+                            error!(%error);
                         }
                         result.ok()
                     })
@@ -142,7 +142,7 @@ fn main() -> Result<()> {
             })
             .filter_map(|result| {
                 if let Err(error) = &result {
-                    error!("{error}");
+                    error!(%error);
                 }
                 result.ok()
             })

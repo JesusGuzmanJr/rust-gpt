@@ -126,7 +126,7 @@ fn main() -> Result<()> {
                 info!("Training interrupted");
                 anyhow::Ok(())
             })() {
-                error!("{error}");
+                error!(%error);
             }
         }
     })
@@ -188,7 +188,7 @@ fn main() -> Result<()> {
         })
         .filter_map(|result| {
             if let Err(error) = &result {
-                error!("{error}");
+                error!(%error);
             }
             result.ok()
         })
