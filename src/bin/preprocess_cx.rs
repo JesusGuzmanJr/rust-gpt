@@ -121,17 +121,17 @@ fn main() -> Result<()> {
     let current_index = {
         let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
 
-        if args.index <= current_index {
+        if args.index < current_index {
             warn!(
                 requested_index = args.index,
-                current_index,
+                max_index = current_index - 1,
                 "Your index you chose is less than the highest file index you have downloaded.\
                 This means you are requesting files that you already have.\
                 "
             );
         }
 
-        current_index.min(args.index)
+        current_index.min(args.index + 1)
     };
 
     // indices of the files that are missing for some reason
