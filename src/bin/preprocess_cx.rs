@@ -97,6 +97,8 @@ fn main() -> Result<()> {
             curr
         });
 
+    debug!(?processed_file_indices);
+
     let client = reqwest::ClientBuilder::new()
         .default_headers({
             let mut headers = reqwest::header::HeaderMap::new();
@@ -163,7 +165,6 @@ fn main() -> Result<()> {
                         })
                         .is_err()
                     {
-                        // Already at 0, stop
                         should_stop.store(true, Ordering::Relaxed);
                         break;
                     }
@@ -172,7 +173,7 @@ fn main() -> Result<()> {
                         if let Some(i) = missing.lock().await.pop() {
                             i
                         } else {
-                            current_index.fetch_add(1, Ordering::Relaxed)
+                            current_index.fetch_add(1, Ordering::Relaxed) + 1
                         }
                     };
 
@@ -191,7 +192,9 @@ fn main() -> Result<()> {
                                 );
                             }
 
-                            info!(i, size = %byte_size(bytes.len()), duration = ?start.elapsed(), "Done downloading");
+                            let size = byte_size(bytes.len());
+                            let duration = start.elapsed();
+                            info!(i, %size, ?duration, "Done downloading");
                             if tx.send((i, bytes)).is_err() {
                                 should_stop.store(true, Ordering::Release);
                                 break;
