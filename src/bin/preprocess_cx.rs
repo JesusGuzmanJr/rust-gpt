@@ -16,7 +16,7 @@ use {
         os::unix::ffi::OsStrExt,
         path::PathBuf,
         sync::{
-            Arc,
+            Arc, LazyLock,
             atomic::{AtomicBool, AtomicUsize, Ordering},
         },
         time::{Duration, Instant},
@@ -185,7 +185,7 @@ fn main() -> Result<()> {
             info!(i, "Processing file...");
 
             let mut encoder = zstd::Encoder::new(
-                BufWriter::new(tempfile::tempfile()?),
+                BufWriter::new(tempfile()?),
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
@@ -288,7 +288,7 @@ async fn download_file(i: usize, client: Client) -> Result<(usize, File)> {
         .error_for_status()?
         .bytes_stream();
 
-    let mut temp_file = tempfile::tempfile()?;
+    let mut temp_file = tempfile()?;
     let mut size = 0;
     while let Some(Ok(bytes)) = stream.next().await {
         temp_file.write_all(&bytes)?;
@@ -298,4 +298,15 @@ async fn download_file(i: usize, client: Client) -> Result<(usize, File)> {
     temp_file.seek(SeekFrom::Start(0))?;
 
     Ok((size, temp_file))
+}
+
+/// Create a temporary file in the user's cache directory.
+fn tempfile() -> Result<File> {
+    static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+        xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))
+            .cache_home
+            .expect("failed to get cache directory")
+    });
+
+    tempfile::tempfile_in(&*DIR).context("failed to create temp file")
 }
