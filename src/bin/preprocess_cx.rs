@@ -3,6 +3,7 @@ use {
     anyhow::{Context, Result},
     clap::Parser,
     futures::stream::StreamExt,
+    itertools::Itertools,
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{ParallelBridge, ParallelIterator},
     reqwest::Client,
@@ -120,6 +121,8 @@ fn main() -> Result<()> {
     // indices of the files that are missing for some reason
     let queue = (0..=args.index)
         .filter(|i| !processed_file_indices.contains(i))
+        .sorted()
+        .rev()
         .collect::<Vec<_>>();
 
     info!(
