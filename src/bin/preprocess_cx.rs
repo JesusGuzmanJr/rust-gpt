@@ -1,18 +1,18 @@
 use {
     ahash::AHashSet,
     anyhow::{Context, Result},
-    bytes::Bytes,
     clap::Parser,
+    futures::stream::StreamExt,
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{ParallelBridge, ParallelIterator},
     reqwest::Client,
     rust_gpt::{
         tokenization::normalize_text,
-        utils::{END_OF_TEXT, byte_size, get_parquet_column},
+        utils::{END_OF_TEXT, get_parquet_column},
     },
     std::{
         fs::File,
-        io::{Cursor, Write},
+        io::{BufWriter, Seek, SeekFrom, Write},
         num::NonZeroUsize,
         os::unix::ffi::OsStrExt,
         path::PathBuf,
@@ -26,11 +26,6 @@ use {
     tokio::sync::Mutex,
     tracing::*,
 };
-
-/// The number of parquet files to download concurrently.
-///
-/// Each file is around 2.5GB.
-const DOWNLOAD_CONCURRENCY: usize = 8;
 
 /// Download, parse and preprocess CulturaX parquet files
 /// creating shards of normalized, compressed markdown.
@@ -119,7 +114,7 @@ fn main() -> Result<()> {
         .build()
         .expect("failed to build client");
 
-    let (download_tx, download_rx) = crossbeam_channel::bounded(DOWNLOAD_CONCURRENCY);
+    let (file_tx, file_rx) = crossbeam_channel::bounded(rayon::current_num_threads());
 
     let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
 
@@ -143,18 +138,16 @@ fn main() -> Result<()> {
         let missing = Arc::new(Mutex::new(missing));
         let should_stop = Arc::new(AtomicBool::new(false));
         let current_index = Arc::new(AtomicUsize::new(current_index));
-        let downloaded_bytes = Arc::new(AtomicUsize::new(0));
         let limit = Arc::new(AtomicUsize::new(
             args.limit.map(Into::into).unwrap_or(usize::MAX),
         ));
 
-        for _ in 0..DOWNLOAD_CONCURRENCY {
-            let tx = download_tx.clone();
+        for _ in 0..rayon::current_num_threads() {
+            let tx = file_tx.clone();
             let client = client.clone();
             let should_stop = should_stop.clone();
             let current_index = current_index.clone();
             let missing = missing.clone();
-            let downloaded_bytes = downloaded_bytes.clone();
             let limit = limit.clone();
 
             // launch IO threads to continuously download files
@@ -179,24 +172,12 @@ fn main() -> Result<()> {
                     };
 
                     let start = Instant::now();
-                    info!(i, "Downloading parquet file...");
-                    match download_parquet(i, client.clone()).await {
-                        Ok(bytes) => {
-                            let downloaded = downloaded_bytes
-                                .fetch_add(bytes.len(), Ordering::Relaxed)
-                                + bytes.len();
-
-                            if downloaded.is_multiple_of(100 * 1024 * 1024) {
-                                info!(
-                                    i,
-                                    downloaded = %byte_size(downloaded)
-                                );
-                            }
-
-                            let size = byte_size(bytes.len());
+                    info!(i, "Downloading file...");
+                    match download_file(i, client.clone()).await {
+                        Ok(file) => {
                             let duration = start.elapsed();
-                            info!(i, %size, ?duration, "Done downloading");
-                            if tx.send((i, bytes)).is_err() {
+                            info!(i, ?duration, "Done downloading");
+                            if tx.send((i, file)).is_err() {
                                 should_stop.store(true, Ordering::Release);
                                 break;
                             }
@@ -213,24 +194,24 @@ fn main() -> Result<()> {
     });
 
     // process and compress per CPU core
-    download_rx
+    file_rx
         .into_iter()
         .par_bridge()
         .try_for_each(|(i, bytes)| -> Result<()> {
-            info!(i, "Processing parquet...");
+            info!(i, "Processing file...");
 
             let mut encoder = zstd::Encoder::new(
-                Cursor::new(Vec::new()),
+                BufWriter::new(tempfile::tempfile()?),
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
-                19,
+                8,
             )?;
 
             let mut duration = Duration::from_secs(0);
 
             ParquetRecordBatchReaderBuilder::try_new(bytes)?
-                .with_batch_size(1024)
+                .with_batch_size(128)
                 .build()?
                 .filter_map(|batch| {
                     if let Err(error) = &batch {
@@ -273,15 +254,15 @@ fn main() -> Result<()> {
 
             let start = Instant::now();
             encoder.flush()?;
-            let bytes = encoder.finish()?.into_inner();
-            duration += start.elapsed();
-            info!(i, ?duration, "Done processing parquet");
+            let mut temp_file = encoder.finish()?.into_inner()?;
 
-            info!(i, "Writing shard...");
-            let start = Instant::now();
-            let mut file = File::create(args.output_dir.join(format!("shard-{i}.zst")))?;
-            file.write_all(&bytes)?;
-            info!(i, duration = ?start.elapsed(), "Done writing shard");
+            temp_file.seek(SeekFrom::Start(0))?;
+
+            std::io::copy(
+                &mut temp_file,
+                &mut File::create(args.output_dir.join(format!("shard-{i}.zst")))?,
+            )?;
+            info!(i, duration = ?start.elapsed(), "Done processing file");
 
             Ok(())
         })?;
@@ -289,7 +270,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// Download the parquet file in its entirety.
+/// Download the parquet file into a temporary file.
 ///
 /// ---
 ///
@@ -307,17 +288,23 @@ fn main() -> Result<()> {
 ///
 /// University of Oregon NLP group chose an
 /// appropriate file size to make this approach possible.
-async fn download_parquet(i: usize, client: Client) -> Result<Bytes> {
+async fn download_file(i: usize, client: Client) -> Result<File> {
     // https://huggingface.co/datasets/uonlp/CulturaX
-    match client
+    let mut stream = client
         .get(format!(
             "https://huggingface.co/datasets/uonlp/CulturaX/resolve/main/en/en_part_{i:05}.parquet",
         ))
         .send()
         .await?
-        .error_for_status()
-    {
-        Ok(response) => Ok(response.bytes().await?),
-        Err(error) => Err(error.into()),
+        .error_for_status()?
+        .bytes_stream();
+
+    let mut temp_file = tempfile::tempfile()?;
+    while let Some(Ok(bytes)) = stream.next().await {
+        temp_file.write_all(&bytes)?;
     }
+
+    temp_file.seek(SeekFrom::Start(0))?;
+
+    Ok(temp_file)
 }
