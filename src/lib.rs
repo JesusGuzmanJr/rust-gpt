@@ -1,6 +1,7 @@
 pub mod tokenization;
 pub mod utils;
 
+#[cfg(feature = "cuda")]
 pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     #[link(name = "kernels", kind = "static")]
     unsafe extern "C" {
@@ -9,8 +10,9 @@ pub fn vec_add(a: &[f32], b: &[f32], c: &mut [f32]) {
     unsafe { vec_add(a.as_ptr(), b.as_ptr(), c.as_mut_ptr(), a.len() as i32) };
 }
 
+#[cfg(feature = "cuda")]
 #[cfg(test)]
-mod tests {
+mod test_cuda {
     use {super::*, std::time::Instant};
 
     fn vec_add_naive(a: &[f32], b: &[f32], c: &mut [f32]) {

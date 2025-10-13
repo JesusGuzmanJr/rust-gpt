@@ -1,3 +1,5 @@
+#![cfg(feature = "cuda")]
+
 use {
     criterion::{Criterion, criterion_group, criterion_main},
     rust_gpt::vec_add,

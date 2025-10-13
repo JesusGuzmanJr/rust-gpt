@@ -14,7 +14,7 @@ run bin *args:
 # Run tests
 test *args:
     #!/usr/bin/env bash
-    cargo test --release --quiet --no-fail-fast "${@:2}" -- --color always --no-capture
+    cargo test --release --quiet --no-fail-fast "$@" -- --color always --no-capture
 
 # Install all binaries in /usr/local/bin
 install:
