@@ -44,9 +44,11 @@ struct Args {
     #[arg(short, long)]
     output_dir: PathBuf,
 
-    /// Limit how many parquet files to process.
+    /// The desired index of the files to download and process.
+    /// All files at and below the desired index will be downloaded and
+    /// processed.
     #[arg(short, long)]
-    limit: Option<NonZeroUsize>,
+    index: usize,
 }
 
 fn main() -> Result<()> {
@@ -116,31 +118,42 @@ fn main() -> Result<()> {
 
     let (file_tx, file_rx) = crossbeam_channel::bounded(rayon::current_num_threads());
 
-    let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
-
-    rt.spawn(async move {
-        // index of the current file
+    // largest index of the file the user has already downloaded
+    let current_index = {
         let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
 
-        // indices of the files that are missing for some reason
-        let missing = (0..=current_index)
-            .filter(|i| !processed_file_indices.contains(i))
-            .collect::<Vec<_>>();
-
-        if !missing.is_empty() {
+        if args.index <= current_index {
             warn!(
+                requested_index = args.index,
                 current_index,
-                num_missing = %missing.len().separate_with_commas(),
-                "Found missing files",
+                "Your index you chose is less than the highest file index you have downloaded.\
+                This means you are requesting files that you already have.\
+                "
             );
         }
 
+        current_index.min(args.index)
+    };
+
+    // indices of the files that are missing for some reason
+    let missing = (0..=current_index)
+        .filter(|i| !processed_file_indices.contains(i))
+        .collect::<Vec<_>>();
+
+    if !missing.is_empty() {
+        warn!(
+            current_index,
+            num_missing = %missing.len().separate_with_commas(),
+            "Found missing files",
+        );
+    }
+
+    let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
+
+    rt.spawn(async move {
         let missing = Arc::new(Mutex::new(missing));
         let should_stop = Arc::new(AtomicBool::new(false));
         let current_index = Arc::new(AtomicUsize::new(current_index));
-        let limit = Arc::new(AtomicUsize::new(
-            args.limit.map(Into::into).unwrap_or(usize::MAX),
-        ));
 
         for _ in 0..rayon::current_num_threads() {
             let tx = file_tx.clone();
@@ -148,21 +161,10 @@ fn main() -> Result<()> {
             let should_stop = should_stop.clone();
             let current_index = current_index.clone();
             let missing = missing.clone();
-            let limit = limit.clone();
 
             // launch IO threads to continuously download files
             tokio::spawn(async move {
                 while !should_stop.load(Ordering::Acquire) {
-                    if limit
-                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
-                            if n > 0 { Some(n - 1) } else { None }
-                        })
-                        .is_err()
-                    {
-                        should_stop.store(true, Ordering::Relaxed);
-                        break;
-                    }
-
                     let i = {
                         if let Some(i) = missing.lock().await.pop() {
                             i
