@@ -184,7 +184,7 @@ fn main() -> Result<()> {
     file_rx
         .into_iter()
         .par_bridge()
-        .try_for_each(|(i, bytes)| -> Result<()> {
+        .map(|(i, bytes)| -> Result<()> {
             info!(i, "Processing file...");
 
             let mut encoder = zstd::Encoder::new(
@@ -254,7 +254,12 @@ fn main() -> Result<()> {
             files_processed.fetch_add(1, Ordering::Relaxed);
 
             Ok(())
-        })?;
+        })
+        .for_each(|result| {
+            if let Err(error) = result {
+                error!(%error);
+            }
+        });
 
     let files_processed = files_processed.load(Ordering::Relaxed);
     info!(files_processed, "Done");
