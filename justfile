@@ -15,3 +15,13 @@ run bin *args:
 test *args:
     #!/usr/bin/env bash
     cargo test --release --quiet --no-fail-fast "${@:2}" -- --color always --no-capture
+
+# Install all binaries in /usr/local/bin
+install:
+    #!/usr/bin/env bash
+    cargo build --release
+    export DST=/usr/local/bin/
+    sudo cp target/release/export_tokenizer $DST
+    sudo cp target/release/preprocess_cx $DST
+    sudo cp target/release/preprocess_sow $DST
+    sudo cp target/release/train_tokenizer $DST
