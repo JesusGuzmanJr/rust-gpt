@@ -8,7 +8,7 @@ use {
     rust_gpt::{tokenization::normalize_text, utils::get_parquet_column},
     std::{
         fs::File,
-        io::Write,
+        io::{BufWriter, Write},
         path::PathBuf,
         sync::{
             Arc, LazyLock, Mutex,
@@ -196,7 +196,7 @@ fn main() -> Result<()> {
                 info!("Writing to {file_name}...");
                 let encoder = Box::new(
                     zstd::Encoder::new(
-                        File::create(args.output_dir.join(file_name))?,
+                        BufWriter::new(File::create(args.output_dir.join(file_name))?),
                         // The compression level for the zstd encoder.
                         // The higher the level, the more compressed the data will be.
                         // Decompressing is same speed regardless of the level.
@@ -220,6 +220,13 @@ fn main() -> Result<()> {
 
             Ok(())
         })?;
+
+    for encoder in encoders.lock().expect("failed to lock encoders").iter_mut() {
+        encoder
+            .as_mut()
+            .expect("encoder is not available")
+            .flush()?;
+    }
 
     info!(
         "Finished processing {} articles",

@@ -12,13 +12,15 @@ use {
     },
     std::{
         fs::File,
-        io::Write,
+        io::{Cursor, Write},
+        num::NonZeroUsize,
         os::unix::ffi::OsStrExt,
         path::PathBuf,
         sync::{
             Arc,
             atomic::{AtomicBool, AtomicUsize, Ordering},
         },
+        time::{Duration, Instant},
     },
     thousands::Separable,
     tokio::sync::Mutex,
@@ -44,6 +46,10 @@ struct Args {
     /// If the directory does not exist, it will be created.
     #[arg(short, long)]
     output_dir: PathBuf,
+
+    /// Limit how many parquet files to process.
+    #[arg(short, long)]
+    limit: Option<NonZeroUsize>,
 }
 
 fn main() -> Result<()> {
@@ -98,8 +104,8 @@ fn main() -> Result<()> {
                 "Authorization",
                 format!(
                     "Bearer {}",
-                    std::env::var("HUGGING_FACE_TOKEN")
-                        .context("HUGGING_FACE_TOKEN environment variable is not set")?
+                    std::env::var("HF_TOKEN")
+                        .context("HF_TOKEN environment variable is not set")?
                 )
                 .parse()
                 .expect("bad header"),
@@ -109,116 +115,117 @@ fn main() -> Result<()> {
         .build()
         .expect("failed to build client");
 
-    let (tx, rx) = crossbeam_channel::bounded(PARQUET_FILE_CONCURRENCY);
+    let (parquet_bytes_tx, parquet_bytes_rx) = crossbeam_channel::bounded(PARQUET_FILE_CONCURRENCY);
 
-    tokio::runtime::Builder::new_current_thread()
-        .build()
-        .expect("failed to build tokio runtime")
-        .spawn(async move {
-            // index of the current file
-            let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
+    let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
 
-            // indices of the files that are missing for some reason
-            let missing = (0..=current_index)
-                .filter(|i| !processed_file_indices.contains(i))
-                .collect::<Vec<_>>();
+    rt.spawn(async move {
+        // index of the current file
+        let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
 
-            if !missing.is_empty() {
-                warn!(
-                    current_index,
-                    num_missing = missing.len().separate_with_commas(),
-                    "Found missing files",
-                );
-            }
+        // indices of the files that are missing for some reason
+        let missing = (0..=current_index)
+            .filter(|i| !processed_file_indices.contains(i))
+            .collect::<Vec<_>>();
 
-            let missing = Arc::new(Mutex::new(missing));
-            let should_stop = Arc::new(AtomicBool::new(false));
-            let current_index = Arc::new(AtomicUsize::new(current_index));
-            let downloaded_bytes = Arc::new(AtomicUsize::new(0));
+        if !missing.is_empty() {
+            warn!(
+                current_index,
+                num_missing = %missing.len().separate_with_commas(),
+                "Found missing files",
+            );
+        }
 
-            for _ in 0..PARQUET_FILE_CONCURRENCY {
-                let tx = tx.clone();
-                let client = client.clone();
-                let should_stop = should_stop.clone();
-                let current_index = current_index.clone();
-                let missing = missing.clone();
-                let downloaded_bytes = downloaded_bytes.clone();
+        let missing = Arc::new(Mutex::new(missing));
+        let should_stop = Arc::new(AtomicBool::new(false));
+        let current_index = Arc::new(AtomicUsize::new(current_index));
+        let downloaded_bytes = Arc::new(AtomicUsize::new(0));
+        let limit = Arc::new(AtomicUsize::new(
+            args.limit.map(Into::into).unwrap_or(usize::MAX),
+        ));
 
-                // launch PARQUET_FILE_CONCURRENCY IO threads to continuously download parquet
-                // files
-                tokio::spawn(async move {
-                    while !should_stop.load(Ordering::Relaxed) {
-                        let i = {
-                            if let Some(i) = missing.lock().await.pop() {
-                                i
-                            } else {
-                                current_index.fetch_add(1, Ordering::Relaxed)
+        for _ in 0..PARQUET_FILE_CONCURRENCY {
+            let tx = parquet_bytes_tx.clone();
+            let client = client.clone();
+            let should_stop = should_stop.clone();
+            let current_index = current_index.clone();
+            let missing = missing.clone();
+            let downloaded_bytes = downloaded_bytes.clone();
+            let limit = limit.clone();
+
+            // launch PARQUET_FILE_CONCURRENCY IO threads to continuously download parquet
+            // files
+            tokio::spawn(async move {
+                while !should_stop.load(Ordering::Acquire) {
+                    if limit
+                        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                            if n > 0 { Some(n - 1) } else { None }
+                        })
+                        .is_err()
+                    {
+                        // Already at 0, stop
+                        should_stop.store(true, Ordering::Relaxed);
+                        break;
+                    }
+
+                    let i = {
+                        if let Some(i) = missing.lock().await.pop() {
+                            i
+                        } else {
+                            current_index.fetch_add(1, Ordering::Relaxed)
+                        }
+                    };
+
+                    let start = Instant::now();
+                    info!(i, "Downloading parquet file...");
+                    match download_parquet(i, client.clone()).await {
+                        Ok(bytes) => {
+                            let downloaded = downloaded_bytes
+                                .fetch_add(bytes.len(), Ordering::Relaxed)
+                                + bytes.len();
+
+                            if downloaded.is_multiple_of(100 * 1024 * 1024) {
+                                info!(
+                                    i,
+                                    downloaded = %byte_size(downloaded)
+                                );
                             }
-                        };
 
-                        match download_parquet(i, client.clone()).await {
-                            Ok(bytes) => {
-                                let downloaded = downloaded_bytes
-                                    .fetch_add(bytes.len(), Ordering::Relaxed)
-                                    + bytes.len();
-
-                                if downloaded.is_multiple_of(100 * 1024 * 1024) {
-                                    info!(
-                                        i,
-                                        downloaded = %byte_size(downloaded)
-                                    );
-                                }
-
-                                if tx.send((i, bytes)).is_err() {
-                                    should_stop.store(true, Ordering::Relaxed);
-                                    break;
-                                }
-                            }
-                            Err(error) => {
-                                error!(%error, i);
-                                should_stop.store(true, Ordering::Relaxed);
+                            info!(i, size = %byte_size(bytes.len()), duration = ?start.elapsed(), "Done downloading");
+                            if tx.send((i, bytes)).is_err() {
+                                should_stop.store(true, Ordering::Release);
                                 break;
                             }
                         }
+                        Err(error) => {
+                            error!(%error, i);
+                            should_stop.store(true, Ordering::Relaxed);
+                            break;
+                        }
                     }
-                });
-            }
-        });
+                }
+            });
+        }
+    });
 
-    let encoders = Arc::new(std::sync::Mutex::new(
-        (0..rayon::current_num_threads())
-            .map(|_| None)
-            .collect::<Vec<_>>(),
-    ));
-
-    rx.into_iter()
+    // for every parquet file bytes (all of which are in memory), we process in a
+    // single CPU thread and compress into a single shard file because
+    // compression is single threaded
+    parquet_bytes_rx
+        .into_iter()
         .par_bridge()
         .try_for_each(|(i, bytes)| -> Result<()> {
-            info!(i, "Processing shard...");
-            let thread_idx = rayon::current_thread_index().expect("thread index is not available");
+            info!(i, "Processing parquet...");
 
-            // Get or create encoder for this thread
-            let mut encoders = encoders.lock().expect("failed to lock encoders");
-            if encoders[thread_idx].is_none() {
-                let file_name = format!("shard-{i}.zst");
-                info!("Writing to {file_name}...");
-                let encoder = Box::new(
-                    zstd::Encoder::new(
-                        File::create(args.output_dir.join(file_name))?,
-                        // The compression level for the zstd encoder.
-                        // The higher the level, the more compressed the data will be.
-                        // Decompressing is same speed regardless of the level.
-                        19,
-                    )?
-                    .auto_finish(),
-                );
-                encoders[thread_idx] = Some(encoder);
-            }
+            let mut encoder = zstd::Encoder::new(
+                Cursor::new(Vec::new()),
+                // The compression level for the zstd encoder.
+                // The higher the level, the more compressed the data will be.
+                // Decompressing is same speed regardless of the level.
+                6,
+            )?;
 
-            let encoder = encoders[thread_idx]
-                .as_mut()
-                .expect("encoder is not available")
-                .as_mut();
+            let mut duration = Duration::from_secs(0);
 
             ParquetRecordBatchReaderBuilder::try_new(bytes)?
                 .with_batch_size(1024)
@@ -234,7 +241,7 @@ fn main() -> Result<()> {
                     // https://huggingface.co/datasets/uonlp/CulturaX
                     let text = get_parquet_column(&batch, "text")?;
 
-                    let rows = (0..batch.num_rows())
+                    let bytes = (0..batch.num_rows())
                         .map(|i| text.value(i))
                         .par_bridge()
                         .fold(Vec::<u8>::new, |mut buffer, text| {
@@ -251,16 +258,9 @@ fn main() -> Result<()> {
                             curr
                         });
 
-                    anyhow::Ok(rows)
-                })
-                .filter_map(|result| {
-                    if let Err(error) = &result {
-                        error!(%error);
-                    }
-                    result.ok()
-                })
-                .map(move |bytes| {
+                    let start = Instant::now();
                     encoder.write_all(&bytes)?;
+                    duration += start.elapsed();
                     anyhow::Ok(())
                 })
                 .for_each(|result| {
@@ -269,7 +269,17 @@ fn main() -> Result<()> {
                     }
                 });
 
-            info!(i, "Finished writing shard");
+            let start = Instant::now();
+            encoder.flush()?;
+            let bytes = encoder.finish()?.into_inner();
+            duration += start.elapsed();
+            info!(i, ?duration, "Done processing parquet");
+
+            info!(i, "Writing shard...");
+            let start = Instant::now();
+            let mut file = File::create(args.output_dir.join(format!("shard-{i}.zst")))?;
+            file.write_all(&bytes)?;
+            info!(i, duration = ?start.elapsed(), "Done writing shard");
 
             Ok(())
         })?;
