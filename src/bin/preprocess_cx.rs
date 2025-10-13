@@ -189,7 +189,7 @@ fn main() -> Result<()> {
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
-                10,
+                3,
             )?;
 
             let mut duration = Duration::from_secs(0);
@@ -246,7 +246,8 @@ fn main() -> Result<()> {
                 &mut temp_file,
                 &mut File::create(args.output_dir.join(format!("shard-{i}.zst")))?,
             )?;
-            info!(i, duration = ?start.elapsed(), "Done processing file");
+            duration += start.elapsed();
+            info!(i, ?duration, "Done processing file");
             files_processed.fetch_add(1, Ordering::Relaxed);
 
             Ok(())
