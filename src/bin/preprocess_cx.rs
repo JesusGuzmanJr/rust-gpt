@@ -27,8 +27,10 @@ use {
     tracing::*,
 };
 
-/// The number of parquet files to process concurrently.
-const PARQUET_FILE_CONCURRENCY: usize = 16;
+/// The number of parquet files to download concurrently.
+///
+/// Each file is around 2.5GB.
+const DOWNLOAD_CONCURRENCY: usize = 8;
 
 /// Download, parse and preprocess CulturaX parquet files
 /// creating shards of normalized, compressed markdown.
@@ -117,7 +119,7 @@ fn main() -> Result<()> {
         .build()
         .expect("failed to build client");
 
-    let (parquet_bytes_tx, parquet_bytes_rx) = crossbeam_channel::bounded(PARQUET_FILE_CONCURRENCY);
+    let (download_tx, download_rx) = crossbeam_channel::bounded(DOWNLOAD_CONCURRENCY);
 
     let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
 
@@ -146,8 +148,8 @@ fn main() -> Result<()> {
             args.limit.map(Into::into).unwrap_or(usize::MAX),
         ));
 
-        for _ in 0..PARQUET_FILE_CONCURRENCY {
-            let tx = parquet_bytes_tx.clone();
+        for _ in 0..DOWNLOAD_CONCURRENCY {
+            let tx = download_tx.clone();
             let client = client.clone();
             let should_stop = should_stop.clone();
             let current_index = current_index.clone();
@@ -155,8 +157,7 @@ fn main() -> Result<()> {
             let downloaded_bytes = downloaded_bytes.clone();
             let limit = limit.clone();
 
-            // launch PARQUET_FILE_CONCURRENCY IO threads to continuously download parquet
-            // files
+            // launch IO threads to continuously download files
             tokio::spawn(async move {
                 while !should_stop.load(Ordering::Acquire) {
                     if limit
@@ -211,10 +212,8 @@ fn main() -> Result<()> {
         }
     });
 
-    // for every parquet file bytes (all of which are in memory), we process in a
-    // single CPU thread and compress into a single shard file because
-    // compression is single threaded
-    parquet_bytes_rx
+    // process and compress per CPU core
+    download_rx
         .into_iter()
         .par_bridge()
         .try_for_each(|(i, bytes)| -> Result<()> {
@@ -225,7 +224,7 @@ fn main() -> Result<()> {
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
-                6,
+                19,
             )?;
 
             let mut duration = Duration::from_secs(0);
