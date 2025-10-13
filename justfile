@@ -20,6 +20,7 @@ test *args:
 install:
     #!/usr/bin/env bash
     cargo build --release
+    sudo chown :devs target/release/*
     export DST=/usr/local/bin/
     sudo cp target/release/export_tokenizer $DST
     sudo cp target/release/preprocess_cx $DST
