@@ -13,7 +13,6 @@ use {
     std::{
         fs::File,
         io::{BufWriter, Seek, SeekFrom, Write},
-        num::NonZeroUsize,
         os::unix::ffi::OsStrExt,
         path::PathBuf,
         sync::{
