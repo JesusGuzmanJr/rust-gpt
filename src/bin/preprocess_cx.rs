@@ -118,32 +118,27 @@ fn main() -> Result<()> {
     let (file_tx, file_rx) = crossbeam_channel::bounded(rayon::current_num_threads());
 
     // indices of the files that are missing for some reason
-    let missing = (0..=args.index)
+    let queue = (0..=args.index)
         .filter(|i| !processed_file_indices.contains(i))
         .collect::<Vec<_>>();
 
-    if !missing.is_empty() {
-        warn!(
-            num_missing = %missing.len().separate_with_commas(),
-            "Found missing files",
-        );
-    }
-
-    debug!(?missing);
+    info!(
+        files_to_request = %queue.len().separate_with_commas(),
+        "Downloading missing files",
+    );
 
     let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
 
     rt.spawn(async move {
-        let missing = Arc::new(Mutex::new(missing));
+        let queue = Arc::new(Mutex::new(queue));
         let should_stop = Arc::new(AtomicBool::new(false));
-        let index = Arc::new(AtomicUsize::new(args.index));
 
         for _ in 0..rayon::current_num_threads() {
             let tx = file_tx.clone();
             let client = client.clone();
             let should_stop = should_stop.clone();
-            let index = index.clone();
-            let missing = missing.clone();
+
+            let missing = queue.clone();
 
             // launch IO threads to continuously download files
             tokio::spawn(async move {
@@ -152,21 +147,18 @@ fn main() -> Result<()> {
                         if let Some(i) = missing.lock().await.pop() {
                             i
                         } else {
-                            index.fetch_add(1, Ordering::Relaxed) + 1
+                            should_stop.store(true, Ordering::Release);
+                            break;
                         }
                     };
-
-                    if i > args.index {
-                        should_stop.store(true, Ordering::Release);
-                        break;
-                    }
 
                     let start = Instant::now();
                     info!(i, "Downloading file...");
                     match download_file(i, client.clone()).await {
-                        Ok(file) => {
+                        Ok((size, file)) => {
                             let duration = start.elapsed();
-                            info!(i, ?duration, "Done downloading");
+                            let size = rust_gpt::utils::byte_size(size);
+                            info!(i, ?duration, %size, "Done downloading");
                             if tx.send((i, file)).is_err() {
                                 should_stop.store(true, Ordering::Release);
                                 break;
@@ -197,7 +189,7 @@ fn main() -> Result<()> {
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
-                8,
+                10,
             )?;
 
             let mut duration = Duration::from_secs(0);
@@ -284,7 +276,7 @@ fn main() -> Result<()> {
 ///
 /// University of Oregon NLP group chose an
 /// appropriate file size to make this approach possible.
-async fn download_file(i: usize, client: Client) -> Result<File> {
+async fn download_file(i: usize, client: Client) -> Result<(usize, File)> {
     // https://huggingface.co/datasets/uonlp/CulturaX
     let mut stream = client
         .get(format!(
@@ -296,11 +288,13 @@ async fn download_file(i: usize, client: Client) -> Result<File> {
         .bytes_stream();
 
     let mut temp_file = tempfile::tempfile()?;
+    let mut size = 0;
     while let Some(Ok(bytes)) = stream.next().await {
         temp_file.write_all(&bytes)?;
+        size += bytes.len();
     }
 
     temp_file.seek(SeekFrom::Start(0))?;
 
-    Ok(temp_file)
+    Ok((size, temp_file))
 }
