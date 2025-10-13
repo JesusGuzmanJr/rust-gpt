@@ -117,48 +117,32 @@ fn main() -> Result<()> {
 
     let (file_tx, file_rx) = crossbeam_channel::bounded(rayon::current_num_threads());
 
-    // largest index of the file the user has already downloaded
-    let current_index = {
-        let current_index = processed_file_indices.iter().cloned().max().unwrap_or(0);
-
-        if args.index < current_index {
-            warn!(
-                requested_index = args.index,
-                max_index = current_index - 1,
-                "Your index you chose is less than the highest file index you have downloaded.\
-                This means you are requesting files that you already have.\
-                "
-            );
-        }
-
-        current_index.min(args.index + 1)
-    };
-
     // indices of the files that are missing for some reason
-    let missing = (0..=current_index)
+    let missing = (0..=args.index)
         .filter(|i| !processed_file_indices.contains(i))
         .collect::<Vec<_>>();
 
     if !missing.is_empty() {
         warn!(
-            current_index,
             num_missing = %missing.len().separate_with_commas(),
             "Found missing files",
         );
     }
+
+    debug!(?missing);
 
     let rt = tokio::runtime::Runtime::new().expect("failed to build tokio runtime");
 
     rt.spawn(async move {
         let missing = Arc::new(Mutex::new(missing));
         let should_stop = Arc::new(AtomicBool::new(false));
-        let current_index = Arc::new(AtomicUsize::new(current_index));
+        let index = Arc::new(AtomicUsize::new(args.index));
 
         for _ in 0..rayon::current_num_threads() {
             let tx = file_tx.clone();
             let client = client.clone();
             let should_stop = should_stop.clone();
-            let current_index = current_index.clone();
+            let index = index.clone();
             let missing = missing.clone();
 
             // launch IO threads to continuously download files
@@ -168,9 +152,14 @@ fn main() -> Result<()> {
                         if let Some(i) = missing.lock().await.pop() {
                             i
                         } else {
-                            current_index.fetch_add(1, Ordering::Relaxed) + 1
+                            index.fetch_add(1, Ordering::Relaxed) + 1
                         }
                     };
+
+                    if i > args.index {
+                        should_stop.store(true, Ordering::Release);
+                        break;
+                    }
 
                     let start = Instant::now();
                     info!(i, "Downloading file...");
@@ -193,6 +182,8 @@ fn main() -> Result<()> {
             });
         }
     });
+
+    let files_processed = AtomicUsize::new(0);
 
     // process and compress per CPU core
     file_rx
@@ -264,9 +255,13 @@ fn main() -> Result<()> {
                 &mut File::create(args.output_dir.join(format!("shard-{i}.zst")))?,
             )?;
             info!(i, duration = ?start.elapsed(), "Done processing file");
+            files_processed.fetch_add(1, Ordering::Relaxed);
 
             Ok(())
         })?;
+
+    let files_processed = files_processed.load(Ordering::Relaxed);
+    info!(files_processed, "Done");
 
     Ok(())
 }
