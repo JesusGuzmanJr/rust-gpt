@@ -25,3 +25,7 @@ install:
     sudo cp target/release/preprocess_cx $DST
     sudo cp target/release/preprocess_sow $DST
     sudo cp target/release/train_tokenizer $DST
+    sudo chown root:devs $DST/export_tokenizer
+    sudo chown root:devs $DST/preprocess_cx
+    sudo chown root:devs $DST/preprocess_sow
+    sudo chown root:devs $DST/train_tokenizer
