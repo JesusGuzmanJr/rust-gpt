@@ -19,7 +19,7 @@ test *args:
 # Install all binaries in /usr/local/bin
 install:
     #!/usr/bin/env bash
-    cargo build --release
+    cargo build --release --features cuda
     export DST=/usr/local/bin/
     sudo cp target/release/export_tokenizer $DST
     sudo cp target/release/preprocess_cx $DST
