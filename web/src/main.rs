@@ -2,11 +2,14 @@ use {
     anyhow::Result,
     axum::{
         Router,
-        http::{HeaderValue, header},
-        response::IntoResponse,
+        body::Body,
+        http::{HeaderValue, Request, StatusCode, header},
+        response::{IntoResponse, Response},
         routing::get,
     },
     maud::html,
+    tower::service_fn,
+    tower_http::services::ServeDir,
     tracing::*,
 };
 
@@ -15,9 +18,17 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
     let bind_address = "127.0.0.1:3000";
+
     let app = Router::new()
         .route("/style.css", get(style))
-        .route("/", get(root));
+        .route("/", get(root))
+        .fallback_service(
+            ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/public")).fallback(service_fn(
+                |_req: Request<Body>| async move {
+                    Ok::<Response, std::convert::Infallible>(not_found().into_response())
+                },
+            )),
+        );
 
     let listener = tokio::net::TcpListener::bind(bind_address).await?;
     info!(%bind_address, "listening");
@@ -27,8 +38,7 @@ async fn main() -> Result<()> {
 
 // basic handler that responds with a static string
 async fn root() -> impl IntoResponse {
-    info!("Root endpoint called");
-    let r = html! {
+    html! {
         (maud::DOCTYPE)
         html {
             head {
@@ -44,9 +54,7 @@ async fn root() -> impl IntoResponse {
                 }
             }
         }
-    };
-    println!("{}", r.clone().into_string());
-    r
+    }
 }
 
 /// Get the CSS file
@@ -64,4 +72,21 @@ async fn style() -> impl IntoResponse {
         ],
         include_bytes!("../../target/style.css"),
     )
+}
+
+fn not_found() -> impl IntoResponse {
+    let doc = html! {
+        (maud::DOCTYPE)
+        html {
+            head {
+                meta charset="utf-8";
+                title { "Not Found" }
+            }
+            body {
+                h1 { "404 - Not Found" }
+                p { "The requested resource could not be found." }
+            }
+        }
+    };
+    (StatusCode::NOT_FOUND, doc)
 }
