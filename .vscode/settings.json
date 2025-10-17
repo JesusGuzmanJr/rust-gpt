@@ -39,6 +39,7 @@
         "Pretokenize",
         "reqwest",
         "rlib",
+        "rsass",
         "serde",
         "smallvec",
         "subword",
