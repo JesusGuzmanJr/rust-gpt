@@ -1315,6 +1315,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "language_model"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "arrow-array",
+ "arrow-cast",
+ "bincode 2.0.1",
+ "bytes",
+ "bytesize",
+ "cc",
+ "clap",
+ "comrak",
+ "criterion",
+ "crossbeam-channel",
+ "ctrlc",
+ "futures",
+ "icu_normalizer",
+ "indexmap",
+ "itertools 0.14.0",
+ "parquet",
+ "rayon",
+ "regex",
+ "reqwest",
+ "ron",
+ "serde",
+ "serde_json",
+ "smallvec",
+ "tempfile",
+ "thousands",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "xdg 3.0.0",
+ "zstd",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1963,44 +2001,6 @@ dependencies = [
  "serde",
  "serde_derive",
  "unicode-ident",
-]
-
-[[package]]
-name = "rust-gpt"
-version = "0.1.0"
-dependencies = [
- "ahash",
- "anyhow",
- "arrow-array",
- "arrow-cast",
- "bincode 2.0.1",
- "bytes",
- "bytesize",
- "cc",
- "clap",
- "comrak",
- "criterion",
- "crossbeam-channel",
- "ctrlc",
- "futures",
- "icu_normalizer",
- "indexmap",
- "itertools 0.14.0",
- "parquet",
- "rayon",
- "regex",
- "reqwest",
- "ron",
- "serde",
- "serde_json",
- "smallvec",
- "tempfile",
- "thousands",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "xdg 3.0.0",
- "zstd",
 ]
 
 [[package]]

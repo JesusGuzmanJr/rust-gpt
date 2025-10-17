@@ -1,6 +1,6 @@
 use {
     crate::common::assert_success,
-    rust_gpt::{
+    language_model::{
         tokenization::{Token, TokenizerModel},
         utils::Bincode,
     },
@@ -19,7 +19,7 @@ fn test_train_tokenizer() {
             .arg("run")
             .arg("train_tokenizer")
             .arg("--config")
-            .arg("tests/tokenizer-training-config.ron")
+            .arg("crates/language_model/tests/tokenizer-training-config.ron")
             .output()
             .expect("failed to run train_tokenizer"),
     );
@@ -38,8 +38,9 @@ fn test_train_tokenizer() {
         ],
     };
 
-    let model =
-        TokenizerModel::from_bytes(&std::fs::read("target/test/tokenizer.bin").unwrap()).unwrap();
+    let model_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/test/tokenizer.bin");
+    let model = TokenizerModel::from_bytes(&std::fs::read(model_path).unwrap()).unwrap();
 
     assert_eq!(model, control_model);
 }

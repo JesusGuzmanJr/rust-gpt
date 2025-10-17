@@ -4,7 +4,7 @@ use {
     clap::Parser,
     rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
     regex::Regex,
-    rust_gpt::{
+    language_model::{
         tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
         utils::{Bincode, Ron, byte_size},
     },
@@ -38,7 +38,7 @@ struct Args {
 fn main() -> Result<()> {
     let start = Instant::now();
 
-    rust_gpt::utils::setup_tracing_subscriber();
+    language_model::utils::setup_tracing_subscriber();
 
     let config = TokenizerTrainingConfig::from_file_path(&Args::parse().config)?;
     let tokenizer = Tokenizer::from_file(&config.output_file).ok();

@@ -1,7 +1,7 @@
 use {
     anyhow::Result,
     clap::Parser,
-    rust_gpt::{tokenization::Tokenizer, utils::Bincode},
+    language_model::{tokenization::Tokenizer, utils::Bincode},
     std::{fs::File, io::Write, path::PathBuf},
 };
 
@@ -33,7 +33,7 @@ fn main() -> Result<()> {
 
     // Get the pre-tokenization regex pattern
     // We need to access the model to get the regex pattern
-    let model = rust_gpt::tokenization::TokenizerModel::from_bytes(&std::fs::read(&args.input)?)?;
+    let model = language_model::tokenization::TokenizerModel::from_bytes(&std::fs::read(&args.input)?)?;
 
     // Create JSON structure
     let json_data = serde_json::json!({

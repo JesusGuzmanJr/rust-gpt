@@ -37,6 +37,7 @@
         "smallvec",
         "subword",
         "subwords",
+        "thiserror",
         "tiktoken",
         "vocabs",
         "Wikitext",

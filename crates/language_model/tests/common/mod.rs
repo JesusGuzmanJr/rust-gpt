@@ -1,11 +1,16 @@
-use std::process::{Command, Output};
+use std::{
+    path::PathBuf,
+    process::{Command, Output},
+};
 
 /// Create the test output directory if it doesn't exist.
 pub(crate) fn create_test_output_dir() {
-    if std::fs::metadata("target/test").is_ok() {
-        std::fs::remove_dir_all("target/test").expect("failed to remove test output directory");
+    let root_target_test: PathBuf =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/test");
+    if std::fs::metadata(&root_target_test).is_ok() {
+        std::fs::remove_dir_all(&root_target_test).expect("failed to remove test output directory");
     }
-    std::fs::create_dir_all("target/test").expect("failed to create test output directory");
+    std::fs::create_dir_all(&root_target_test).expect("failed to create test output directory");
 }
 
 /// Compile the specified binary in release mode.

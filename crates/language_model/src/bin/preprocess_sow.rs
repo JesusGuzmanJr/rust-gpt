@@ -5,7 +5,7 @@ use {
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
-    rust_gpt::{tokenization::normalize_text, utils::get_parquet_column},
+    language_model::{tokenization::normalize_text, utils::get_parquet_column},
     std::{
         fs::File,
         io::{BufWriter, Write},
@@ -56,7 +56,7 @@ struct Section {
 }
 
 fn main() -> Result<()> {
-    rust_gpt::utils::setup_tracing_subscriber();
+    language_model::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
     // create the output directory if it doesn't exist
@@ -216,7 +216,7 @@ fn main() -> Result<()> {
 
             // Add end-of-text character
             // https://en.wikipedia.org/wiki/C0_and_C1_control_codes
-            encoder.write_all(rust_gpt::utils::END_OF_TEXT)?;
+            encoder.write_all(language_model::utils::END_OF_TEXT)?;
 
             Ok(())
         })?;

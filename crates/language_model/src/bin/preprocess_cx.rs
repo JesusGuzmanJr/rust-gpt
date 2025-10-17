@@ -7,7 +7,7 @@ use {
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{ParallelBridge, ParallelIterator},
     reqwest::Client,
-    rust_gpt::{
+    language_model::{
         tokenization::normalize_text,
         utils::{END_OF_TEXT, get_parquet_column},
     },
@@ -52,7 +52,7 @@ struct Args {
 }
 
 fn main() -> Result<()> {
-    rust_gpt::utils::setup_tracing_subscriber();
+    language_model::utils::setup_tracing_subscriber();
     let args = Args::parse();
 
     // create the output directory if it doesn't exist
@@ -160,7 +160,7 @@ fn main() -> Result<()> {
                     match download_file(i, client.clone()).await {
                         Ok((size, file)) => {
                             let duration = start.elapsed();
-                            let size = rust_gpt::utils::byte_size(size);
+                            let size = language_model::utils::byte_size(size);
                             info!(i, ?duration, %size, "Done downloading");
                             if tx.send((i, file)).is_err() {
                                 should_stop.store(true, Ordering::Release);
