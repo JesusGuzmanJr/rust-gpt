@@ -60,10 +60,7 @@
     "files.trimTrailingWhitespace": true,
     "rust-analyzer.showUnlinkedFileNotification": false,
     "rust-analyzer.check.command": "clippy",
-    "rust-analyzer.cargo.features": [
-        "ssr",
-        "hydrate"
-    ],
+    "rust-analyzer.cargo.features": [],
     "rust-analyzer.rustfmt.extraArgs": [
         "+nightly",
     ],
