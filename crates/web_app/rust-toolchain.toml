@@ -1,0 +1,3 @@
+[toolchain]
+# specified wasm as a additional target in addition to the default target
+targets = ["wasm32-unknown-unknown"]

@@ -2,9 +2,13 @@
     "cSpell.words": [
         "aabb",
         "ahash",
+        "autoreload",
         "backpressure",
         "BBPE",
+        "bindgen",
+        "browserlist",
         "bytesize",
+        "cdylib",
         "chrono",
         "commonmark",
         "comrak",
@@ -22,6 +26,7 @@
         "itertools",
         "Jurafsky",
         "Karpathy",
+        "leptos",
         "malloc",
         "memcpy",
         "minbpe",
@@ -33,6 +38,7 @@
         "overfiting",
         "Pretokenize",
         "reqwest",
+        "rlib",
         "serde",
         "smallvec",
         "subword",
@@ -54,10 +60,15 @@
     "files.trimTrailingWhitespace": true,
     "rust-analyzer.showUnlinkedFileNotification": false,
     "rust-analyzer.check.command": "clippy",
+    "rust-analyzer.cargo.features": [
+        "ssr",
+        "hydrate"
+    ],
     "rust-analyzer.rustfmt.extraArgs": [
         "+nightly",
     ],
     "cSpell.ignorePaths": [
-        "Cargo.lock"
+        "Cargo.lock",
+        ".vscode"
     ]
 }

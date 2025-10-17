@@ -1,0 +1,6 @@
+export RUST_LOG := env("RUST_LOG", "info")
+
+# Run the web app watching for changes
+watch:
+    #!/usr/bin/env bash
+    cargo leptos watch

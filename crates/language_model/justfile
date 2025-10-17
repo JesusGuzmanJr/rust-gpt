@@ -1,0 +1,16 @@
+export RUST_LOG := env("RUST_LOG", "info")
+set positional-arguments
+
+# Install all binaries in /usr/local/bin
+install:
+    #!/usr/bin/env bash
+    cargo build --release --features cuda
+    export DST=/usr/local/bin/
+    sudo cp target/release/export_tokenizer $DST
+    sudo cp target/release/preprocess_cx $DST
+    sudo cp target/release/preprocess_sow $DST
+    sudo cp target/release/train_tokenizer $DST
+    sudo chown root:devs $DST/export_tokenizer
+    sudo chown root:devs $DST/preprocess_cx
+    sudo chown root:devs $DST/preprocess_sow
+    sudo chown root:devs $DST/train_tokenizer

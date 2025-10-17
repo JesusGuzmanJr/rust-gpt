@@ -1,11 +1,6 @@
 export RUST_LOG := env("RUST_LOG", "info")
 set positional-arguments
 
-[private]
-default:
-    #!/usr/bin/env bash
-    just --list --unsorted
-
 # Run the specified binary
 run bin *args:
     #!/usr/bin/env bash
@@ -15,17 +10,3 @@ run bin *args:
 test *args:
     #!/usr/bin/env bash
     cargo test --release --quiet --no-fail-fast "$@" -- --color always --no-capture
-
-# Install all binaries in /usr/local/bin
-install:
-    #!/usr/bin/env bash
-    cargo build --release --features cuda
-    export DST=/usr/local/bin/
-    sudo cp target/release/export_tokenizer $DST
-    sudo cp target/release/preprocess_cx $DST
-    sudo cp target/release/preprocess_sow $DST
-    sudo cp target/release/train_tokenizer $DST
-    sudo chown root:devs $DST/export_tokenizer
-    sudo chown root:devs $DST/preprocess_cx
-    sudo chown root:devs $DST/preprocess_sow
-    sudo chown root:devs $DST/train_tokenizer
