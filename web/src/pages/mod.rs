@@ -3,10 +3,8 @@ use {
     maud::{Markup, html},
 };
 
-mod chat;
-mod not_found;
-
-pub(crate) use {chat::*, not_found::*};
+pub mod chat;
+pub mod not_found;
 
 pub(crate) fn page(title: &str, content: Markup) -> impl IntoResponse {
     html_page(StatusCode::OK, title, content)
@@ -30,7 +28,7 @@ fn html_page(status_code: StatusCode, title: &str, content: Markup) -> impl Into
                 head {
                     title { (title) };
                     link rel="stylesheet" href="style.css";
-                    script async src="htmx.min.js" {}
+                    script src="htmx.min.js" {}
                 }
                 body {
                     (content);

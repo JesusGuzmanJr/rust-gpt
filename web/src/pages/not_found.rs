@@ -1,6 +1,6 @@
 use {axum::response::IntoResponse, maud::html};
 
-pub(crate) fn not_found() -> impl IntoResponse {
+pub(crate) fn page() -> impl IntoResponse {
     super::error_page(
         axum::http::StatusCode::NOT_FOUND,
         "Not Found",

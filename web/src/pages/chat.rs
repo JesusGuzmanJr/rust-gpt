@@ -1,6 +1,9 @@
-use {axum::response::IntoResponse, maud::html};
+use {
+    axum::{Router, response::IntoResponse, routing::get},
+    maud::html,
+};
 
-pub(crate) async fn chat() -> impl IntoResponse {
+pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Chat",
         html! {
@@ -150,7 +153,7 @@ pub(crate) async fn chat() -> impl IntoResponse {
                     // Input area
                     div.chat-input {
                         div.chat-input__inner {
-                            button.chat-input__settings-btn {
+                            button.chat-input__settings-btn hx-get="/api/chat/models" {
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
                                     path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" {}
                                     circle cx="12" cy="12" r="3" {}
@@ -170,4 +173,13 @@ pub(crate) async fn chat() -> impl IntoResponse {
             }
         },
     )
+}
+
+pub(crate) fn api() -> Router {
+    Router::new().nest("/chat", Router::new().route("/models", get(models)))
+}
+
+async fn models() -> impl IntoResponse {
+    tracing::info!("Models requested");
+    "Models"
 }
