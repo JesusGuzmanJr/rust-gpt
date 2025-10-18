@@ -1,13 +1,14 @@
-// Main SCSS Entry Point - Pure SASS (No Tailwind)
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
 
-// Import Partials
-@import "variables";
-@import "theme-light";
-@import "theme-dark";
-@import "base";
-@import "utilities";
-@import "colors";
-@import "components";
+* {
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+}
 
-// also compile the _404.scss file
-@import "404";
+@import 'not_found';
