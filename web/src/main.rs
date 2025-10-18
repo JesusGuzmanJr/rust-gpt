@@ -3,15 +3,29 @@ use {
     axum::{
         Router,
         body::Body,
-        http::{HeaderValue, Request, StatusCode, header},
+        http::{HeaderName, HeaderValue, Request, StatusCode, header},
         response::{IntoResponse, Response},
         routing::get,
     },
-    maud::html,
+    maud::{Markup, html},
     tower::service_fn,
-    tower_http::services::ServeDir,
+    tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
     tracing::*,
 };
+
+/// 15 minutes public cache
+const CACHE_CONTROL: (HeaderName, HeaderValue) = (
+    header::CACHE_CONTROL,
+    HeaderValue::from_static("public, max-age=900"), // 15 minutes
+);
+
+/// HTML content type
+const HTML_CONTENT_TYPE: (HeaderName, HeaderValue) = (
+    header::CONTENT_TYPE,
+    HeaderValue::from_static("text/html; charset=utf-8"),
+);
+
+const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] = [CACHE_CONTROL, HTML_CONTENT_TYPE];
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -28,7 +42,11 @@ async fn main() -> Result<()> {
                     Ok::<Response, std::convert::Infallible>(not_found().into_response())
                 },
             )),
-        );
+        )
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        ));
 
     let listener = tokio::net::TcpListener::bind(bind_address).await?;
     info!(%bind_address, "listening");
@@ -36,14 +54,12 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// basic handler that responds with a static string
 async fn root() -> impl IntoResponse {
     html! {
         (maud::DOCTYPE)
         html {
             head {
-                meta charset="utf-8";
-                title { "Hello, world!" }
+                title { "Rust GPT" }
             }
             body {
                 h1 { "Hello, world!" }
@@ -57,7 +73,6 @@ async fn root() -> impl IntoResponse {
     }
 }
 
-/// Get the CSS file
 async fn style() -> impl IntoResponse {
     (
         [
@@ -65,28 +80,49 @@ async fn style() -> impl IntoResponse {
                 header::CONTENT_TYPE,
                 HeaderValue::from_static("text/css; charset=utf-8"),
             ),
-            (
-                header::CACHE_CONTROL,
-                HeaderValue::from_static("public, max-age=900"), // 15 minutes
-            ),
+            CACHE_CONTROL,
         ],
         include_bytes!("../../target/style.css"),
     )
 }
 
+fn page(title: &str, content: Markup) -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        DEFAULT_HEADERS,
+        html! {
+            (maud::DOCTYPE)
+            html {
+                head {
+                    title { (title) };
+                    link rel="stylesheet" href="style.css";
+                }
+                body {
+                    (content)
+                }
+            }
+        },
+    )
+}
+
 fn not_found() -> impl IntoResponse {
-    let doc = html! {
-        (maud::DOCTYPE)
-        html {
-            head {
-                meta charset="utf-8";
-                title { "Not Found" }
+    page(
+        "Not Found",
+        html! {
+             div.not-found-container {
+                div.not-found-content {
+                    div.not-found-code { "404" }
+                    h1.not-found-title { "Page Not Found" }
+                    p.not-found-description {
+                        "The page you're looking for doesn't exist or has been moved."
+                    }
+                    a.not-found-button href="/" {
+                        // Home icon placeholder - you can add an SVG or icon font here
+                        span.not-found-button-icon { "🏠" }
+                        span { "Back to Home" }
+                    }
+                }
             }
-            body {
-                h1 { "404 - Not Found" }
-                p { "The requested resource could not be found." }
-            }
-        }
-    };
-    (StatusCode::NOT_FOUND, doc)
+        },
+    )
 }

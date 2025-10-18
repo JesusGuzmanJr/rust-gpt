@@ -18,7 +18,7 @@ serde.workspace = true
 thiserror = "2.0.12"
 tokio.workspace = true
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs"] }
+tower-http = { version = "0.6", features = ["fs", "set-header"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
 wasm-bindgen = "0.2.93"
