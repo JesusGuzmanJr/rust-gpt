@@ -1,1 +1,11 @@
 export RUST_LOG := env("RUST_LOG", "info")
+
+# Run the serve in file-watch dev mode
+dev:
+    #!/usr/bin/env bash
+    watchexec \
+    --restart \
+    --watch ../web \
+    --watch ../Cargo.toml \
+    --watch ../Cargo.lock \
+    cargo run --bin web
