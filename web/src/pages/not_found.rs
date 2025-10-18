@@ -1,7 +1,8 @@
-use {super::page, axum::response::IntoResponse, maud::html};
+use {axum::response::IntoResponse, maud::html};
 
 pub(crate) fn not_found() -> impl IntoResponse {
-    page(
+    super::error_page(
+        axum::http::StatusCode::NOT_FOUND,
         "Not Found",
         html! {
             div.error-page__container {

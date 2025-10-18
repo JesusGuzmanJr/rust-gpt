@@ -1,7 +1,7 @@
-use {super::page, axum::response::IntoResponse, maud::html};
+use {axum::response::IntoResponse, maud::html};
 
 pub(crate) async fn chat() -> impl IntoResponse {
-    page(
+    super::page(
         "Chat",
         html! {
             div.chat-container {
@@ -159,7 +159,7 @@ pub(crate) async fn chat() -> impl IntoResponse {
 
                             textarea.chat-input__textarea placeholder="Type your message..." rows="1" {}
 
-                            button.button.button--primary.chat-input__send-btn {
+                            button.button.button--primary.chat-input__send-btn href="/#foo" {
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {
                                     path d="M5 12h14M12 5l7 7-7 7";
                                 }
