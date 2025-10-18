@@ -6,7 +6,6 @@ use {
         response::{IntoResponse, Redirect, Response},
         routing::get,
     },
-    const_format::formatcp,
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
     tracing::*,
@@ -33,7 +32,7 @@ async fn main() -> Result<()> {
             .route("/", get(|| async { Redirect::to("/chat") }))
             .route("/chat", get(pages::chat))
             .route(
-                formatcp!("/{}", pages::STYLE_SHEET_PATH),
+                "/style.css",
                 get((
                     [
                         (
