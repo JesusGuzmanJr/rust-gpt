@@ -153,10 +153,44 @@ pub(crate) async fn page() -> impl IntoResponse {
                     // Input area
                     div.chat-input {
                         div.chat-input__inner {
-                            button.chat-input__settings-btn hx-get="/api/chat/models" {
-                                svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                    path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" {}
-                                    circle cx="12" cy="12" r="3" {}
+                            div.settings-popover {
+                                button.chat-input__settings-btn id="settings-btn" {
+                                    svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                                        path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" {}
+                                        circle cx="12" cy="12" r="3" {}
+                                    }
+                                }
+
+                                div.popover-content id="settings-popover" {
+                                    div.popover-inner {
+                                        div.form-group {
+                                            label.form-label { "Model" }
+                                            select.form-select name="model" {
+                                                option value="model1" { "Model 1" }
+                                                option value="model2" { "Model 2" }
+                                                option value="model3" { "Model 3" }
+                                                option value="model4" { "Model 4" }
+                                                option value="model5" { "Model 5" }
+                                            }
+                                            div.model-details {
+                                                div.model-detail { "Embedding Size: 12,349" }
+                                                div.model-detail { "Vocabulary: 340,332" }
+                                            }
+                                        }
+
+                                        div.form-group {
+                                            div.form-label-row {
+                                                label.form-label { "Temperature" }
+                                                span.form-value { "0.0" }
+                                            }
+                                            input.form-range type="range" min="-1" max="1" step="0.1" value="0" name="temperature";
+                                            div.range-labels {
+                                                span { "-1.0" }
+                                                span { "0.0" }
+                                                span { "1.0" }
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
@@ -170,6 +204,8 @@ pub(crate) async fn page() -> impl IntoResponse {
                         }
                     }
                 }
+            }
+            script {(maud::PreEscaped(include_str!("../../scripts/chat.js")))
             }
         },
     )
