@@ -1,0 +1,69 @@
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.12 0.03 285);
+    --foreground: oklch(0.95 0.02 290);
+    --card: oklch(0.15 0.03 285);
+    --card-foreground: oklch(0.95 0.02 290);
+    --popover: oklch(0.15 0.03 285);
+    --popover-foreground: oklch(0.95 0.02 290);
+    --primary: oklch(0.65 0.22 285);
+    --primary-foreground: oklch(0.15 0.03 285);
+    --secondary: oklch(0.2 0.04 285);
+    --secondary-foreground: oklch(0.95 0.02 290);
+    --muted: oklch(0.2 0.04 285);
+    --muted-foreground: oklch(0.6 0.05 285);
+    --accent: oklch(0.25 0.08 285);
+    --accent-foreground: oklch(0.95 0.02 290);
+    --destructive: oklch(0.396 0.141 25.723);
+    --destructive-foreground: oklch(0.95 0 0);
+    --border: oklch(0.2 0.04 285);
+    --input: oklch(0.2 0.04 285);
+    --ring: oklch(0.5 0.18 285);
+    --chat-system: oklch(0.28 0.06 285);
+    --chat-system-dark: oklch(0.24 0.07 285);
+    --chat-user: oklch(0.62 0.24 285);
+    --chat-user-text: oklch(0.12 0.03 285);
+    --sidebar: oklch(0.15 0.04 285);
+    --sidebar-foreground: oklch(0.95 0.02 290);
+    --sidebar-primary: oklch(0.65 0.22 285);
+    --sidebar-primary-foreground: oklch(0.15 0.03 285);
+    --sidebar-accent: oklch(0.22 0.06 285);
+    --sidebar-accent-foreground: oklch(0.95 0.02 290);
+    --sidebar-border: oklch(0.2 0.04 285);
+    --sidebar-ring: oklch(0.5 0.18 285);
+  }
+}
+
+.dark {
+  --background: oklch(0.12 0.03 285);
+  --foreground: oklch(0.95 0.02 290);
+  --card: oklch(0.15 0.03 285);
+  --card-foreground: oklch(0.95 0.02 290);
+  --popover: oklch(0.15 0.03 285);
+  --popover-foreground: oklch(0.95 0.02 290);
+  --primary: oklch(0.65 0.22 285);
+  --primary-foreground: oklch(0.15 0.03 285);
+  --secondary: oklch(0.2 0.04 285);
+  --secondary-foreground: oklch(0.95 0.02 290);
+  --muted: oklch(0.2 0.04 285);
+  --muted-foreground: oklch(0.6 0.05 285);
+  --accent: oklch(0.25 0.08 285);
+  --accent-foreground: oklch(0.95 0.02 290);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.95 0 0);
+  --border: oklch(0.2 0.04 285);
+  --input: oklch(0.2 0.04 285);
+  --ring: oklch(0.5 0.18 285);
+  --chat-system: oklch(0.28 0.06 285);
+  --chat-system-dark: oklch(0.24 0.07 285);
+  --chat-user: oklch(0.62 0.24 285);
+  --chat-user-text: oklch(0.12 0.03 285);
+  --sidebar: oklch(0.15 0.04 285);
+  --sidebar-foreground: oklch(0.95 0.02 290);
+  --sidebar-primary: oklch(0.65 0.22 285);
+  --sidebar-primary-foreground: oklch(0.15 0.03 285);
+  --sidebar-accent: oklch(0.22 0.06 285);
+  --sidebar-accent-foreground: oklch(0.95 0.02 290);
+  --sidebar-border: oklch(0.2 0.04 285);
+  --sidebar-ring: oklch(0.5 0.18 285);
+}

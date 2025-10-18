@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sign In - AI Chat</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body class="auth-page">
+  <div class="auth-page__container">
+    <div class="auth-page__card">
+      <div class="auth-page__header">
+        <div class="auth-page__logo">
+          <span>AI</span>
+        </div>
+        <h1 class="auth-page__title">Sign In</h1>
+        <p class="auth-page__subtitle">Enter your credentials to access your account</p>
+      </div>
+
+      <form class="auth-page__form" id="signInForm">
+        <div class="form-group">
+          <label class="form-group__label" for="email">Email</label>
+          <input 
+            type="email" 
+            class="form-group__input" 
+            id="email" 
+            placeholder="you@example.com"
+            required
+          >
+        </div>
+
+        <div class="form-group">
+          <label class="form-group__label" for="password">Password</label>
+          <input 
+            type="password" 
+            class="form-group__input" 
+            id="password" 
+            placeholder="Enter your password"
+            required
+          >
+        </div>
+
+        <button type="submit" class="button button--primary button--full">
+          Sign In
+        </button>
+      </form>
+
+      <div class="auth-page__footer">
+        <p class="auth-page__footer-text">
+          Don't have an account? 
+          <a href="/sign-up.html" class="auth-page__link">Sign up</a>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/scripts/auth.js"></script>
+</body>
+</html>

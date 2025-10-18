@@ -1,0 +1,64 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: $spacing-2;
+  padding: $spacing-2 $spacing-4;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: $radius-md;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+  cursor: pointer;
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &--primary {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+    
+    &:hover:not(:disabled) {
+      opacity: 0.9;
+    }
+  }
+
+  &--outline {
+    border-color: var(--border);
+    background-color: transparent;
+    
+    &:hover:not(:disabled) {
+      background-color: var(--accent);
+    }
+  }
+
+  &--ghost {
+    background-color: transparent;
+    
+    &:hover:not(:disabled) {
+      background-color: var(--accent);
+    }
+  }
+
+  &--sm {
+    padding: $spacing-1 $spacing-3;
+    font-size: 0.75rem;
+  }
+
+  &--icon {
+    padding: $spacing-2;
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  &--full {
+    width: 100%;
+  }
+
+  &__icon {
+    width: 1rem;
+    height: 1rem;
+  }
+}

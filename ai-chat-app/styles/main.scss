@@ -1,0 +1,47 @@
+@import 'variables';
+@import 'mixins';
+@import 'theme-light';
+@import 'theme-dark';
+@import 'utilities';
+@import 'animations';
+
+// Base styles
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  height: 100%;
+  overflow: hidden;
+  font-family: $font-sans;
+}
+
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: $font-sans;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+[role="button"],
+[role="menuitem"],
+[role="option"],
+[type="button"],
+[type="submit"],
+a {
+  cursor: pointer;
+}
+
+// Focus styles
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}

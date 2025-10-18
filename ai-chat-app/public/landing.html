@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chat - Start Chatting</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body class="landing-page">
+  <header class="landing-page__header">
+    <div class="landing-page__logo">
+      <span>AI</span>
+    </div>
+    <div class="landing-page__header-actions">
+      <a href="/sign-in.html" class="button button--outline button--sm">Sign in</a>
+      <a href="/sign-up.html" class="button button--outline button--sm">Get Started</a>
+    </div>
+  </header>
+
+  <main class="landing-page__main">
+    <div class="landing-page__hero">
+      <h1 class="landing-page__title">AI conversations that understand you</h1>
+      <div class="landing-page__search">
+        <input 
+          type="text" 
+          class="landing-page__input" 
+          placeholder="Start a conversation..."
+          id="landingInput"
+        >
+        <button class="button button--primary button--icon landing-page__start-btn" id="startBtn">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <script src="/scripts/landing.js"></script>
+</body>
+</html>

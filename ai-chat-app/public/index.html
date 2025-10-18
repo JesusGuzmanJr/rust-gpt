@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chat</title>
+  <link rel="stylesheet" href="/styles/main.css">
+</head>
+<body class="chat-page">
+  <!-- Sidebar Overlay -->
+  <div class="chat-page__overlay" id="sidebarOverlay"></div>
+
+  <!-- Sidebar -->
+  <aside class="chat-page__sidebar" id="sidebar">
+    <div class="chat-page__sidebar-header">
+      <button class="button button--primary button--sm chat-page__new-chat-btn" id="newChatBtn">
+        <svg class="button__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+        <span>New Chat</span>
+      </button>
+      <button class="button button--ghost button--icon chat-page__close-sidebar" id="closeSidebarBtn">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"></line>
+          <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+    </div>
+
+    <div class="chat-page__sidebar-content" id="chatList">
+      <!-- Chat items will be inserted here by JavaScript -->
+    </div>
+
+    <div class="chat-page__sidebar-footer">
+      <div class="chat-page__footer-links">
+        <a href="/about.html" class="chat-page__footer-link">
+          <svg class="chat-page__footer-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+          <span>About</span>
+        </a>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="chat-page__main">
+    <!-- Header -->
+    <header class="chat-page__header">
+      <div class="chat-page__header-left">
+        <button class="button button--ghost button--icon chat-page__menu-btn" id="menuBtn">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+        <div class="chat-page__logo">
+          <span>AI</span>
+        </div>
+        <div class="chat-page__title-wrapper" id="titleWrapper">
+          <h1 class="chat-page__title" id="chatTitle">AI Chat</h1>
+          <input type="text" class="chat-page__title-input" id="titleInput" style="display: none;">
+          <div class="chat-page__title-actions" id="titleActions" style="display: none;">
+            <button class="button button--ghost button--icon button--sm chat-page__title-confirm" id="confirmTitleBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </button>
+            <button class="button button--ghost button--icon button--sm chat-page__title-cancel" id="cancelTitleBtn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="chat-page__header-right">
+        <div class="dropdown" id="userDropdown">
+          <button class="button button--outline button--sm dropdown__trigger" id="userDropdownBtn">
+            <span class="dropdown__email">user@example.com</span>
+          </button>
+          <div class="dropdown__menu" id="userDropdownMenu" style="display: none;">
+            <div class="dropdown__label">Account</div>
+            <div class="dropdown__separator"></div>
+            <div class="dropdown__item dropdown__item--disabled">
+              <span class="dropdown__item-label">Tokens Used</span>
+              <span class="dropdown__item-value">12,450</span>
+            </div>
+            <div class="dropdown__separator"></div>
+            <button class="dropdown__item dropdown__item--clickable" id="signOutBtn">
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Messages Area -->
+    <main class="chat-page__messages" id="messagesArea">
+      <div class="chat-page__messages-container" id="messagesContainer">
+        <!-- Messages will be inserted here by JavaScript -->
+      </div>
+    </main>
+
+    <!-- Input Area -->
+    <div class="chat-page__input-area">
+      <div class="chat-page__input-wrapper">
+        <div class="popover" id="settingsPopover">
+          <button class="button button--ghost button--icon chat-page__settings-btn" id="settingsBtn">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m5.2-13.2l-4.2 4.2m0 6l4.2 4.2M23 12h-6m-6 0H1m18.2-5.2l-4.2 4.2m0 6l4.2 4.2"></path>
+            </svg>
+          </button>
+          <div class="popover__content" id="settingsPopoverContent" style="display: none;">
+            <div class="popover__section">
+              <label class="popover__label">Model</label>
+              <select class="select" id="modelSelect">
+                <option value="model1">Model 1</option>
+                <option value="model2">Model 2</option>
+                <option value="model3">Model 3</option>
+                <option value="model4">Model 4</option>
+                <option value="model5">Model 5</option>
+              </select>
+              <div class="popover__details" id="modelDetails">
+                <div>Embedding Size: 12,349</div>
+                <div>Vocabulary: 340,332</div>
+              </div>
+            </div>
+            <div class="popover__section">
+              <div class="popover__label-row">
+                <label class="popover__label">Temperature</label>
+                <span class="popover__value" id="temperatureValue">0.0</span>
+              </div>
+              <input type="range" class="slider" id="temperatureSlider" min="-1" max="1" step="0.1" value="0">
+              <div class="slider__labels">
+                <span>-1.0</span>
+                <span>0.0</span>
+                <span>1.0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <textarea 
+          class="chat-page__input" 
+          id="messageInput" 
+          placeholder="Type your message..."
+          rows="1"
+        ></textarea>
+
+        <button class="button button--primary button--icon chat-page__send-btn" id="sendBtn" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+            <polyline points="12 5 19 12 12 19"></polyline>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/scripts/chat.js"></script>
+</body>
+</html>
