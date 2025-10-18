@@ -49,6 +49,7 @@
         "thiserror",
         "tiktoken",
         "vocabs",
+        "watchexec",
         "Wikitext",
         "xxhash",
         "Zstandard",
