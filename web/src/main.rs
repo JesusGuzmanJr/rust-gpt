@@ -57,7 +57,8 @@ async fn main() -> Result<()> {
             .layer(SetResponseHeaderLayer::if_not_present(
                 header::X_CONTENT_TYPE_OPTIONS,
                 HeaderValue::from_static("nosniff"),
-            )),
+            ))
+            .layer(axum_htmx::AutoVaryLayer),
     )
     .await?;
     Ok(())

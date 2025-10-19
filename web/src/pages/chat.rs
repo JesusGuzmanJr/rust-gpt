@@ -1,5 +1,10 @@
 use {
-    axum::{Router, extract::Query, response::IntoResponse, routing::get},
+    axum::{
+        Form, Router,
+        extract::Query,
+        response::IntoResponse,
+        routing::{get, post},
+    },
     bytesize::ByteSize,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
@@ -196,9 +201,9 @@ pub(crate) async fn page() -> impl IntoResponse {
                                 }
                             }
 
-                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" {}
+                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" {}
 
-                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled {
+                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages" hx-include="#message-input" {
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {
                                     path d="M5 12h14M12 5l7 7-7 7";
                                 }
@@ -207,7 +212,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                     }
                 }
             }
-            script {(maud::PreEscaped(include_str!("../../scripts/chat.js")))
+            script {(maud::PreEscaped(include_str!("chat.js")))
             }
         },
     )
@@ -216,12 +221,35 @@ pub(crate) async fn page() -> impl IntoResponse {
 pub(crate) fn api() -> Router {
     Router::new().nest(
         "/chat",
-        Router::new().route(
-            "/models",
-            get(async |Query(ModelQuery { model }): Query<ModelQuery>| {
-                render_model_details(model).into_response()
-            }),
-        ),
+        Router::new()
+            .route(
+                "/models",
+                get({
+                    #[derive(Debug, Deserialize)]
+                    struct ModelQuery {
+                        // must match the "name" attribute
+                        model: ModelSelection,
+                    }
+
+                    async |Query(ModelQuery { model }): Query<ModelQuery>| {
+                        render_model_details(model).into_response()
+                    }
+                }),
+            )
+            .route(
+                "/send",
+                post({
+                    #[derive(Debug, Deserialize)]
+                    struct MessageQuery {
+                        // must match the "name" attribute
+                        message: String,
+                    }
+
+                    async |Form(MessageQuery { message }): Form<MessageQuery>| {
+                        send_message(message).await.into_response()
+                    }
+                }),
+            ),
     )
 }
 
@@ -241,15 +269,14 @@ impl From<ModelSelection> for ModelInfo {
     }
 }
 
-#[derive(Debug, Deserialize)]
-struct ModelQuery {
-    model: ModelSelection,
-}
-
 fn render_model_details(selection: ModelSelection) -> Markup {
     let model_info: ModelInfo = selection.into();
     html! {
         div.model-detail { (format!("Corpus Size: {}", model_info.corpus_size.display().iec())) }
         div.model-detail { (format!("Vocabulary Size: {}", model_info.vocabulary_size.separate_with_commas())) }
     }
+}
+
+async fn send_message(message: String) -> impl IntoResponse {
+    "".into_response()
 }

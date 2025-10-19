@@ -290,6 +290,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "axum-htmx"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2d4a162b7621482903309c0e8a990a866728b6312350147181230f840252314"
+dependencies = [
+ "axum-core",
+ "futures",
+ "http",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "base64"
 version = "0.22.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3296,6 +3309,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
+ "axum-htmx",
  "bytesize",
  "const_format",
  "language_model",
