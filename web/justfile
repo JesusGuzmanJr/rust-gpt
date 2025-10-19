@@ -7,6 +7,9 @@ dev:
     --clear \
     --restart \
     --watch ../web \
+    --watch ../language_model/src \
+    --watch ../language_model/Cargo.toml \
+    --watch ../language_model/build.rs \
     --watch ../Cargo.toml \
     --watch ../Cargo.lock \
     cargo run --bin web

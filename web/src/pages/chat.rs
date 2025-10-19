@@ -1,6 +1,7 @@
 use {
     axum::{Router, extract::Query, response::IntoResponse, routing::get},
     bytesize::ByteSize,
+    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
     serde::Deserialize,
     strum::{Display, EnumIter, IntoEnumIterator},
@@ -170,12 +171,12 @@ pub(crate) async fn page() -> impl IntoResponse {
                                         div.form-group {
                                             label.form-label { "Model" }
                                             select.form-select name="model" hx-get="/api/chat/models" hx-target=".model-details" {
-                                                @for model in Model::iter() {
-                                                    option value=(format!("{model:?}")) { (model) }
+                                                @for selection in ModelSelection::iter() {
+                                                    option value=(selection) { (ModelInfo::from(selection).name) }
                                                 }
                                             }
                                             div.model-details {
-                                                (model_details(Model::default()))
+                                                (render_model_details(ModelSelection::default()))
                                             }
                                         }
 
@@ -195,9 +196,9 @@ pub(crate) async fn page() -> impl IntoResponse {
                                 }
                             }
 
-                            textarea.chat-input__textarea placeholder="Type your message..." rows="1" {}
+                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" {}
 
-                            button.button.button--primary.chat-input__send-btn {
+                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled {
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {
                                     path d="M5 12h14M12 5l7 7-7 7";
                                 }
@@ -215,36 +216,40 @@ pub(crate) async fn page() -> impl IntoResponse {
 pub(crate) fn api() -> Router {
     Router::new().nest(
         "/chat",
-        Router::new().route("/models", get(get_model_details)),
+        Router::new().route(
+            "/models",
+            get(async |Query(ModelQuery { model }): Query<ModelQuery>| {
+                render_model_details(model).into_response()
+            }),
+        ),
     )
 }
 
-#[derive(Debug, Default, Display, EnumIter, Deserialize)]
-enum Model {
+#[derive(Debug, Display, Default, EnumIter, Deserialize)]
+enum ModelSelection {
     #[default]
-    #[strum(to_string = "Model 1")]
+    Model0,
     Model1,
+}
 
-    #[strum(to_string = "Model 2")]
-    Model2,
+impl From<ModelSelection> for ModelInfo {
+    fn from(model_option: ModelSelection) -> Self {
+        match model_option {
+            ModelSelection::Model0 => LANGUAGE_MODEL_0_INFO,
+            ModelSelection::Model1 => LANGUAGE_MODEL_1_INFO,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
 struct ModelQuery {
-    model: Model,
+    model: ModelSelection,
 }
 
-fn model_details(model: Model) -> Markup {
-    let (corpus_size, vocabulary_size) = match model {
-        Model::Model1 => (ByteSize::b(12_328), 30_332.separate_with_commas()),
-        Model::Model2 => (ByteSize::b(12_349_988), 340_332.separate_with_commas()),
-    };
+fn render_model_details(selection: ModelSelection) -> Markup {
+    let model_info: ModelInfo = selection.into();
     html! {
-        div.model-detail { (format!("Corpus Size: {}", corpus_size.display().iec())) }
-        div.model-detail { (format!("Vocabulary Size: {}", vocabulary_size)) }
+        div.model-detail { (format!("Corpus Size: {}", model_info.corpus_size.display().iec())) }
+        div.model-detail { (format!("Vocabulary Size: {}", model_info.vocabulary_size.separate_with_commas())) }
     }
-}
-
-async fn get_model_details(Query(ModelQuery { model }): Query<ModelQuery>) -> impl IntoResponse {
-    model_details(model).into_response()
 }

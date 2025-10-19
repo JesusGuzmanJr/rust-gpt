@@ -73,4 +73,51 @@ document.addEventListener('DOMContentLoaded', () => {
             temperatureValue.textContent = parseFloat(event.target.value).toFixed(1);
         });
     }
+
+    // Enable/disable send button based on textarea content
+    const messageInput = document.getElementById('message-input');
+    const sendButton = document.getElementById('send-btn');
+
+    if (messageInput && sendButton) {
+        const updateSendButton = () => {
+            const hasContent = messageInput.value.trim().length > 0;
+            sendButton.disabled = !hasContent;
+        };
+
+        // Auto-expand textarea
+        const autoExpand = () => {
+            // If empty, reset to min height
+            if (messageInput.value === '') {
+                messageInput.style.height = '48px'; // 3rem = 48px
+                return;
+            }
+
+            // Store the current scroll position
+            const scrollPos = messageInput.scrollTop;
+
+            // Reset height to min-height to get accurate scrollHeight
+            messageInput.style.height = '48px';
+
+            // Calculate new height based on content
+            const scrollHeight = messageInput.scrollHeight;
+
+            // Set height to content height, capped at 200px
+            // Use max to ensure we never go below min height
+            const newHeight = Math.max(48, Math.min(scrollHeight, 200));
+            messageInput.style.height = newHeight + 'px';
+
+            // Restore scroll position if needed
+            messageInput.scrollTop = scrollPos;
+        };
+
+        // Check on input
+        messageInput.addEventListener('input', () => {
+            updateSendButton();
+            autoExpand();
+        });
+
+        // Initial check
+        updateSendButton();
+        autoExpand();
+    }
 });

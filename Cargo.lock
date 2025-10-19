@@ -3298,6 +3298,7 @@ dependencies = [
  "axum",
  "bytesize",
  "const_format",
+ "language_model",
  "maud",
  "native_db",
  "rsass",

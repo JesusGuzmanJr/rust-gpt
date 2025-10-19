@@ -39,6 +39,7 @@
         "oneshot",
         "overfiting",
         "Pretokenize",
+        "pretraining",
         "reqwest",
         "rlib",
         "rsass",

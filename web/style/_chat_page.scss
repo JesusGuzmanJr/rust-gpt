@@ -371,9 +371,12 @@
   color: var(--text-primary);
   font-family: inherit;
   font-size: 0.9375rem;
+  line-height: 1.5;
   resize: none;
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  overflow-y: auto;
+  box-sizing: border-box;
 
   &::placeholder {
     color: var(--text-tertiary);
