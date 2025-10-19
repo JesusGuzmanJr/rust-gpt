@@ -1,6 +1,10 @@
 use {
-    axum::{Router, response::IntoResponse, routing::get},
-    maud::html,
+    axum::{Router, extract::Query, response::IntoResponse, routing::get},
+    bytesize::ByteSize,
+    maud::{Markup, html},
+    serde::Deserialize,
+    strum::{Display, EnumIter, IntoEnumIterator},
+    thousands::Separable,
 };
 
 pub(crate) async fn page() -> impl IntoResponse {
@@ -165,16 +169,13 @@ pub(crate) async fn page() -> impl IntoResponse {
                                     div.popover-inner {
                                         div.form-group {
                                             label.form-label { "Model" }
-                                            select.form-select name="model" {
-                                                option value="model1" { "Model 1" }
-                                                option value="model2" { "Model 2" }
-                                                option value="model3" { "Model 3" }
-                                                option value="model4" { "Model 4" }
-                                                option value="model5" { "Model 5" }
+                                            select.form-select name="model" hx-get="/api/chat/models" hx-target=".model-details" {
+                                                @for model in Model::iter() {
+                                                    option value=(format!("{model:?}")) { (model) }
+                                                }
                                             }
                                             div.model-details {
-                                                div.model-detail { "Embedding Size: 12,349" }
-                                                div.model-detail { "Vocabulary: 340,332" }
+                                                (model_details(Model::default()))
                                             }
                                         }
 
@@ -212,10 +213,38 @@ pub(crate) async fn page() -> impl IntoResponse {
 }
 
 pub(crate) fn api() -> Router {
-    Router::new().nest("/chat", Router::new().route("/models", get(models)))
+    Router::new().nest(
+        "/chat",
+        Router::new().route("/models", get(get_model_details)),
+    )
 }
 
-async fn models() -> impl IntoResponse {
-    tracing::info!("Models requested");
-    "Models"
+#[derive(Debug, Default, Display, EnumIter, Deserialize)]
+enum Model {
+    #[default]
+    #[strum(to_string = "Model 1")]
+    Model1,
+
+    #[strum(to_string = "Model 2")]
+    Model2,
+}
+
+#[derive(Debug, Deserialize)]
+struct ModelQuery {
+    model: Model,
+}
+
+fn model_details(model: Model) -> Markup {
+    let (corpus_size, vocabulary_size) = match model {
+        Model::Model1 => (ByteSize::b(12_328), 30_332.separate_with_commas()),
+        Model::Model2 => (ByteSize::b(12_349_988), 340_332.separate_with_commas()),
+    };
+    html! {
+        div.model-detail { (format!("Corpus Size: {}", corpus_size.display().iec())) }
+        div.model-detail { (format!("Vocabulary Size: {}", vocabulary_size)) }
+    }
+}
+
+async fn get_model_details(Query(ModelQuery { model }): Query<ModelQuery>) -> impl IntoResponse {
+    model_details(model).into_response()
 }
