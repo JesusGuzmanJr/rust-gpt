@@ -101,10 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
             // Calculate new height based on content
             const scrollHeight = messageInput.scrollHeight;
 
-            // Set height to content height, capped at 200px
-            // Use max to ensure we never go below min height
-            const newHeight = Math.max(48, Math.min(scrollHeight, 200));
-            messageInput.style.height = newHeight + 'px';
+            // Only expand if content actually needs more space (threshold accounts for single-line padding)
+            // If scrollHeight is <= 56px, it's still a single line, so keep at 48px
+            if (scrollHeight <= 56) {
+                messageInput.style.height = '48px';
+            } else {
+                // Multi-line content: set height to scrollHeight, capped at 200px
+                const newHeight = Math.min(scrollHeight, 200);
+                messageInput.style.height = newHeight + 'px';
+            }
 
             // Restore scroll position if needed
             messageInput.scrollTop = scrollPos;
