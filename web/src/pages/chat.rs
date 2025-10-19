@@ -5,7 +5,6 @@ use {
         response::IntoResponse,
         routing::{get, post},
     },
-    bytesize::ByteSize,
     chrono::{DateTime, Utc},
     language_model::{
         message::UserMessage,
@@ -108,55 +107,46 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.chat-messages__inner {
                             // System message
                             div.message.message--system {
-                                div.message__bubble.message__bubble--system {
-                                    p { "Hello! How can I assist you today?" }
-                                }
-                                div.message__meta {
-                                    span.message__time { "2:30 PM" }
-                                    button.message__feedback-btn {
-                                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                            path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
-                                        }
+                                div.message__wrapper {
+                                    div.message__bubble.message__bubble--system {
+                                        p { "Hello! How can I assist you today?" }
                                     }
-                                    button.message__feedback-btn {
-                                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                            path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
+                                    div.message__meta {
+                                        span.message__time { "2:30 PM" }
+                                        button.message__feedback-btn {
+                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                                                path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
+                                            }
+                                        }
+                                        button.message__feedback-btn {
+                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                                                path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
+                                            }
                                         }
                                     }
                                 }
                             }
 
                             // User message
-                            div.message.message--user {
-                                div.message__bubble.message__bubble--user {
-                                    p { "I need help with my project." }
-                                }
-                                div.message__meta.message__meta--user {
-                                    span.message__time { "2:31 PM" }
-                                    button.message__edit-btn {
-                                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                            path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7";
-                                            path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z";
-                                        }
-                                    }
-                                }
-                            }
+                            (render_user_message(&UserMessage::new("I need help with my project."), Utc::now()))
 
                             // System message
                             div.message.message--system {
-                                div.message__bubble.message__bubble--system {
-                                    p { "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?" }
-                                }
-                                div.message__meta {
-                                    span.message__time { "2:31 PM" }
-                                    button.message__feedback-btn {
-                                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                            path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
-                                        }
+                                div.message__wrapper {
+                                    div.message__bubble.message__bubble--system {
+                                        p { "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?" }
                                     }
-                                    button.message__feedback-btn {
-                                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                            path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
+                                    div.message__meta {
+                                        span.message__time { "2:31 PM" }
+                                        button.message__feedback-btn {
+                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                                                path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
+                                            }
+                                        }
+                                        button.message__feedback-btn {
+                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                                                path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
+                                            }
                                         }
                                     }
                                 }
@@ -250,9 +240,7 @@ pub(crate) fn api() -> Router {
                     }
 
                     async |Form(MessageQuery { message }): Form<MessageQuery>| {
-                        render_user_message(&UserMessage::new(message), Utc::now())
-                            .await
-                            .into_response()
+                        render_user_message(&UserMessage::new(message), Utc::now()).into_response()
                     }
                 }),
             ),
@@ -283,19 +271,21 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-async fn render_user_message(user_message: &UserMessage, timestamp: DateTime<Utc>) -> Markup {
+fn render_user_message(user_message: &UserMessage, timestamp: DateTime<Utc>) -> Markup {
     // Note the user message needs to be escaped; htmx escapes by default.
     html! {
         div.message.message--user {
-            div.message__bubble.message__bubble--user {
-                p { (user_message) }
-            }
-            div.message__meta.message__meta--user {
-                span.message__time { (crate::datetime::ago(&timestamp)) }
-                button.message__edit-btn {
-                    svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                        path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7";
-                        path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z";
+            div.message__wrapper {
+                div.message__bubble.message__bubble--user {
+                    p { (user_message) }
+                }
+                div.message__meta.message__meta--user {
+                    span.message__time { (crate::datetime::ago(&timestamp)) }
+                    button.message__edit-btn {
+                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                            path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7";
+                            path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z";
+                        }
                     }
                 }
             }

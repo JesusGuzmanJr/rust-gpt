@@ -1,4 +1,4 @@
-use {ahash::AHashSet, bytesize::ByteSize};
+use bytesize::ByteSize;
 
 /// Basic information about a language model.
 #[derive(Debug)]

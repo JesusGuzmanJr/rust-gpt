@@ -3,8 +3,8 @@ use {
     maud::{Markup, html},
 };
 
-pub mod chat;
-pub mod not_found;
+pub(crate) mod chat;
+pub(crate) mod not_found;
 
 pub(crate) fn page(title: &str, content: Markup) -> impl IntoResponse {
     html_page(StatusCode::OK, title, content)
