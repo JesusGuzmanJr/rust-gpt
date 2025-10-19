@@ -92,7 +92,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                             div.chat-header__logo {
                                 span { "AI" }
                             }
-                            h1.chat-header__title { "AI Chat" }
+                            h1.chat-header__title { "New Chat" }
                         }
 
                         div.chat-header__right {
