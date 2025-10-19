@@ -15,6 +15,7 @@ anyhow.workspace = true
 axum = "0.8.6"
 axum-htmx = { version = "0.8.1", features = ["auto-vary"] }
 bytesize.workspace = true
+chrono.workspace = true
 const_format.workspace = true
 language_model = { path = "../language_model" }
 maud = { version = "0.27.0", features = ["axum"] }

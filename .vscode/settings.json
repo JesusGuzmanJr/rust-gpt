@@ -5,6 +5,7 @@
         "autoreload",
         "backpressure",
         "BBPE",
+        "beforeend",
         "bindgen",
         "browserlist",
         "bytesize",

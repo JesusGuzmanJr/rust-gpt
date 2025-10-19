@@ -11,6 +11,7 @@ use {
     tracing::*,
 };
 
+mod datetime;
 mod http;
 mod pages;
 

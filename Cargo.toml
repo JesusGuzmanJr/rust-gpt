@@ -26,8 +26,10 @@ unused_qualifications = "warn"
 [workspace.dependencies]
 anyhow = "1.0.99"
 bytesize = "2.1.0"
+chrono = "0.4.42"
 const_format = "0.2.34"
-futures = "0.3.31"
+derive_more = { version = "2.0.1", features = ["display", "from", "from_str"] }
+futures = "0.3.21"
 serde = { version = "1.0.219", features = ["derive"] }
 strum = { version = "0.27.2", features = ["derive"] }
 thiserror = "2.0.17"
@@ -35,3 +37,4 @@ thousands = "0.2.0"
 tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }

@@ -25,6 +25,7 @@ clap = { version = "4.5.49", features = ["derive"] }
 comrak = "0.44.0"
 crossbeam-channel = "0.5.15"
 ctrlc = "3.5.0"
+derive_more.workspace = true
 futures.workspace = true
 icu_normalizer = "2.0.0"
 indexmap = "2.11.4"
@@ -42,6 +43,7 @@ thousands.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+uuid.workspace = true
 xdg = "3.0.0"
 zstd = "0.13.3"
 

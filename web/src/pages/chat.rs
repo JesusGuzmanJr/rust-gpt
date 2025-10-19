@@ -6,7 +6,11 @@ use {
         routing::{get, post},
     },
     bytesize::ByteSize,
-    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
+    chrono::{DateTime, Utc},
+    language_model::{
+        message::UserMessage,
+        models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
+    },
     maud::{Markup, html},
     serde::Deserialize,
     strum::{Display, EnumIter, IntoEnumIterator},
@@ -203,7 +207,7 @@ pub(crate) async fn page() -> impl IntoResponse {
 
                             textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" {}
 
-                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages" hx-include="#message-input" {
+                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages" hx-include="#message-input" hx-swap="beforeend"{
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {
                                     path d="M5 12h14M12 5l7 7-7 7";
                                 }
@@ -246,7 +250,9 @@ pub(crate) fn api() -> Router {
                     }
 
                     async |Form(MessageQuery { message }): Form<MessageQuery>| {
-                        send_message(message).await.into_response()
+                        render_user_message(&UserMessage::new(message), Utc::now())
+                            .await
+                            .into_response()
                     }
                 }),
             ),
@@ -277,6 +283,22 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-async fn send_message(message: String) -> impl IntoResponse {
-    "".into_response()
+async fn render_user_message(user_message: &UserMessage, timestamp: DateTime<Utc>) -> Markup {
+    // Note the user message needs to be escaped; htmx escapes by default.
+    html! {
+        div.message.message--user {
+            div.message__bubble.message__bubble--user {
+                p { (user_message) }
+            }
+            div.message__meta.message__meta--user {
+                span.message__time { (crate::datetime::ago(&timestamp)) }
+                button.message__edit-btn {
+                    svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
+                        path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7";
+                        path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z";
+                    }
+                }
+            }
+        }
+    }
 }
