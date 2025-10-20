@@ -49,8 +49,8 @@ pub struct TokenizerTrainingConfig {
     /// A word should not be split across shard boundaries. The shards should
     /// not be modified during training.
     ///
-    /// Only *.zst files will be processed. The directory will not be walked
-    /// recursively.
+    /// Only *.zst files will be processed. The directory will be recursively
+    /// walked.
     pub input_dir: PathBuf,
 
     /// Path to save the tokenizer file.
