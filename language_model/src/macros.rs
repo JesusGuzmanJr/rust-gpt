@@ -1,6 +1,6 @@
 //! Helpful [declarative macros][1].
 //!
-//! Note that macros with `#[macro_export]`are exposed on the root of the
+//! Note that macros with `#[macro_export]`are exposed at the root of the
 //! create.
 //!
 //! [1]: <https://doc.rust-lang.org/book/ch20-05-macros.html#declarative-macros-with-macro_rules-for-general-metaprogramming>

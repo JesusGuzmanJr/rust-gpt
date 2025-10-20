@@ -3,6 +3,7 @@ use {
     axum_extra::extract::CookieJar,
     chrono_tz::Tz,
     icu::locale::Locale,
+    language_model::{chat::ThreadId, user::UserId},
 };
 
 /// 15 minutes public cache
@@ -17,7 +18,7 @@ pub(crate) const HTML_CONTENT_TYPE: (HeaderName, HeaderValue) = (
     HeaderValue::from_static("text/html; charset=utf-8"),
 );
 
-/// Helper function to get the user's locale from the cookies set by the
+/// Helper to get the user's locale from the cookies set by the
 /// frontend script.
 pub(crate) fn extract_locale(cookie_jar: &CookieJar) -> Locale {
     cookie_jar
@@ -28,13 +29,29 @@ pub(crate) fn extract_locale(cookie_jar: &CookieJar) -> Locale {
         .unwrap_or(icu::locale::locale!("en-US"))
 }
 
-/// Helper function to get the user's timezone from the cookies set by the
+/// Helper to get the user's timezone from the cookies set by the
 /// frontend script (chrono-tz format).
 pub(crate) fn extract_timezone(cookie_jar: &CookieJar) -> Tz {
     cookie_jar
         .get("timezone")
         .and_then(|cookie| cookie.value().parse().ok())
         .unwrap_or(chrono_tz::America::Los_Angeles)
+}
+
+/// Helper to get the current thread ID from the cookies.
+pub(crate) fn extract_thread_id(cookie_jar: &CookieJar) -> Option<ThreadId> {
+    cookie_jar
+        .get("chat_id")
+        .map(|cookie| cookie.value())
+        .and_then(|value| ThreadId::try_parse(value).ok())
+}
+
+/// Helper to get the current user ID from the cookies.
+pub(crate) fn extract_user_id(cookie_jar: &CookieJar) -> Option<UserId> {
+    cookie_jar
+        .get("user_id")
+        .map(|cookie| cookie.value())
+        .and_then(|value| UserId::try_parse(value).ok())
 }
 
 #[cfg(test)]

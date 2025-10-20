@@ -3,6 +3,7 @@ use {
     axum::{
         Form, Router,
         extract::Query,
+        http::StatusCode,
         response::IntoResponse,
         routing::{get, post},
     },
@@ -250,8 +251,24 @@ pub(crate) fn api() -> Router {
 
                     async |cookie_jar: CookieJar,
                            Form(MessageQuery { message }): Form<MessageQuery>| {
+                        let _user_id = match http::extract_user_id(&cookie_jar) {
+                            Some(user_id) => user_id,
+                            None => {
+                                return (StatusCode::BAD_REQUEST, "No user ID found")
+                                    .into_response();
+                            }
+                        };
+                        let user_message = UserMessage::new(message);
+                        let _thread_id = match http::extract_thread_id(&cookie_jar) {
+                            Some(thread_id) => thread_id,
+                            None => {
+                                return (StatusCode::BAD_REQUEST, "No thread ID found")
+                                    .into_response();
+                            }
+                        };
+
                         render_user_message(
-                            &UserMessage::new(message),
+                            &user_message,
                             Utc::now(),
                             &http::extract_locale(&cookie_jar),
                             &http::extract_timezone(&cookie_jar),

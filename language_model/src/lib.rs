@@ -1,7 +1,9 @@
+pub mod chat;
 mod macros;
 pub mod message;
 pub mod models;
 pub mod tokenization;
+pub mod user;
 pub mod utils;
 
 #[cfg(feature = "cuda")]
