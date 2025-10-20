@@ -258,13 +258,22 @@
   max-width: 80%;
 }
 
+.message--user .message__wrapper {
+  align-items: flex-end;
+}
+
+.message--system .message__wrapper {
+  align-items: flex-start;
+}
+
 .message__bubble {
   padding: 0.75rem 1rem;
   border-radius: 1rem;
+  width: fit-content;
 
   p {
     margin: 0;
-    line-height: 1.6;
+    line-height: 1.2;
     color: inherit;
   }
 }
@@ -288,11 +297,9 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.5rem;
+  width: fit-content;
 }
 
-.message__meta--user {
-  justify-content: flex-end;
-}
 
 .message__time {
   font-size: 0.75rem;
