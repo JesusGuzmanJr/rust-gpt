@@ -32,6 +32,7 @@
         "Karpathy",
         "leptos",
         "linecap",
+        "linejoin",
         "malloc",
         "memcpy",
         "minbpe",
