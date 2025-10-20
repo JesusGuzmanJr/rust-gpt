@@ -204,7 +204,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                                 }
                             }
 
-                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" {}
+                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-swap="beforeend" hx-trigger="keydown[key=='Enter' && !shiftKey]" {}
 
                             button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-include="#message-input" hx-swap="beforeend"{
                                 svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {

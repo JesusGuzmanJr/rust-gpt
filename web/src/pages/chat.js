@@ -124,5 +124,25 @@ document.addEventListener('DOMContentLoaded', () => {
         // Initial check
         updateSendButton();
         autoExpand();
+
+        // Clear textarea after successful message send
+        const clearInput = () => {
+            messageInput.value = '';
+            messageInput.style.height = '48px';
+            updateSendButton();
+        };
+
+        // Listen for htmx afterRequest event on both textarea and send button
+        messageInput.addEventListener('htmx:afterRequest', (event) => {
+            if (event.detail.successful) {
+                clearInput();
+            }
+        });
+
+        sendButton.addEventListener('htmx:afterRequest', (event) => {
+            if (event.detail.successful) {
+                clearInput();
+            }
+        });
     }
 });
