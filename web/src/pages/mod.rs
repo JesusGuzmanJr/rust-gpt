@@ -29,6 +29,14 @@ fn html_page(status_code: StatusCode, title: &str, content: Markup) -> impl Into
                     title { (title) };
                     link rel="stylesheet" href="style.css";
                     script src="htmx.min.js" {}
+                    script {
+                        (maud::PreEscaped(r#"
+                        (function() {
+                        document.cookie = `locale=${encodeURIComponent(navigator.language)}; path=/; SameSite=Strict`;
+                        document.cookie = `timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}; path=/; SameSite=Strict`;
+                        })();
+                        "#))
+                    }
                 }
                 body {
                     (content);

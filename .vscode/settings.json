@@ -17,9 +17,11 @@
         "cuda",
         "Cultura",
         "culturax",
+        "Datelike",
         "encod",
         "enwiki",
         "FEFF",
+        "fieldsets",
         "formatcp",
         "Halfaker's",
         "htmx",
@@ -29,6 +31,7 @@
         "Jurafsky",
         "Karpathy",
         "leptos",
+        "linecap",
         "malloc",
         "memcpy",
         "minbpe",
@@ -51,10 +54,12 @@
         "subwords",
         "thiserror",
         "tiktoken",
+        "Timelike",
         "vocabs",
         "watchexec",
         "Wikitext",
         "xxhash",
+        "YMDE",
         "Zstandard",
         "zstd",
         "zstdcat"
@@ -75,5 +80,13 @@
         "Cargo.lock",
         ".vscode"
     ],
-    "scss.lint.unknownAtRules": "ignore"
+    "scss.lint.unknownAtRules": "ignore",
+    "cSpell.customDictionaries": {
+        "custom-dictionary-workspace": {
+            "name": "custom-dictionary-workspace",
+            "path": "${workspaceFolder:rust-gpt}/.cspell/custom-dictionary-workspace.txt",
+            "addWords": true,
+            "scope": "workspace"
+        }
+    }
 }

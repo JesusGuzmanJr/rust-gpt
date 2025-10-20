@@ -1,11 +1,15 @@
 use {
+    crate::http,
     axum::{
         Form, Router,
         extract::Query,
         response::IntoResponse,
         routing::{get, post},
     },
+    axum_extra::extract::CookieJar,
     chrono::{DateTime, Utc},
+    chrono_tz::Tz,
+    icu::locale::Locale,
     language_model::{
         message::UserMessage,
         models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
@@ -16,7 +20,7 @@ use {
     thousands::Separable,
 };
 
-pub(crate) async fn page() -> impl IntoResponse {
+pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
     super::page(
         "Chat",
         html! {
@@ -128,7 +132,12 @@ pub(crate) async fn page() -> impl IntoResponse {
                             }
 
                             // User message
-                            (render_user_message(&UserMessage::new("I need help with my project."), Utc::now()))
+                            (render_user_message(
+                                &UserMessage::new("I need help with my project."),
+                                Utc::now(),
+                                &http::extract_locale(&cookie_jar),
+                                &http::extract_timezone(&cookie_jar),
+                            ))
 
                             // System message
                             div.message.message--system {
@@ -239,8 +248,15 @@ pub(crate) fn api() -> Router {
                         message: String,
                     }
 
-                    async |Form(MessageQuery { message }): Form<MessageQuery>| {
-                        render_user_message(&UserMessage::new(message), Utc::now()).into_response()
+                    async |cookie_jar: CookieJar,
+                           Form(MessageQuery { message }): Form<MessageQuery>| {
+                        render_user_message(
+                            &UserMessage::new(message),
+                            Utc::now(),
+                            &http::extract_locale(&cookie_jar),
+                            &http::extract_timezone(&cookie_jar),
+                        )
+                        .into_response()
                     }
                 }),
             ),
@@ -271,7 +287,12 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-fn render_user_message(user_message: &UserMessage, timestamp: DateTime<Utc>) -> Markup {
+fn render_user_message(
+    user_message: &UserMessage,
+    datetime: DateTime<Utc>,
+    locale: &Locale,
+    timezone: &Tz,
+) -> Markup {
     // Note the user message needs to be escaped; htmx escapes by default.
     html! {
         div.message.message--user {
@@ -280,13 +301,13 @@ fn render_user_message(user_message: &UserMessage, timestamp: DateTime<Utc>) -> 
                     p { (user_message) }
                 }
                 div.message__meta.message__meta--user {
-                    span.message__time { (crate::datetime::ago(&timestamp)) }
-                     button.message__edit-btn {
-                         svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                             path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z";
-                             path d="m15 5 4 4";
-                         }
-                     }
+                    span.message__time { (crate::datetime::today_implied_human_datetime(&datetime, &locale, &timezone)) }
+                    button.message__edit-btn {
+                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+                            path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z";
+                            path d="m15 5 4 4";
+                        }
+                    }
                 }
             }
         }

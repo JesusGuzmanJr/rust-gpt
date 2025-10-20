@@ -13,10 +13,13 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 axum = "0.8.6"
+axum-extra = { version = "0.10.3", features = ["cookie"] }
 axum-htmx = { version = "0.8.1", features = ["auto-vary"] }
 bytesize.workspace = true
 chrono.workspace = true
+chrono-tz = "0.10"
 const_format.workspace = true
+icu = "2.0.0"
 language_model = { path = "../language_model" }
 maud = { version = "0.27.0", features = ["axum"] }
 native_db = "0.8.2"
