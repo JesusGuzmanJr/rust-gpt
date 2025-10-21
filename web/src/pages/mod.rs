@@ -5,6 +5,8 @@ use {
 
 pub(crate) mod chat;
 pub(crate) mod not_found;
+pub(crate) mod signin;
+pub(crate) mod signup;
 
 /// Compiled and minified javascript.
 mod scripts {

@@ -32,6 +32,8 @@ async fn main() -> Result<()> {
         Router::new()
             .route("/", get(|| async { Redirect::to("/chat") }))
             .route("/chat", get(pages::chat::page))
+            .route("/signin", get(pages::signin::page))
+            .route("/signup", get(pages::signup::page))
             .route(
                 "/style.css",
                 get((
@@ -45,7 +47,13 @@ async fn main() -> Result<()> {
                     include_bytes!(concat!(env!("OUT_DIR"), "/style.css")),
                 )),
             )
-            .nest("/api", Router::new().merge(pages::chat::api()))
+            .nest(
+                "/api",
+                Router::new()
+                    .merge(pages::chat::api())
+                    .merge(pages::signin::api())
+                    .merge(pages::signup::api()),
+            )
             .fallback_service(
                 ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets")).fallback(service_fn(
                     |_| async move {
