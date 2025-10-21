@@ -6,6 +6,11 @@ use {
 pub(crate) mod chat;
 pub(crate) mod not_found;
 
+/// Compiled and minified javascript.
+mod scripts {
+    include!(concat!(env!("OUT_DIR"), "/scripts.rs"));
+}
+
 pub(crate) fn page(title: &str, content: Markup) -> impl IntoResponse {
     html_page(StatusCode::OK, title, content)
 }
@@ -29,14 +34,7 @@ fn html_page(status_code: StatusCode, title: &str, content: Markup) -> impl Into
                     title { (title) };
                     link rel="stylesheet" href="style.css";
                     script src="htmx.min.js" {}
-                    script {
-                        (maud::PreEscaped(r#"
-                        (function() {
-                        document.cookie = `locale=${encodeURIComponent(navigator.language)}; path=/; SameSite=Strict`;
-                        document.cookie = `timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}; path=/; SameSite=Strict`;
-                        })();
-                        "#))
-                    }
+                    (scripts::main_script())
                 }
                 body {
                     (content);

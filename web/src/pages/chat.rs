@@ -216,8 +216,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                     }
                 }
             }
-            script {(maud::PreEscaped(include_str!("chat.js")))
-            }
+            (super::scripts::chat_script())
         },
     )
 }

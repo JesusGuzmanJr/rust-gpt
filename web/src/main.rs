@@ -42,12 +42,12 @@ async fn main() -> Result<()> {
                         ),
                         http::CACHE_PUBLICLY_15_MIN,
                     ],
-                    include_bytes!("../../target/style.css"),
+                    include_bytes!(concat!(env!("OUT_DIR"), "/style.css")),
                 )),
             )
             .nest("/api", Router::new().merge(pages::chat::api()))
             .fallback_service(
-                ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/public")).fallback(service_fn(
+                ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets")).fallback(service_fn(
                     |_| async move {
                         Ok::<Response, std::convert::Infallible>(
                             pages::not_found::page().into_response(),
