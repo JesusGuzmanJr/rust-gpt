@@ -32,8 +32,10 @@ async fn main() -> Result<()> {
         Router::new()
             .route("/", get(|| async { Redirect::to("/chat") }))
             .route("/chat", get(pages::chat::page))
+            .route("/privacy", get(pages::privacy::page))
             .route("/signin", get(pages::signin::page))
             .route("/signup", get(pages::signup::page))
+            .route("/terms", get(pages::terms::page))
             .route(
                 "/style.css",
                 get((
