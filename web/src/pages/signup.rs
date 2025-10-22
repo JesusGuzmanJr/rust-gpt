@@ -1,5 +1,5 @@
 use {
-    crate::user::{EmailAddress, Name, Password},
+    crate::user::{EmailAddress, Name, Password, User},
     axum::{
         Form, Router,
         http::StatusCode,
@@ -25,7 +25,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                             span.auth-logo__text { "AI" }
                         }
                         h1.auth-title { "Create Account" }
-                        p.auth-subtitle { "Sign up to get started with AI Chat" }
+                        p.auth-subtitle { "Sign up to get started with RustGPT" }
                     }
 
                     form.auth-form method="post" action="/api/signup" {
@@ -159,10 +159,8 @@ pub(crate) fn api() -> Router {
                    })): Garde<Form<SignUpForm>>| {
                 debug!(%name, %email, "sign up");
 
-                if password != confirm_password {
-                    return (StatusCode::BAD_REQUEST, "Passwords do not match").into_response();
-                }
-
+                // create user with async fn; error should be enum to handle unique constraint
+                // violations
                 Redirect::to("/chat").into_response()
             }
         }),

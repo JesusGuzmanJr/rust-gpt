@@ -12,6 +12,7 @@ use {
 };
 
 mod chat;
+mod database;
 mod datetime;
 mod http;
 mod pages;
@@ -23,6 +24,10 @@ const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
+
+    database::init(std::path::Path::new("../target/web.db"))?;
+
+    let rw = database::db().rw_transaction()?;
 
     let bind_address = "127.0.0.1:3000";
 
