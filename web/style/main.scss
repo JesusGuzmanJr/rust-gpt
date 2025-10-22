@@ -12,6 +12,9 @@
   --text-tertiary: #9ca3af;
   --text-inverse: #ffffff;
 
+  --icon-color: #9ca3af;
+  --icon-opacity: 1;
+
   --border-primary: #e5e7eb;
   --border-secondary: #d1d5db;
 
@@ -46,6 +49,9 @@
     --text-secondary: rgba(255, 255, 255, 0.6);
     --text-tertiary: rgba(255, 255, 255, 0.4);
     --text-inverse: #0d1218;
+
+    --icon-color: rgb(255, 255, 255);
+    --icon-opacity: 0.4;
 
     --border-primary: rgba(255, 255, 255, 0.1);
     --border-secondary: rgba(255, 255, 255, 0.15);

@@ -74,9 +74,20 @@
 .input-icon {
   position: absolute;
   left: 1rem;
-  color: var(--text-tertiary);
   pointer-events: none;
-  transition: color 0.2s ease;
+  transition: opacity 0.2s ease;
+  color: var(--icon-color);
+  opacity: var(--icon-opacity);
+
+  svg {
+    display: block;
+
+    // Ensure all stroke elements use fully opaque color
+    * {
+      stroke: currentColor;
+      opacity: 1;
+    }
+  }
 }
 
 .form-input {
