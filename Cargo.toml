@@ -1,5 +1,5 @@
 [workspace]
-members = ["web", "language_model"]
+members = ["common", "language_model", "web"]
 resolver = "3"
 
 [workspace.package]
@@ -38,3 +38,4 @@ tokio = { version = "1.48.0", features = ["rt-multi-thread"] }
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 uuid = { version = "1.18.1", features = ["v4", "fast-rng", "serde"] }
+zeroize = { version = "1.8.2", features = ["zeroize_derive"] }

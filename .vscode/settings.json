@@ -63,9 +63,11 @@
         "Wikitext",
         "xxhash",
         "YMDE",
+        "zeroize",
         "Zstandard",
         "zstd",
-        "zstdcat"
+        "zstdcat",
+        "zxcvbn"
     ],
     "editor.formatOnPaste": true,
     "editor.formatOnSave": true,

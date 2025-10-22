@@ -1,4 +1,5 @@
 use {
+    crate::user::{EmailAddress, Name, Password},
     axum::{
         Form, Router,
         http::StatusCode,
@@ -6,8 +7,11 @@ use {
         routing::post,
     },
     axum_extra::extract::CookieJar,
+    axum_valid::Garde,
+    garde::{Validate, util::nested_path},
     maud::html,
     serde::Deserialize,
+    tracing::debug,
 };
 
 pub(crate) async fn page() -> impl IntoResponse {
@@ -24,7 +28,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         p.auth-subtitle { "Sign up to get started with AI Chat" }
                     }
 
-                    form.auth-form method="post" action="/api/auth/signup" {
+                    form.auth-form method="post" action="/api/signup" {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
@@ -108,55 +112,56 @@ pub(crate) fn api() -> Router {
         post({
             #[derive(Debug, Deserialize)]
             struct SignUpForm {
-                name: String,
-                email: String,
-                password: String,
-                confirm_password: String,
-                terms: Option<String>,
+                name: Name,
+                email: EmailAddress,
+                password: Password,
+                confirm_password: Password,
+            }
+
+            impl Validate for SignUpForm {
+                type Context = ();
+
+                fn validate_into(
+                    &self,
+                    ctx: &Self::Context,
+                    mut parent: &mut dyn FnMut() -> garde::Path,
+                    report: &mut garde::Report,
+                ) {
+                    self.name
+                        .validate_into(ctx, &mut nested_path!(parent, "name"), report);
+                    self.email
+                        .validate_into(ctx, &mut nested_path!(parent, "email"), report);
+
+                    if self.password != self.confirm_password {
+                        report.append(
+                            nested_path!(parent, "confirm_password")(),
+                            garde::Error::new("Passwords do not match"),
+                        );
+                    }
+
+                    self.password.validate_into(
+                        &crate::user::PasswordValidationContext {
+                            email: self.email.clone(),
+                            name: self.name.clone(),
+                        },
+                        &mut nested_path!(parent, "password"),
+                        report,
+                    );
+                }
             }
 
             async |_cookie_jar: CookieJar,
-                   Form(SignUpForm {
+                   Garde(Form(SignUpForm {
                        name,
                        email,
                        password,
                        confirm_password,
-                       terms,
-                   }): Form<SignUpForm>| {
-                // TODO: Implement actual registration logic
-                // For now, this is a placeholder
-
-                // Validate inputs
-                if name.is_empty() || email.is_empty() || password.is_empty() {
-                    return (StatusCode::BAD_REQUEST, "All fields are required").into_response();
-                }
+                   })): Garde<Form<SignUpForm>>| {
+                debug!(%name, %email, "sign up");
 
                 if password != confirm_password {
                     return (StatusCode::BAD_REQUEST, "Passwords do not match").into_response();
                 }
-
-                if password.len() < 8 {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        "Password must be at least 8 characters",
-                    )
-                        .into_response();
-                }
-
-                if terms.is_none() {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        "You must agree to the terms of service",
-                    )
-                        .into_response();
-                }
-
-                // Create user account (placeholder)
-                // let user_id = create_user(&name, &email, &password)?;
-
-                // Set user session cookies
-                // let cookie_jar = http::set_user_id(cookie_jar, user_id);
-                // let cookie_jar = http::set_thread_id(cookie_jar, thread_id);
 
                 Redirect::to("/chat").into_response()
             }

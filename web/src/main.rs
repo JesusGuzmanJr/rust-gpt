@@ -11,9 +11,11 @@ use {
     tracing::*,
 };
 
+mod chat;
 mod datetime;
 mod http;
 mod pages;
+mod user;
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];

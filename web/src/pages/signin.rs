@@ -24,7 +24,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         p.auth-subtitle { "Sign in to continue to your account" }
                     }
 
-                    form.auth-form method="post" action="/api/auth/signin" {
+                    form.auth-form method="post" action="/api/signin" {
                         div.form-group {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
