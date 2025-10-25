@@ -86,13 +86,11 @@ pub(crate) async fn init(config: MailerConfig) -> Result<()> {
 }
 
 fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
-    let builder = SmtpTransport::relay(&config.host)
+    Ok(SmtpTransport::starttls_relay(&config.host)
         .context("invalid SMTP host")?
         .pool_config(PoolConfig::default().min_idle(MIN_IDLE_CONNECTIONS))
         .timeout(Some(CONNECTION_TIMEOUT))
-        .port(config.port);
-
-    Ok(builder
+        .port(config.port)
         .credentials(lettre::transport::smtp::authentication::Credentials::new(
             config.username.0,
             config.password.0.clone(),

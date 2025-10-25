@@ -54,6 +54,7 @@
         "rustls",
         "serde",
         "smallvec",
+        "starttls",
         "stylesheet",
         "subword",
         "subwords",
