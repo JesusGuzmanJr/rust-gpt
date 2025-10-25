@@ -1,5 +1,7 @@
 use {axum::response::IntoResponse, maud::html};
 
+pub(crate) const PATH: &str = "/privacy";
+
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Privacy Policy",

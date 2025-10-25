@@ -1,10 +1,10 @@
 use {
-    crate::http,
+    crate::{error::AppResult, http},
     axum::{
         Form, Router,
         extract::Query,
         http::StatusCode,
-        response::IntoResponse,
+        response::{IntoResponse, Redirect},
         routing::{get, post},
     },
     axum_extra::extract::CookieJar,
@@ -20,6 +20,8 @@ use {
     strum::{Display, EnumIter, IntoEnumIterator},
     thousands::Separable,
 };
+
+pub(crate) const PATH: &str = "/chat";
 
 pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
     super::page(
@@ -118,7 +120,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
 
                                         div.dropdown-separator {}
 
-                                        a.dropdown-item href="/api/signout" {
+                                        a.dropdown-item href="/api/chat/sign-out" {
                                             span { "Sign out" }
                                         }
                                     }
@@ -243,7 +245,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
 
 pub(crate) fn api() -> Router {
     Router::new().nest(
-        "/chat",
+        PATH,
         Router::new()
             .route(
                 "/models",
@@ -293,6 +295,17 @@ pub(crate) fn api() -> Router {
                             &http::extract_timezone(&cookie_jar),
                         )
                         .into_response()
+                    }
+                }),
+            )
+            .route(
+                "/sign-out",
+                get({
+                    async |cookie_jar: CookieJar| {
+                        AppResult::Ok((
+                            crate::auth::remove_auth_cookie(cookie_jar)?,
+                            Redirect::to(PATH),
+                        ))
                     }
                 }),
             ),

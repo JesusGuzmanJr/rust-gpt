@@ -10,6 +10,8 @@ use {
     serde::Deserialize,
 };
 
+pub(crate) const PATH: &str = "/signin";
+
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Sign In",

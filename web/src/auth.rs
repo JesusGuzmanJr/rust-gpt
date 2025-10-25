@@ -65,6 +65,8 @@ pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Resu
     cookie.set_http_only(true);
     cookie.set_max_age(time::Duration::seconds(SESSION_DURATION.num_seconds()));
 
+    dbg!(&cookie);
+
     Ok(cookie_jar.add(cookie))
 }
 

@@ -37,12 +37,12 @@ async fn main() -> Result<()> {
     axum::serve(
         listener,
         Router::new()
-            .route("/", get(|| async { Redirect::to("/chat") }))
-            .route("/chat", get(pages::chat::page))
-            .route("/privacy", get(pages::privacy::page))
-            .route("/signin", get(pages::signin::page))
-            .route("/signup", get(pages::signup::page))
-            .route("/terms", get(pages::terms::page))
+            .route("/", get(|| async { Redirect::to(pages::chat::PATH) }))
+            .route(pages::chat::PATH, get(pages::chat::page))
+            .route(pages::privacy::PATH, get(pages::privacy::page))
+            .route(pages::signin::PATH, get(pages::signin::page))
+            .route(pages::signup::PATH, get(pages::signup::page))
+            .route(pages::terms::PATH, get(pages::terms::page))
             .route(
                 "/style.css",
                 get((

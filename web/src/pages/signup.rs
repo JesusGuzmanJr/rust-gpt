@@ -16,6 +16,8 @@ use {
     tracing::*,
 };
 
+pub(crate) const PATH: &str = "/signup";
+
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Sign Up",
@@ -164,10 +166,8 @@ pub(crate) fn api() -> Router {
                 let user_id = user.id;
                 user.save()?;
                 AppResult::Ok((
-                    // the updated jar must be returned for the changes to be included in the
-                    // response
                     crate::auth::create_auth_cookie(cookie_jar, user_id)?,
-                    Redirect::to("/chat"),
+                    Redirect::to(crate::pages::chat::PATH),
                 ))
             }
         }),
