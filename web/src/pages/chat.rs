@@ -24,6 +24,9 @@ use {
 pub(crate) const PATH: &str = "/chat";
 
 pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
+    dbg!(&cookie_jar);
+    let user_id = crate::auth::get_auth_user(&cookie_jar);
+    dbg!(&user_id);
     super::page(
         "Chat",
         html! {
@@ -302,10 +305,10 @@ pub(crate) fn api() -> Router {
                 "/sign-out",
                 get({
                     async |cookie_jar: CookieJar| {
-                        AppResult::Ok((
-                            crate::auth::remove_auth_cookie(cookie_jar)?,
+                        (
+                            crate::auth::remove_auth_cookie(cookie_jar),
                             Redirect::to(PATH),
-                        ))
+                        )
                     }
                 }),
             ),

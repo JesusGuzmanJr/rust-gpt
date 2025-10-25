@@ -1,12 +1,12 @@
 use {
     crate::user::UserId,
-    anyhow::Result,
+    anyhow::{Context, Result},
     axum_extra::extract::{CookieJar, cookie::Cookie},
     base64::{
         Engine,
-        engine::general_purpose::{GeneralPurpose, GeneralPurposeConfig},
+        engine::general_purpose::{GeneralPurpose, NO_PAD},
     },
-    blake3::KEY_LEN,
+    blake3::{Hash, KEY_LEN},
     chrono::{DateTime, Duration, Utc},
     common::bincode,
     serde::{Deserialize, Serialize},
@@ -16,10 +16,7 @@ use {
 const SESSION_DURATION: Duration = Duration::days(30);
 const COOKIE_NAME: &str = "auth";
 
-const BASE_64: GeneralPurpose = GeneralPurpose::new(
-    &base64::alphabet::URL_SAFE,
-    GeneralPurposeConfig::new().with_encode_padding(false),
-);
+const BASE_64: GeneralPurpose = GeneralPurpose::new(&base64::alphabet::URL_SAFE, NO_PAD);
 
 static KEY: OnceLock<[u8; KEY_LEN]> = OnceLock::new();
 
@@ -52,26 +49,65 @@ pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Resu
         create_at: Utc::now(),
     };
 
-    let mut cookie = Cookie::new(
-        COOKIE_NAME,
-        BASE_64.encode(bincode::serialize(&Container {
-            signature: *blake3::keyed_hash(key(), &bincode::serialize(&session)?).as_bytes(),
-            session,
-        })?),
-    );
+    let cookie = BASE_64.encode(bincode::serialize(&Container {
+        signature: *blake3::keyed_hash(
+            key(),
+            &bincode::serialize(&session).context("unable to serialize session")?,
+        )
+        .as_bytes(),
+        session,
+    })?);
 
-    cookie.set_secure(true);
+    dbg!(&cookie);
+
+    let mut cookie = Cookie::new(COOKIE_NAME, cookie);
+
+    // cookie.set_secure(true);
     cookie.set_same_site(axum_extra::extract::cookie::SameSite::Strict);
     cookie.set_http_only(true);
     cookie.set_max_age(time::Duration::seconds(SESSION_DURATION.num_seconds()));
+    cookie.set_secure(!cfg!(debug_assertions));
+    cookie.set_path("/");
 
     dbg!(&cookie);
 
     Ok(cookie_jar.add(cookie))
 }
 
-pub(crate) fn remove_auth_cookie(cookie_jar: CookieJar) -> Result<CookieJar> {
+pub(crate) fn remove_auth_cookie(cookie_jar: CookieJar) -> CookieJar {
     let mut cookie = Cookie::new(COOKIE_NAME, "");
+    cookie.set_same_site(axum_extra::extract::cookie::SameSite::Strict);
+    cookie.set_path("/");
     cookie.set_max_age(Some(time::Duration::seconds(0)));
-    Ok(cookie_jar.add(cookie))
+    cookie_jar.add(cookie)
+}
+
+pub(crate) fn get_auth_user(cookie_jar: &CookieJar) -> Result<Option<UserId>> {
+    let cookie = match cookie_jar.get(COOKIE_NAME) {
+        None => return Ok(None),
+        Some(cookie) => cookie,
+    };
+    dbg!(&cookie.value());
+    let Container { signature, session } = bincode::deserialize::<Container>(
+        &BASE_64
+            .decode(cookie.value())
+            .context("unable to base64 decode cookie value")?,
+    )?;
+
+    if Hash::from(signature)
+        != blake3::keyed_hash(
+            key(),
+            &bincode::serialize(&session).context("unable to serialize session")?,
+        )
+    {
+        tracing::warn!("invalid auth signature");
+        return Ok(None);
+    }
+
+    if Utc::now() - session.create_at > SESSION_DURATION {
+        tracing::warn!("auth session expired");
+        return Ok(None);
+    }
+
+    Ok(Some(session.user_id))
 }
