@@ -11,8 +11,9 @@ use {
     },
     blake3::{Hash, KEY_LEN},
     chrono::{DateTime, Duration, Utc},
-    common::bincode,
-    serde::{Deserialize, Serialize},
+    common::{bincode, key_type},
+    hex::FromHex,
+    serde::{Deserialize, Deserializer, Serialize},
     std::sync::OnceLock,
 };
 
@@ -25,13 +26,35 @@ static KEY: OnceLock<[u8; KEY_LEN]> = OnceLock::new();
 
 /// Initialize the Blake3 key.
 #[deny(dead_code)]
-pub(crate) fn init(key: [u8; KEY_LEN]) {
-    KEY.set(key).expect("already initialized");
+pub(crate) fn init(config: AuthConfig) {
+    KEY.set(config.blake3_key).expect("already initialized");
 }
 
 #[inline]
 fn key() -> &'static [u8; KEY_LEN] {
     KEY.get().expect("not initialized")
+}
+
+key_type!(Blake3HexKey);
+
+/// The SMTP server configuration.
+#[derive(Debug, Deserialize)]
+pub(crate) struct AuthConfig {
+    #[serde(deserialize_with = "deserialize_blake3_key")]
+    blake3_key: [u8; KEY_LEN],
+}
+
+fn deserialize_blake3_key<'de, D>(deserializer: D) -> Result<[u8; KEY_LEN], D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let hex_key = Blake3HexKey::deserialize(deserializer)?;
+
+    let key = <[u8; KEY_LEN]>::from_hex(&hex_key.0)
+        .context("failed to decode blake3_key")
+        .map_err(serde::de::Error::custom)?;
+
+    Ok(key)
 }
 
 #[derive(Serialize, Deserialize)]

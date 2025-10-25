@@ -15,11 +15,13 @@ use {
 
 mod auth;
 mod chat;
-mod database;
+mod config;
 mod datetime;
 mod error;
 mod http;
+mod mailer;
 mod pages;
+mod persistence;
 mod svg;
 mod user;
 
@@ -33,8 +35,11 @@ const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
 
-    auth::init([0u8; blake3::KEY_LEN]);
-    database::init(std::path::Path::new("../target/web.db"))?;
+    let config = config::AppConfig::from_config_path()?;
+
+    auth::init(config.auth);
+    persistence::init(&config.persistence)?;
+    mailer::init(config.mailer).await?;
 
     let bind_address = "127.0.0.1:3000";
     let listener = tokio::net::TcpListener::bind(bind_address).await?;

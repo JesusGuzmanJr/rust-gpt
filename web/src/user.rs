@@ -1,7 +1,7 @@
 use {
     crate::{
-        database::db,
         error::{AppError, AppResult},
+        persistence::db,
     },
     anyhow::{Context, Result},
     argon2::Argon2,

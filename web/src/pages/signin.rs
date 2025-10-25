@@ -93,8 +93,10 @@ pub(crate) fn api() -> Router {
                    Garde(Form(SignInForm {
                        email,
                        password,
-                       remember: _remember,
+                       remember,
                    })): Garde<Form<SignInForm>>| {
+                let remember = remember.is_some();
+                dbg!(&email, &password, &remember);
                 // TODO: Implement actual authentication logic
                 // For now, this is a placeholder
 
