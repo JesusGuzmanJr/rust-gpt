@@ -200,6 +200,10 @@
   gap: 0.75rem;
 }
 
+.user-dropdown {
+  position: relative;
+}
+
 .chat-header__user-btn {
   padding: 0.5rem 1rem;
   font-size: 0.875rem;
@@ -222,6 +226,82 @@
     background: var(--overlay-medium);
     border-color: var(--border-secondary);
   }
+}
+
+.dropdown-content {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  width: 14rem;
+  padding-top: 0.5rem;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  z-index: 50;
+  pointer-events: none;
+
+  .user-dropdown:hover & {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+.dropdown-inner {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow-lg);
+  padding: 0.5rem;
+}
+
+.dropdown-label {
+  padding: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.dropdown-separator {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 0.5rem 0;
+}
+
+.dropdown-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  text-decoration: none;
+  color: var(--text-primary);
+
+  &:hover:not(&--disabled) {
+    background: var(--overlay-light);
+  }
+
+  &--disabled {
+    cursor: default;
+  }
+
+  span {
+    font-size: 0.875rem;
+  }
+}
+
+.dropdown-item__label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+}
+
+.dropdown-item__value {
+  font-family: monospace;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 // Messages

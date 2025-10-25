@@ -101,8 +101,28 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                         }
 
                         div.chat-header__right {
-                            button.chat-header__user-btn {
-                                span { "user@example.com" }
+                            div.user-dropdown {
+                                button.chat-header__user-btn id="user-menu-btn" {
+                                    span { "Jesus Guzman, Jr." }
+                                }
+
+                                div.dropdown-content id="user-dropdown" {
+                                    div.dropdown-inner {
+                                        div.dropdown-label { "jesus@email.com" }
+                                        div.dropdown-separator {}
+
+                                        div.dropdown-item.dropdown-item--disabled {
+                                            div.dropdown-item__label { "Tokens Used" }
+                                            div.dropdown-item__value { "12,450" }
+                                        }
+
+                                        div.dropdown-separator {}
+
+                                        a.dropdown-item href="/api/signout" {
+                                            span { "Sign out" }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
