@@ -1,5 +1,5 @@
 use {
-    anyhow::Result,
+    anyhow::{Context, Result},
     axum::{
         Router,
         http::{HeaderName, HeaderValue, header},
@@ -7,6 +7,7 @@ use {
         routing::get,
     },
     bytesize::ByteSize,
+    std::thread,
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
     tracing::*,
@@ -84,7 +85,28 @@ async fn main() -> Result<()> {
             .layer(axum_htmx::AutoVaryLayer)
             .layer(axum::extract::DefaultBodyLimit::max(
                 MAX_REQUEST_BODY_SIZE.as_u64() as _,
-            )),
+            ))
+            .layer(tower_governor::GovernorLayer::new({
+                // Allow bursts with up to ten requests per IP address
+                // and replenishes one element every two seconds
+                let governor_config = tower_governor::governor::GovernorConfigBuilder::default()
+                    .per_second(3)
+                    .burst_size(10)
+                    .finish()
+                    .context("invalid rate limiting governor configuration")?;
+
+                let governor_limiter = governor_config.limiter().clone();
+
+                thread::spawn(move || {
+                    loop {
+                        thread::sleep(std::time::Duration::from_secs(20));
+                        governor_limiter.retain_recent();
+                    }
+                });
+
+                governor_config
+            }))
+            .into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await?;
     Ok(())

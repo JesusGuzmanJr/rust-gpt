@@ -51,6 +51,7 @@ uuid.workspace = true
 wasm-bindgen = "0.2.93"
 zeroize.workspace = true
 zxcvbn = "3.1.0"
+tower_governor = { version = "0.8.0", features = ["axum", "tracing"] }
 
 [build-dependencies]
 oxc = { version = "0.95.0", features = ["full"] }
