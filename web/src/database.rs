@@ -12,6 +12,7 @@ pub(crate) fn db() -> &'static Database<'static> {
     DB.get().expect("db not initialized")
 }
 
+#[deny(dead_code)]
 pub(super) fn init(path: &Path) -> Result<()> {
     let mut models = Models::new();
     crate::user::define(&mut models)?;

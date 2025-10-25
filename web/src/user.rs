@@ -1,4 +1,5 @@
 use {
+    crate::error::{AppError, AppResult},
     anyhow::{Context, Result},
     argon2::Argon2,
     chrono::{DateTime, Utc},
@@ -72,24 +73,36 @@ impl ToKey for UserId {
     }
 }
 
-pub(crate) type User = v1::User;
+impl ToKey for EmailAddress {
+    fn to_key(&self) -> Key {
+        Key::new(self.0.as_bytes().to_vec())
+    }
 
-mod v1 {
+    fn key_names() -> Vec<String> {
+        vec!["EmailAddress".to_string()]
+    }
+}
+
+pub(crate) type User = v1::User;
+pub(crate) type UserKey = v1::UserKey;
+
+pub(crate) mod v1 {
     use super::*;
 
     /// A user of the application.
     #[derive(Debug, Serialize, Deserialize)]
-    #[native_model(id = 1, version = 1)]
+    #[native_model(id = 1, version = 1, with = native_model::bincode_2::Bincode)]
     #[native_db]
-    pub(super) struct User {
+    pub(crate) struct User {
         #[primary_key]
-        pub(super) id: UserId,
-        pub(super) name: Name,
-        pub(super) email: EmailAddress,
+        pub(crate) id: UserId,
+        pub(crate) name: Name,
+        #[secondary_key(unique)]
+        pub(crate) email: EmailAddress,
         pub(super) hash: [u8; HASH_LEN],
         pub(super) salt: [u8; SALT_LEN],
-        pub(super) created_at: DateTime<Utc>,
-        pub(super) updated_at: DateTime<Utc>,
+        pub(crate) created_at: DateTime<Utc>,
+        pub(crate) updated_at: DateTime<Utc>,
     }
 }
 
@@ -100,7 +113,7 @@ pub(crate) fn define(models: &mut Models) -> Result<()> {
 }
 
 impl User {
-    pub(crate) fn new(name: Name, email: EmailAddress, password: Password) -> Result<Self> {
+    pub(crate) fn new(name: Name, email: EmailAddress, password: Password) -> AppResult<Self> {
         let mut salt = [0u8; SALT_LEN];
         rand::fill(&mut salt);
 
@@ -118,6 +131,27 @@ impl User {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
+    }
+
+    pub(crate) fn save(self) -> AppResult<()> {
+        let rw = crate::database::db()
+            .rw_transaction()
+            .context("failed to create rw transaction")?;
+        match rw.insert(self) {
+            Ok(()) => Ok(()),
+            Err(native_db::db_type::Error::DuplicateKey { key_name: _ }) => {
+                // ignore the key_name, it's just "email"
+                Err(AppError::DuplicateEmail)
+            }
+            Err(error) => Err(AppError::InternalServerError(error.into())),
+        }
+    }
+
+    pub(crate) fn find_by_email(email: &EmailAddress) -> Result<Option<Self>> {
+        let r = crate::database::db().r_transaction()?;
+        r.get()
+            .secondary(UserKey::email, email.to_key())
+            .map_err(Into::into)
     }
 
     pub(crate) fn verify_password(&self, password: &Password) -> Result<bool> {

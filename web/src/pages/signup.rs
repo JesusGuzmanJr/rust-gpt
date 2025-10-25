@@ -1,17 +1,19 @@
 use {
-    crate::user::{EmailAddress, Name, Password, User},
+    crate::{
+        error::AppResult,
+        user::{EmailAddress, Name, Password, User},
+    },
     axum::{
         Form, Router,
-        http::StatusCode,
         response::{IntoResponse, Redirect},
         routing::post,
     },
-    axum_extra::extract::CookieJar,
+    axum_extra::extract::{CookieJar, cookie::Cookie},
     axum_valid::Garde,
     garde::{Validate, util::nested_path},
     maud::html,
     serde::Deserialize,
-    tracing::debug,
+    tracing::*,
 };
 
 pub(crate) async fn page() -> impl IntoResponse {
@@ -150,18 +152,23 @@ pub(crate) fn api() -> Router {
                 }
             }
 
-            async |_cookie_jar: CookieJar,
+            async |cookie_jar: CookieJar,
                    Garde(Form(SignUpForm {
                        name,
                        email,
                        password,
-                       confirm_password,
+                       confirm_password: _,
                    })): Garde<Form<SignUpForm>>| {
-                debug!(%name, %email, "sign up");
-
-                // create user with async fn; error should be enum to handle unique constraint
-                // violations
-                Redirect::to("/chat").into_response()
+                info!(%name, %email, "sign up");
+                let user = User::new(name, email, password)?;
+                let user_id = user.id;
+                user.save()?;
+                AppResult::Ok((
+                    // the updated jar must be returned for the changes to be included in the
+                    // response
+                    crate::auth::create_auth_cookie(cookie_jar, user_id)?,
+                    Redirect::to("/chat"),
+                ))
             }
         }),
     )
