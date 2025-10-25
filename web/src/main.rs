@@ -18,6 +18,7 @@ mod datetime;
 mod error;
 mod http;
 mod pages;
+mod svg;
 mod user;
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =

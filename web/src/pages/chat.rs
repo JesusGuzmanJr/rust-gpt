@@ -1,5 +1,5 @@
 use {
-    crate::{error::AppResult, http},
+    crate::{error::AppResult, http, svg},
     axum::{
         Form, Router,
         extract::Query,
@@ -35,9 +35,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                 aside.chat-sidebar {
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn {
-                            svg.icon width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                path d="M12 5v14M5 12h14";
-                            }
+                            (svg::plus(16, 16))
                             span { "New Chat" }
                         }
                     }
@@ -46,9 +44,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                         div.chat-item.chat-item--active {
                             div.chat-item__content {
                                 div.chat-item__header {
-                                    svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                        path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z";
-                                    }
+                                    (svg::chat_bubble(16, 16))
                                     span.chat-item__title { "Project Help" }
                                     span.chat-item__time { "1h ago" }
                                 }
@@ -59,9 +55,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                         div.chat-item {
                             div.chat-item__content {
                                 div.chat-item__header {
-                                    svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                        path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z";
-                                    }
+                                    (svg::chat_bubble(16, 16))
                                     span.chat-item__title { "Code Review" }
                                     span.chat-item__time { "2h ago" }
                                 }
@@ -72,9 +66,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                         div.chat-item {
                             div.chat-item__content {
                                 div.chat-item__header {
-                                    svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                        path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z";
-                                    }
+                                    (svg::chat_bubble(16, 16))
                                     span.chat-item__title { "Design Feedback" }
                                     span.chat-item__time { "1d ago" }
                                 }
@@ -85,10 +77,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
 
                     div.chat-sidebar__footer {
                         a.chat-sidebar__link href="/about" {
-                            svg.icon.icon--xs width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                circle cx="12" cy="12" r="10";
-                                path d="M12 16v-4M12 8h.01";
-                            }
+                            (svg::info_circle(12, 12))
                             span { "About" }
                         }
                     }
@@ -144,14 +133,10 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                                     div.message__meta {
                                         span.message__time { "2:30 PM" }
                                         button.message__feedback-btn {
-                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                                path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
-                                            }
+                                            (svg::thumbs_up(16, 16))
                                         }
                                         button.message__feedback-btn {
-                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                                path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
-                                            }
+                                            (svg::thumbs_down(16, 16))
                                         }
                                     }
                                 }
@@ -174,14 +159,10 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                                     div.message__meta {
                                         span.message__time { "2:31 PM" }
                                         button.message__feedback-btn {
-                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                                path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3";
-                                            }
+                                            (svg::thumbs_up(16, 16))
                                         }
                                         button.message__feedback-btn {
-                                            svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                                path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17";
-                                            }
+                                            (svg::thumbs_down(16, 16))
                                         }
                                     }
                                 }
@@ -194,10 +175,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                         div.chat-input__inner {
                             div.settings-popover {
                                 button.chat-input__settings-btn id="settings-btn" {
-                                    svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                        path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" {}
-                                        circle cx="12" cy="12" r="3" {}
-                                    }
+                                    (svg::settings(20, 20))
                                 }
 
                                 div.popover-content id="settings-popover" {
@@ -233,9 +211,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
                             textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-swap="beforeend" hx-trigger="keydown[key=='Enter' && !shiftKey]" {}
 
                             button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-include="#message-input" hx-swap="beforeend"{
-                                svg.icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" {
-                                    path d="M5 12h14M12 5l7 7-7 7";
-                                }
+                                (svg::arrow_right(20, 20, 3))
                             }
                         }
                     }
@@ -355,10 +331,7 @@ fn render_user_message(
                 div.message__meta.message__meta--user {
                     span.message__time { (crate::datetime::today_implied_human_datetime(&datetime, &locale, &timezone)) }
                     button.message__edit-btn {
-                        svg.icon.icon--sm width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                            path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z";
-                            path d="m15 5 4 4";
-                        }
+                        (svg::edit(16, 16))
                     }
                 }
             }

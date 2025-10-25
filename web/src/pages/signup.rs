@@ -1,6 +1,7 @@
 use {
     crate::{
         error::AppResult,
+        svg,
         user::{EmailAddress, Name, Password, User},
     },
     axum::{
@@ -8,7 +9,7 @@ use {
         response::{IntoResponse, Redirect},
         routing::post,
     },
-    axum_extra::extract::{CookieJar, cookie::Cookie},
+    axum_extra::extract::CookieJar,
     axum_valid::Garde,
     garde::{Validate, util::nested_path},
     maud::html,
@@ -36,10 +37,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" {}
-                                    circle cx="12" cy="7" r="4" {}
-                                }
+                                (svg::user(20, 20))
                                 input."form-input"#name type="text" name="name" placeholder="John Doe" required autofocus;
                             }
                         }
@@ -47,10 +45,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    rect x="3" y="5" width="18" height="14" rx="2" {}
-                                    path d="m3 7 9 6 9-6" {}
-                                }
+                                (svg::mail(20, 20))
                                 input."form-input"#email type="email" name="email" placeholder="you@example.com" required;
                             }
                         }
@@ -58,10 +53,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="password" { "Password" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    rect x="5" y="11" width="14" height="10" rx="2" ry="2" {}
-                                    path d="M7 11V7a5 5 0 0 1 10 0v4" {}
-                                }
+                                (svg::lock(20, 20))
                                 input."form-input"#password type="password" name="password" placeholder="Create a strong password" required minlength="8";
                             }
                             p.form-hint { "Must be at least 8 characters" }
@@ -70,10 +62,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="confirm-password" { "Confirm Password" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    rect x="5" y="11" width="14" height="10" rx="2" ry="2" {}
-                                    path d="M7 11V7a5 5 0 0 1 10 0v4" {}
-                                }
+                                (svg::lock(20, 20))
                                 input."form-input" id="confirm-password" type="password" name="confirm_password" placeholder="Re-enter your password" required minlength="8";
                             }
                         }
@@ -92,9 +81,7 @@ pub(crate) async fn page() -> impl IntoResponse {
 
                         button.button.button--primary.button--full type="submit" {
                             span { "Create Account" }
-                            svg.icon width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                path d="M5 12h14M12 5l7 7-7 7";
-                            }
+                            (svg::arrow_right(16, 16, 2))
                         }
                     }
 

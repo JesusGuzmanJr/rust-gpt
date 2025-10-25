@@ -1,4 +1,5 @@
 use {
+    crate::svg,
     axum::{
         Form, Router,
         http::StatusCode,
@@ -30,10 +31,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    rect x="3" y="5" width="18" height="14" rx="2" {}
-                                    path d="m3 7 9 6 9-6" {}
-                                }
+                                (svg::mail(20, 20))
                                 input."form-input"#email type="email" name="email" placeholder="you@example.com" required autofocus;
                             }
                         }
@@ -41,10 +39,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="password" { "Password" }
                             div.input-wrapper {
-                                svg.input-icon width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
-                                    rect x="5" y="11" width="14" height="10" rx="2" ry="2" {}
-                                    path d="M7 11V7a5 5 0 0 1 10 0v4" {}
-                                }
+                                (svg::lock(20, 20))
                                 input."form-input"#password type="password" name="password" placeholder="Enter your password" required;
                             }
                         }
@@ -59,9 +54,7 @@ pub(crate) async fn page() -> impl IntoResponse {
 
                         button.button.button--primary.button--full type="submit" {
                             span { "Sign In" }
-                            svg.icon width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-                                path d="M5 12h14M12 5l7 7-7 7";
-                            }
+                            (svg::arrow_right(16, 16, 2))
                         }
                     }
 
