@@ -1,5 +1,8 @@
 use {
-    crate::user::UserId,
+    crate::{
+        error::{AppError, AppResult},
+        user::{User, UserId},
+    },
     anyhow::{Context, Result},
     axum_extra::extract::{CookieJar, cookie::Cookie},
     base64::{
@@ -58,8 +61,6 @@ pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Resu
         session,
     })?);
 
-    dbg!(&cookie);
-
     let mut cookie = Cookie::new(COOKIE_NAME, cookie);
 
     // cookie.set_secure(true);
@@ -68,8 +69,6 @@ pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Resu
     cookie.set_max_age(time::Duration::seconds(SESSION_DURATION.num_seconds()));
     cookie.set_secure(!cfg!(debug_assertions));
     cookie.set_path("/");
-
-    dbg!(&cookie);
 
     Ok(cookie_jar.add(cookie))
 }
@@ -82,12 +81,12 @@ pub(crate) fn remove_auth_cookie(cookie_jar: CookieJar) -> CookieJar {
     cookie_jar.add(cookie)
 }
 
-pub(crate) fn get_auth_user(cookie_jar: &CookieJar) -> Result<Option<UserId>> {
+fn extract_session(cookie_jar: &CookieJar) -> Result<Option<Session>> {
     let cookie = match cookie_jar.get(COOKIE_NAME) {
         None => return Ok(None),
         Some(cookie) => cookie,
     };
-    dbg!(&cookie.value());
+
     let Container { signature, session } = bincode::deserialize::<Container>(
         &BASE_64
             .decode(cookie.value())
@@ -109,5 +108,11 @@ pub(crate) fn get_auth_user(cookie_jar: &CookieJar) -> Result<Option<UserId>> {
         return Ok(None);
     }
 
-    Ok(Some(session.user_id))
+    Ok(Some(session))
+}
+
+pub(crate) fn require_auth_user(cookie_jar: &CookieJar) -> AppResult<User> {
+    let session = extract_session(cookie_jar)?.ok_or(AppError::Unauthorized)?;
+    let user = User::by_id(session.user_id)?.ok_or(AppError::Unauthorized)?;
+    Ok(user)
 }

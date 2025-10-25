@@ -148,14 +148,20 @@ pub(crate) fn api() -> Router {
                        password,
                        confirm_password: _,
                    })): Garde<Form<SignUpForm>>| {
-                info!(%name, %email, "sign up");
+                info!(%name, %email, "sign up requested");
+
                 let user = User::new(name, email, password)?;
                 let user_id = user.id;
+                let email = user.email.clone();
                 user.save()?;
-                AppResult::Ok((
+
+                let response = AppResult::Ok((
                     crate::auth::create_auth_cookie(cookie_jar, user_id)?,
                     Redirect::to(crate::pages::chat::PATH),
-                ))
+                ));
+
+                info!(%user_id, %email, "sign up completed");
+                response
             }
         }),
     )

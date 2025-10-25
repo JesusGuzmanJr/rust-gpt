@@ -1,5 +1,5 @@
 use {
-    crate::{error::AppResult, http, svg},
+    crate::{auth::require_auth_user, error::ResponseResult, http, svg},
     axum::{
         Form, Router,
         extract::Query,
@@ -23,11 +23,12 @@ use {
 
 pub(crate) const PATH: &str = "/chat";
 
-pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
-    dbg!(&cookie_jar);
-    let user_id = crate::auth::get_auth_user(&cookie_jar);
-    dbg!(&user_id);
-    super::page(
+pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
+    tracing::info!("chat page requested");
+    let user = require_auth_user(&cookie_jar)?;
+    dbg!(&user);
+
+    Ok(super::page(
         "Chat",
         html! {
             div.chat-container {
@@ -219,7 +220,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> impl IntoResponse {
             }
             (super::scripts::chat_script())
         },
-    )
+    ).into_response())
 }
 
 pub(crate) fn api() -> Router {
@@ -283,7 +284,7 @@ pub(crate) fn api() -> Router {
                     async |cookie_jar: CookieJar| {
                         (
                             crate::auth::remove_auth_cookie(cookie_jar),
-                            Redirect::to(PATH),
+                            Redirect::to(crate::pages::signin::PATH),
                         )
                     }
                 }),

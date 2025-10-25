@@ -1,5 +1,8 @@
 use {
-    crate::error::{AppError, AppResult},
+    crate::{
+        database::db,
+        error::{AppError, AppResult},
+    },
     anyhow::{Context, Result},
     argon2::Argon2,
     chrono::{DateTime, Utc},
@@ -134,24 +137,34 @@ impl User {
     }
 
     pub(crate) fn save(self) -> AppResult<()> {
-        let rw = crate::database::db()
+        let rw = db()
             .rw_transaction()
             .context("failed to create rw transaction")?;
+
         match rw.insert(self) {
-            Ok(()) => Ok(()),
+            Ok(()) => (),
             Err(native_db::db_type::Error::DuplicateKey { key_name: _ }) => {
                 // ignore the key_name, it's just "email"
-                Err(AppError::DuplicateEmail)
+                return Err(AppError::DuplicateEmail);
             }
-            Err(error) => Err(AppError::InternalServerError(error.into())),
-        }
+            Err(error) => return Err(AppError::InternalServerError(error.into())),
+        };
+
+        rw.commit()
+            .context("failed to commit transaction that saves user")?;
+
+        Ok(())
     }
 
-    pub(crate) fn find_by_email(email: &EmailAddress) -> Result<Option<Self>> {
-        let r = crate::database::db().r_transaction()?;
-        r.get()
+    pub(crate) fn by_email(email: &EmailAddress) -> Result<Option<Self>> {
+        db().r_transaction()?
+            .get()
             .secondary(UserKey::email, email.to_key())
             .map_err(Into::into)
+    }
+
+    pub(crate) fn by_id(id: UserId) -> Result<Option<Self>> {
+        db().r_transaction()?.get().primary(id).map_err(Into::into)
     }
 
     pub(crate) fn verify_password(&self, password: &Password) -> Result<bool> {
