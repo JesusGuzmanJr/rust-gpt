@@ -1,5 +1,8 @@
 use {
-    crate::svg,
+    crate::{
+        svg,
+        user::{EmailAddress, Password},
+    },
     axum::{
         Form, Router,
         http::StatusCode,
@@ -7,6 +10,8 @@ use {
         routing::post,
     },
     axum_extra::extract::CookieJar,
+    axum_valid::Garde,
+    garde::Validate,
     maud::html,
     serde::Deserialize,
 };
@@ -74,26 +79,26 @@ pub(crate) fn api() -> Router {
     Router::new().route(
         "/signin",
         post({
-            #[derive(Debug, Deserialize)]
+            #[derive(Debug, Deserialize, Validate)]
             struct SignInForm {
-                email: String,
-                password: String,
+                #[garde(dive)]
+                email: EmailAddress,
+                #[garde(skip)]
+                password: Password,
+                #[garde(skip)]
                 remember: Option<String>,
             }
 
             async |_cookie_jar: CookieJar,
-                   Form(SignInForm {
+                   Garde(Form(SignInForm {
                        email,
                        password,
                        remember: _remember,
-                   }): Form<SignInForm>| {
+                   })): Garde<Form<SignInForm>>| {
                 // TODO: Implement actual authentication logic
                 // For now, this is a placeholder
 
                 // Validate credentials (placeholder)
-                if email.is_empty() || password.is_empty() {
-                    return (StatusCode::BAD_REQUEST, "Invalid credentials").into_response();
-                }
 
                 // Set user session cookies
                 // let cookie_jar = http::set_user_id(cookie_jar, user_id);

@@ -17,7 +17,7 @@ pub(crate) enum AppError {
     #[error("❌ You're not logged in")]
     Unauthorized,
 
-    #[error("⚠️ Unable to create user because email already in use")]
+    #[error("⚠️ Unable to create user account because the email is already in use")]
     DuplicateEmail,
 }
 

@@ -6,6 +6,7 @@ use {
         response::{IntoResponse, Redirect, Response},
         routing::get,
     },
+    bytesize::ByteSize,
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
     tracing::*,
@@ -20,6 +21,9 @@ mod http;
 mod pages;
 mod svg;
 mod user;
+
+/// Set low to prevent abuse.
+const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(32);
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];
@@ -77,7 +81,10 @@ async fn main() -> Result<()> {
                 header::X_CONTENT_TYPE_OPTIONS,
                 HeaderValue::from_static("nosniff"),
             ))
-            .layer(axum_htmx::AutoVaryLayer),
+            .layer(axum_htmx::AutoVaryLayer)
+            .layer(axum::extract::DefaultBodyLimit::max(
+                MAX_REQUEST_BODY_SIZE.as_u64() as _,
+            )),
     )
     .await?;
     Ok(())
