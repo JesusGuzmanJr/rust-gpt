@@ -1,8 +1,7 @@
 use {
     anyhow::Result,
     native_db::{Database, Models},
-    serde::Deserialize,
-    std::{path::PathBuf, sync::OnceLock},
+    std::{path::Path, sync::OnceLock},
 };
 
 static MODELS: OnceLock<Models> = OnceLock::new();
@@ -13,21 +12,14 @@ pub(crate) fn db() -> &'static Database<'static> {
     DB.get().expect("db not initialized")
 }
 
-/// The persistence configuration.
-#[derive(Debug, Deserialize)]
-pub(crate) struct PersistenceConfig {
-    /// The embedded database path.
-    path: PathBuf,
-}
-
 #[deny(dead_code)]
-pub(super) fn init(config: &PersistenceConfig) -> Result<()> {
+pub(super) fn init(db_path: &Path) -> Result<()> {
     let mut models: Models = Models::new();
     crate::user::define(&mut models)?;
 
     drop(MODELS.set(models));
-    let db = native_db::Builder::new()
-        .create(MODELS.get().expect("models not initialized"), &config.path)?;
+    let db =
+        native_db::Builder::new().create(MODELS.get().expect("models not initialized"), db_path)?;
 
     drop(DB.set(db));
 

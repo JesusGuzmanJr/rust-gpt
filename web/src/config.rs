@@ -1,14 +1,20 @@
 use {
-    crate::{auth::AuthConfig, mailer::MailerConfig, persistence::PersistenceConfig},
+    crate::{hash::HashKey, mailer::MailerConfig},
     anyhow::{Context, Result},
     serde::Deserialize,
+    std::path::PathBuf,
 };
 
 /// The root configuration.
 #[derive(Debug, Deserialize)]
 pub(crate) struct AppConfig {
-    pub(crate) persistence: PersistenceConfig,
-    pub(crate) auth: AuthConfig,
+    /// The key for hashing data in hex.
+    pub(crate) hash_key: HashKey,
+
+    /// The embedded database path.
+    pub(crate) db_path: PathBuf,
+
+    /// The SMTP server configuration for sending and verifying emails.
     pub(crate) mailer: MailerConfig,
 }
 

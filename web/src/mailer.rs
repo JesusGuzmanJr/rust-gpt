@@ -63,15 +63,17 @@ pub(crate) async fn init(config: MailerConfig) -> Result<()> {
         )
         .expect("already initialized");
 
-    tracing::info!("testing SMTP connection");
-    if !transport
-        .test_connection()
-        .await
-        .context("unable to test SMTP connection")?
-    {
-        bail!("SMTP connection failed");
+    if !cfg!(debug_assertions) {
+        tracing::info!("testing SMTP connection");
+        if !transport
+            .test_connection()
+            .await
+            .context("unable to test SMTP connection")?
+        {
+            bail!("SMTP connection failed");
+        }
+        tracing::info!("SMTP connection successful");
     }
-    tracing::info!("SMTP connection successful");
 
     SMTP_TRANSPORT.set(transport).expect("already initialized");
 

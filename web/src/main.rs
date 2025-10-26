@@ -19,6 +19,7 @@ mod chat;
 mod config;
 mod datetime;
 mod error;
+mod hash;
 mod http;
 mod mailer;
 mod pages;
@@ -42,8 +43,8 @@ async fn main() -> Result<()> {
 
     let config = config::AppConfig::from_config_path()?;
 
-    auth::init(config.auth);
-    persistence::init(&config.persistence)?;
+    hash::init(config.hash_key)?;
+    persistence::init(&config.db_path)?;
     mailer::init(config.mailer).await?;
 
     let bind_address = "127.0.0.1:3000";
