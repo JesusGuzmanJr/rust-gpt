@@ -7,6 +7,7 @@ use {
         routing::get,
     },
     bytesize::ByteSize,
+    const_format::formatcp,
     std::thread,
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
@@ -24,12 +25,16 @@ mod pages;
 mod persistence;
 mod svg;
 mod user;
+mod verification;
 
 /// Set low to prevent abuse.
 const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(32);
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];
+
+const PROJECT_NAME: &str = "rust-gpt";
+const PROJECT_URL: &str = formatcp!("https://{PROJECT_NAME}.marzipanclub.com");
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -39,14 +44,14 @@ async fn main() -> Result<()> {
 
     auth::init(config.auth);
     persistence::init(&config.persistence)?;
-    // mailer::init(config.mailer).await?;
+    mailer::init(config.mailer).await?;
 
     let bind_address = "127.0.0.1:3000";
     let listener = tokio::net::TcpListener::bind(bind_address).await?;
 
     println!(
         "{}",
-        auth::verification_email(
+        verification::verification_email(
             user::Name::new("Jesus Guzman, Jr."),
             "https://www.google.com".to_string(),
         )?

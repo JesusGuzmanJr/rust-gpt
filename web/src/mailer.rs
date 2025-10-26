@@ -11,6 +11,9 @@ use {
     std::{sync::OnceLock, time::Duration},
 };
 
+const SENDER_NAME: &str = "Rust GPT Devs";
+const SENDER_EMAIL: &str = "hello@marzipanclub.com";
+
 /// Timeout for SMTP connection.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(3);
 
@@ -20,6 +23,11 @@ const MIN_IDLE_CONNECTIONS: u32 = 3;
 type SmtpTransport = AsyncSmtpTransport<Tokio1Executor>;
 
 static SMTP_TRANSPORT: OnceLock<SmtpTransport> = OnceLock::new();
+static SENDER_EMAIL_ADDRESS: OnceLock<Address> = OnceLock::new();
+
+fn sender_email_address() -> &'static Address {
+    SENDER_EMAIL_ADDRESS.get().expect("not initialized")
+}
 
 /// Returns a reference to the SMTP transport.
 #[inline]
@@ -40,35 +48,20 @@ pub(crate) struct MailerConfig {
     port: u16,
     username: Username,
     password: Password,
-    sender_name: SenderName,
-    sender_email: Address,
-}
-
-static SENDER_NAME: OnceLock<String> = OnceLock::new();
-static SENDER_EMAIL_ADDRESS: OnceLock<Address> = OnceLock::new();
-
-#[inline]
-fn sender_name() -> &'static String {
-    SENDER_NAME.get().expect("not initialized")
-}
-
-#[inline]
-fn sender_email_address() -> &'static Address {
-    SENDER_EMAIL_ADDRESS.get().expect("not initialized")
 }
 
 /// Creates a SMTP transport and tests the connection.
-// #[deny(dead_code)]
+#[deny(dead_code)]
 pub(crate) async fn init(config: MailerConfig) -> Result<()> {
-    SENDER_NAME
-        .set(config.sender_name.0.clone())
-        .expect("already initialized");
+    let transport = build_smtp_transport(config)?;
 
     SENDER_EMAIL_ADDRESS
-        .set(config.sender_email.clone())
+        .set(
+            SENDER_EMAIL
+                .parse()
+                .context("invalid sender email address")?,
+        )
         .expect("already initialized");
-
-    let transport = build_smtp_transport(config)?;
 
     tracing::info!("testing SMTP connection");
     if !transport
@@ -99,7 +92,7 @@ fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
 }
 
 /// Sends an email.
-pub async fn send_email(
+pub(crate) async fn send_email(
     email: &EmailAddress,
     subject: &str,
     body: String,
@@ -109,7 +102,7 @@ pub async fn send_email(
         .send(
             Message::builder()
                 .from(Mailbox::new(
-                    Some(sender_name().clone()),
+                    Some(SENDER_NAME.to_string()),
                     sender_email_address().clone(),
                 ))
                 .to(email.as_str().parse()?)
