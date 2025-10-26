@@ -57,8 +57,6 @@ async fn main() -> Result<()> {
         )?
     );
 
-    std::process::exit(0);
-
     // mailer::send_email(
     //     &user::EmailAddress::new("jesusguzmanjr@icloud.com"),
     //     "Verify your email address",
@@ -80,6 +78,7 @@ async fn main() -> Result<()> {
             .route(pages::signin::PATH, get(pages::signin::page))
             .route(pages::signup::PATH, get(pages::signup::page))
             .route(pages::terms::PATH, get(pages::terms::page))
+            .route(pages::verify::PATH, get(pages::verify::page))
             .route(
                 "/style.css",
                 get((

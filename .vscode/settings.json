@@ -36,6 +36,7 @@
         "lettre",
         "linecap",
         "linejoin",
+        "mailchecker",
         "malloc",
         "memcpy",
         "minbpe",

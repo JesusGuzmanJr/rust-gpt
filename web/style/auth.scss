@@ -279,3 +279,79 @@
   pointer-events: none;
   opacity: 0.6;
 }
+
+// Verification Page Styles
+.verification-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+  color: var(--accent-primary);
+
+  svg {
+    display: block;
+
+    * {
+      stroke: currentColor;
+      opacity: 1;
+    }
+  }
+}
+
+.verification-message {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.verification-message__main {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+  text-align: center;
+}
+
+.verification-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+}
+
+.verification-step {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
+.step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex-shrink: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-inverse);
+  background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  border-radius: 50%;
+}
+
+.step-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.verification-message__note {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  text-align: center;
+}

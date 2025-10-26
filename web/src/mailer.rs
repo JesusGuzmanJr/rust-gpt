@@ -1,5 +1,5 @@
 use {
-    crate::user::EmailAddress,
+    crate::{PROJECT_URL, user::EmailAddress},
     anyhow::{Context, Result, bail},
     common::{key_type, string_type},
     lettre::{
@@ -13,6 +13,7 @@ use {
 
 const SENDER_NAME: &str = "Rust GPT Devs";
 const SENDER_EMAIL: &str = "hello@marzipanclub.com";
+const SMTP_PORT: u16 = 587;
 
 /// Timeout for SMTP connection.
 const CONNECTION_TIMEOUT: Duration = Duration::from_secs(3);
@@ -42,10 +43,9 @@ string_type!(SenderName);
 string_type!(SenderEmail);
 
 /// The SMTP server configuration.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub(crate) struct MailerConfig {
     host: Host,
-    port: u16,
     username: Username,
     password: Password,
 }
@@ -83,12 +83,38 @@ fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
         .context("invalid SMTP host")?
         .pool_config(PoolConfig::default().min_idle(MIN_IDLE_CONNECTIONS))
         .timeout(Some(CONNECTION_TIMEOUT))
-        .port(config.port)
+        .port(SMTP_PORT)
         .credentials(lettre::transport::smtp::authentication::Credentials::new(
             config.username.0,
             config.password.0.clone(),
         ))
         .build())
+}
+
+/// Check if an email address is sendable by asking the SMTP server.
+pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
+    // avoid asking SMTP server if the email comes from a known disposable email
+    // provider
+    if !mailchecker::is_valid(email.as_str()) {
+        return false;
+    }
+
+    // Verify this input, using async/await syntax.
+    let results = check_if_email_exists::check_email(&check_if_email_exists::CheckEmailInput {
+        to_email: email.to_string(),
+        from_email: sender_email_address().to_string(),
+        hello_name: PROJECT_URL.to_string(),
+        smtp_port: SMTP_PORT,
+        ..Default::default()
+    })
+    .await;
+
+    if results.is_reachable == check_if_email_exists::Reachable::Safe {
+        true
+    } else {
+        tracing::warn!(%email, ?results, "email is not sendable");
+        false
+    }
 }
 
 /// Sends an email.
