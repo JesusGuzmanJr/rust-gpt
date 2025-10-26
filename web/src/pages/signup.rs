@@ -35,7 +35,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
                     }
 
-                    form.auth-form hx-post="/api/signup" hx-target="#email-error" {
+                    form.auth-form hx-post="/api/signup" {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
@@ -114,11 +114,13 @@ pub(crate) fn api() -> Router {
             get({
                 #[derive(Debug, Deserialize)]
                 struct ValidateEmailQuery {
-                    email: String,
+                    email: EmailAddress,
                 }
                 async |Query(ValidateEmailQuery { email }): Query<ValidateEmailQuery>| {
-                    match email.parse::<EmailAddress>() {
-                        Ok(email) if mailer::is_sendable(&email).await => html! {},
+                    trace!(%email, "email to check");
+                    match email.validate() {
+                        Ok(()) if mailer::is_sendable(&email).await => html! {},
+                        Err(_) => html! {}, // user is still typing the email
                         _ => {
                             html! {
                                 p.form-hint { "Please enter a valid email address" }

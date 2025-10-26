@@ -102,6 +102,7 @@ fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
 pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
     // no need to cache these
     if !mailchecker::is_valid(email.as_str()) {
+        tracing::warn!(%email, "email is not valid");
         return false;
     }
 
@@ -111,20 +112,23 @@ pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
         trace!(%email, is_sendable, "email is_sendable returned from cache");
         is_sendable
     } else {
-        // Verify this input, using async/await syntax.
-        let results = check_if_email_exists::check_email(&check_if_email_exists::CheckEmailInput {
-            to_email: email.to_string(),
-            from_email: sender_email_address().to_string(),
-            hello_name: PROJECT_URL.to_string(),
-            smtp_port: SMTP_PORT,
-            ..Default::default()
-        })
+        let results = check_if_email_exists::check_email(
+            &check_if_email_exists::CheckEmailInput::new(email.to_string()),
+        )
         .await;
 
-        let is_sendable = if results.is_reachable == check_if_email_exists::Reachable::Safe {
+        // only check mx records; we don't want to ask the receiver's email server if
+        // *we* can email them because we're on a lowly residential ISP
+        let is_sendable = if results.syntax.is_valid_syntax
+            && results
+                .mx
+                .as_ref()
+                .map(|mx| mx.lookup.is_ok())
+                .unwrap_or(false)
+        {
             true
         } else {
-            tracing::warn!(%email, ?results, "email is not sendable");
+            tracing::warn!(%email, mx = ?results.mx, "email is not sendable");
             false
         };
 

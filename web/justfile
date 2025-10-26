@@ -1,4 +1,4 @@
-export RUST_LOG := env("RUST_LOG", "info")
+export RUST_LOG := env("RUST_LOG", "web=trace,info")
 export CONFIG := env("CONFIG", "dev-config.ron")
 
 # Run the serve in file-watch dev mode
