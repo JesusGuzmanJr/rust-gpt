@@ -1,13 +1,15 @@
 use {
     crate::{
         error::AppResult,
-        svg,
+        hash::Container,
+        mailer, svg,
         user::{EmailAddress, Name, Password, User},
     },
     axum::{
         Form, Router,
+        extract::Query,
         response::{IntoResponse, Redirect},
-        routing::post,
+        routing::{get, post},
     },
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
@@ -30,15 +32,15 @@ pub(crate) async fn page() -> impl IntoResponse {
                             span.auth-logo__text { "AI" }
                         }
                         h1.auth-title { "Create Account" }
-                        p.auth-subtitle { "Sign up to get started with RustGPT" }
+                        p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
                     }
 
-                    form.auth-form method="post" action="/api/signup" {
+                    form.auth-form hx-post="/api/signup" hx-target="#email-error" {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
                                 (svg::user(20, 20))
-                                input."form-input"#name type="text" name="name" placeholder="John Doe" required autofocus;
+                                input."form-input"#name type="text" name="name" placeholder="Jane Doe" required autofocus;
                             }
                         }
 
@@ -46,8 +48,16 @@ pub(crate) async fn page() -> impl IntoResponse {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
                                 (svg::mail(20, 20))
-                                input."form-input"#email type="email" name="email" placeholder="you@example.com" required;
+                                input."form-input"#email
+                                    type="email"
+                                    name="email"
+                                    placeholder="you@example.com"
+                                    required
+                                    hx-get="/api/signup/validate-email"
+                                    hx-trigger="keyup changed delay:500ms"
+                                    hx-target="#email-error";
                             }
+                            div id="email-error" {}
                         }
 
                         div.form-group {
@@ -98,71 +108,96 @@ pub(crate) async fn page() -> impl IntoResponse {
 }
 
 pub(crate) fn api() -> Router {
-    Router::new().route(
-        "/signup",
-        post({
-            #[derive(Debug, Deserialize)]
-            struct SignUpForm {
-                name: Name,
-                email: EmailAddress,
-                password: Password,
-                confirm_password: Password,
-            }
+    Router::new()
+        .route(
+            "/signup/validate-email",
+            get({
+                #[derive(Debug, Deserialize)]
+                struct ValidateEmailQuery {
+                    email: String,
+                }
+                async |Query(ValidateEmailQuery { email }): Query<ValidateEmailQuery>| {
+                    match email.parse::<EmailAddress>() {
+                        Ok(email) if mailer::is_sendable(&email).await => html! {},
+                        _ => {
+                            html! {
+                                p.form-hint { "Please enter a valid email address" }
+                            }
+                        }
+                    }
+                }
+            }),
+        )
+        .route(
+            "/signup",
+            post({
+                #[derive(Debug, Deserialize)]
+                struct SignUpForm {
+                    name: Name,
+                    email: EmailAddress,
+                    password: Password,
+                    confirm_password: Password,
+                }
 
-            impl Validate for SignUpForm {
-                type Context = ();
+                impl Validate for SignUpForm {
+                    type Context = ();
 
-                fn validate_into(
-                    &self,
-                    ctx: &Self::Context,
-                    mut parent: &mut dyn FnMut() -> garde::Path,
-                    report: &mut garde::Report,
-                ) {
-                    self.name
-                        .validate_into(ctx, &mut nested_path!(parent, "name"), report);
-                    self.email
-                        .validate_into(ctx, &mut nested_path!(parent, "email"), report);
+                    fn validate_into(
+                        &self,
+                        ctx: &Self::Context,
+                        mut parent: &mut dyn FnMut() -> garde::Path,
+                        report: &mut garde::Report,
+                    ) {
+                        self.name
+                            .validate_into(ctx, &mut nested_path!(parent, "name"), report);
+                        self.email
+                            .validate_into(ctx, &mut nested_path!(parent, "email"), report);
 
-                    if self.password != self.confirm_password {
-                        report.append(
-                            nested_path!(parent, "confirm_password")(),
-                            garde::Error::new("Passwords do not match"),
+                        if self.password != self.confirm_password {
+                            report.append(
+                                nested_path!(parent, "confirm_password")(),
+                                garde::Error::new("Passwords do not match"),
+                            );
+                        }
+
+                        self.password.validate_into(
+                            &crate::user::PasswordValidationContext {
+                                email: self.email.clone(),
+                                name: self.name.clone(),
+                            },
+                            &mut nested_path!(parent, "password"),
+                            report,
                         );
                     }
-
-                    self.password.validate_into(
-                        &crate::user::PasswordValidationContext {
-                            email: self.email.clone(),
-                            name: self.name.clone(),
-                        },
-                        &mut nested_path!(parent, "password"),
-                        report,
-                    );
                 }
-            }
 
-            async |cookie_jar: CookieJar,
-                   Garde(Form(SignUpForm {
-                       name,
-                       email,
-                       password,
-                       confirm_password: _,
-                   })): Garde<Form<SignUpForm>>| {
-                info!(%name, %email, "sign up requested");
+                async |_cookie_jar: CookieJar,
+                       Garde(Form(SignUpForm {
+                           name,
+                           email,
+                           password,
+                           confirm_password: _,
+                       })): Garde<Form<SignUpForm>>| {
+                    info!(%name, %email, "sign up requested");
 
-                let user = User::new(name, email, password)?;
-                let user_id = user.id;
-                let email = user.email.clone();
-                user.save()?;
+                    let user = User::new(name, email, password)?;
+                    let _user_id = user.id;
+                    let _email = user.email.clone();
 
-                let response = AppResult::Ok((
-                    crate::auth::create_auth_cookie(cookie_jar, user_id)?,
-                    Redirect::to(crate::pages::chat::PATH),
-                ));
+                    let _verify_link = format!(
+                        "{}/api/signup/verify?token={}",
+                        crate::PROJECT_URL,
+                        Container::new(user)?
+                    );
 
-                info!(%user_id, %email, "sign up completed");
-                response
-            }
-        }),
-    )
+                    // TODO: Send verification email with _verify_link
+                    // TODO: Check if email is already in use
+
+                    // Redirect to verify page
+                    info!(%_user_id, %_email, "sign up completed");
+
+                    AppResult::Ok(Redirect::to(crate::pages::verify::PATH).into_response())
+                }
+            }),
+        )
 }

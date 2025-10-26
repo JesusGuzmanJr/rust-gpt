@@ -7,8 +7,13 @@ use {
         message::{Mailbox, header::ContentType},
         transport::smtp::PoolConfig,
     },
+    quick_cache::sync::Cache,
     serde::Deserialize,
-    std::{sync::OnceLock, time::Duration},
+    std::{
+        sync::{LazyLock, OnceLock},
+        time::Duration,
+    },
+    tracing::*,
 };
 
 const SENDER_NAME: &str = "Rust GPT Devs";
@@ -95,27 +100,37 @@ fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
 
 /// Check if an email address is sendable by asking the SMTP server.
 pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
-    // avoid asking SMTP server if the email comes from a known disposable email
-    // provider
+    // no need to cache these
     if !mailchecker::is_valid(email.as_str()) {
         return false;
     }
 
-    // Verify this input, using async/await syntax.
-    let results = check_if_email_exists::check_email(&check_if_email_exists::CheckEmailInput {
-        to_email: email.to_string(),
-        from_email: sender_email_address().to_string(),
-        hello_name: PROJECT_URL.to_string(),
-        smtp_port: SMTP_PORT,
-        ..Default::default()
-    })
-    .await;
+    static CACHE: LazyLock<Cache<EmailAddress, bool>> = LazyLock::new(|| Cache::new(1024));
 
-    if results.is_reachable == check_if_email_exists::Reachable::Safe {
-        true
+    if let Some(is_sendable) = CACHE.get(email) {
+        trace!(%email, is_sendable, "email is_sendable returned from cache");
+        is_sendable
     } else {
-        tracing::warn!(%email, ?results, "email is not sendable");
-        false
+        // Verify this input, using async/await syntax.
+        let results = check_if_email_exists::check_email(&check_if_email_exists::CheckEmailInput {
+            to_email: email.to_string(),
+            from_email: sender_email_address().to_string(),
+            hello_name: PROJECT_URL.to_string(),
+            smtp_port: SMTP_PORT,
+            ..Default::default()
+        })
+        .await;
+
+        let is_sendable = if results.is_reachable == check_if_email_exists::Reachable::Safe {
+            true
+        } else {
+            tracing::warn!(%email, ?results, "email is not sendable");
+            false
+        };
+
+        CACHE.insert(email.clone(), is_sendable);
+        trace!(%email, is_sendable, "email is_sendable inserted into cache");
+        is_sendable
     }
 }
 

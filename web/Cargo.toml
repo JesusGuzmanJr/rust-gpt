@@ -64,6 +64,7 @@ zeroize.workspace = true
 zxcvbn = "3.1.0"
 check-if-email-exists = "0.9.1"
 mailchecker = "6.0.19"
+quick_cache = "0.6.18"
 
 [build-dependencies]
 oxc = { version = "0.95.0", features = ["full"] }
