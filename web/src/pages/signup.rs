@@ -35,7 +35,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
                     }
 
-                    form.auth-form hx-post="/api/signup" {
+                    form.auth-form method="post" action="/api/signup" {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
@@ -47,7 +47,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
-                                (svg::mail(20, 20))
+                                (svg::envelope("input-icon", 20, 20))
                                 input."form-input"#email
                                     type="email"
                                     name="email"

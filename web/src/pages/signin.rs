@@ -36,7 +36,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         div.form-group {
                             label.form-label for="email" { "Email" }
                             div.input-wrapper {
-                                (svg::mail(20, 20))
+                                (svg::envelope("input-icon", 20, 20))
                                 input."form-input"#email type="email" name="email" placeholder="you@example.com" required autofocus;
                             }
                         }

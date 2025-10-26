@@ -18,7 +18,7 @@ pub(crate) async fn page() -> impl IntoResponse {
 
                     div.auth-form {
                         div.verification-icon {
-                            (svg::mail(64, 64))
+                            (svg::envelope("", 64, 64))
                         }
 
                         div.verification-message {
@@ -49,7 +49,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                             }
                         }
 
-                        a.button.button--primary.button--full href="/signin" {
+                        a.button.button--primary.button--full href=(crate::pages::signin::PATH) {
                             span { "Back to Sign In" }
                             (svg::arrow_right(16, 16, 2))
                         }

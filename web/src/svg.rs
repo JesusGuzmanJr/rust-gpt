@@ -1,4 +1,7 @@
-use maud::{Markup, html};
+use {
+    maud::{Markup, html},
+    std::borrow::Cow,
+};
 
 pub(crate) fn plus(width: u32, height: u32) -> Markup {
     html! {
@@ -76,9 +79,9 @@ pub(crate) fn user(width: u32, height: u32) -> Markup {
     }
 }
 
-pub(crate) fn mail(width: u32, height: u32) -> Markup {
+pub(crate) fn envelope(class: &'static str, width: u32, height: u32) -> Markup {
     html! {
-        svg.input-icon width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+        svg class=(class) width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
             rect x="3" y="5" width="18" height="14" rx="2" {}
             path d="m3 7 9 6 9-6" {}
         }

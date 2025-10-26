@@ -230,6 +230,10 @@
 
 // Responsive Design
 @media (max-width: 480px) {
+  .auth-container {
+    padding: 0;
+  }
+
   .auth-card {
     border-radius: 0;
     border-left: none;
@@ -286,7 +290,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 1.5rem;
   color: var(--accent-primary);
 
   svg {
