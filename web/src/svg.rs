@@ -28,6 +28,15 @@ pub(crate) fn info_circle(width: u32, height: u32) -> Markup {
     }
 }
 
+pub(crate) fn check_circle(class: &'static str, width: u32, height: u32) -> Markup {
+    html! {
+        svg class=(class) width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+            circle cx="12" cy="12" r="10" {}
+            path d="m9 12 2 2 4-4" {}
+        }
+    }
+}
+
 pub(crate) fn thumbs_up(width: u32, height: u32) -> Markup {
     html! {
         svg.icon.icon--sm width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {

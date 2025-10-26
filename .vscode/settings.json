@@ -32,6 +32,7 @@
         "itertools",
         "Jurafsky",
         "Karpathy",
+        "keyup",
         "leptos",
         "lettre",
         "linecap",

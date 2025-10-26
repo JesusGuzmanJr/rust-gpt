@@ -1,5 +1,5 @@
 use {
-    crate::{PROJECT_URL, user::EmailAddress},
+    crate::{TEAM_EMAIL, user::EmailAddress},
     anyhow::{Context, Result, bail},
     common::{key_type, string_type},
     lettre::{
@@ -16,8 +16,6 @@ use {
     tracing::*,
 };
 
-const SENDER_NAME: &str = "Rust GPT Devs";
-const SENDER_EMAIL: &str = "hello@marzipanclub.com";
 const SMTP_PORT: u16 = 587;
 
 /// Timeout for SMTP connection.
@@ -61,11 +59,7 @@ pub(crate) async fn init(config: MailerConfig) -> Result<()> {
     let transport = build_smtp_transport(config)?;
 
     SENDER_EMAIL_ADDRESS
-        .set(
-            SENDER_EMAIL
-                .parse()
-                .context("invalid sender email address")?,
-        )
+        .set(TEAM_EMAIL.parse().context("invalid sender email address")?)
         .expect("already initialized");
 
     if !cfg!(debug_assertions) {
@@ -109,7 +103,7 @@ pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
     static CACHE: LazyLock<Cache<EmailAddress, bool>> = LazyLock::new(|| Cache::new(1024));
 
     if let Some(is_sendable) = CACHE.get(email) {
-        trace!(%email, is_sendable, "email is_sendable returned from cache");
+        trace!(%email, is_sendable, "email returned from cache");
         is_sendable
     } else {
         let results = check_if_email_exists::check_email(
@@ -133,7 +127,7 @@ pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
         };
 
         CACHE.insert(email.clone(), is_sendable);
-        trace!(%email, is_sendable, "email is_sendable inserted into cache");
+        trace!(%email, is_sendable, "email inserted into cache");
         is_sendable
     }
 }
@@ -149,7 +143,7 @@ pub(crate) async fn send_email(
         .send(
             Message::builder()
                 .from(Mailbox::new(
-                    Some(SENDER_NAME.to_string()),
+                    Some(TEAM_EMAIL.to_string()),
                     sender_email_address().clone(),
                 ))
                 .to(email.as_str().parse()?)

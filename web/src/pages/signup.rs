@@ -1,5 +1,6 @@
 use {
     crate::{
+        TEAM_EMAIL,
         error::AppResult,
         hash::Container,
         mailer, svg,
@@ -8,13 +9,13 @@ use {
     axum::{
         Form, Router,
         extract::Query,
-        response::{IntoResponse, Redirect},
+        response::IntoResponse,
         routing::{get, post},
     },
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
     garde::{Validate, util::nested_path},
-    maud::html,
+    maud::{Markup, html},
     serde::Deserialize,
     tracing::*,
 };
@@ -35,7 +36,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
                     }
 
-                    form.auth-form method="post" action="/api/signup" {
+                    form.auth-form hx-post="/api/signup" hx-target=".auth-card" {
                         div.form-group {
                             label.form-label for="name" { "Full Name" }
                             div.input-wrapper {
@@ -53,7 +54,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                                     name="email"
                                     placeholder="you@example.com"
                                     required
-                                    hx-get="/api/signup/validate-email"
+                                    hx-get="/api/signup/validate"
                                     hx-trigger="keyup changed delay:500ms"
                                     hx-target="#email-error";
                             }
@@ -107,10 +108,123 @@ pub(crate) async fn page() -> impl IntoResponse {
     )
 }
 
+pub(crate) fn verify_card() -> Markup {
+    html! {
+        div.auth-card__header {
+            div.auth-logo {
+                span.auth-logo__text { "AI" }
+            }
+            h1.auth-title { "Check Your Email" }
+            p.auth-subtitle { "We've sent you a verification link" }
+        }
+
+        div.auth-form {
+            div.verification-icon {
+                (svg::envelope("", 64, 64))
+            }
+
+            div.verification-message {
+                p.verification-message__main {
+                    "We've sent a verification link to your email address. "
+                    "Please check your inbox and click the link to verify your account."
+                }
+
+                div.verification-steps {
+                    div.verification-step {
+                        span.step-number { "1" }
+                        span.step-text { "Open your email inbox" }
+                    }
+                    div.verification-step {
+                        span.step-number { "2" }
+                        span.step-text { "Find the verification email from RustGPT" }
+                    }
+                    div.verification-step {
+                        span.step-number { "3" }
+                        span.step-text { "Click the verification link" }
+                    }
+                }
+
+                p.verification-message__note {
+                    "Didn't receive the email? Check your spam folder."
+                }
+            }
+
+            a.button.button--primary.button--full href=(crate::pages::signin::PATH) {
+                span { "Back to Sign In" }
+                (svg::arrow_right(16, 16, 2))
+            }
+        }
+
+        div.auth-footer {
+            p.auth-footer__text {
+                "Need help? "
+                a.form-link href=(format!("mailto:{TEAM_EMAIL}")) { "Contact support" }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+enum VerificationStatus {
+    Expired,
+    Success,
+    AlreadyVerified,
+}
+
+pub(crate) fn verification_card(status: VerificationStatus) -> Markup {
+    use VerificationStatus::*;
+    html! {
+        div.auth-card__header {
+            div.auth-logo {
+                span.auth-logo__text { "AI" }
+            }
+            h1.auth-title { (match status {
+                Expired => "Verification Link Expired",
+                Success => "Email Verified!",
+                AlreadyVerified => "Email Already Verified",
+            }) }
+            p.auth-subtitle { (match status {
+                Expired => "The verification link has expired",
+                Success => "Your account has been successfully verified",
+                AlreadyVerified => "Your email address has already been verified",
+            }) }
+        }
+
+        div.auth-form {
+            div.verification-icon.verification-icon--success {
+                (svg::check_circle("", 64, 64))
+            }
+
+            div.verification-message {
+                p.verification-message__main {
+                    "Great! Your email address has been verified. "
+                    "You're all set to start using " (crate::PROJECT_NAME) "."
+                }
+
+                p.verification-message__note {
+                    "You can now sign in with your credentials and start exploring."
+                }
+            }
+
+            a.button.button--primary.button--full href=(crate::pages::signin::PATH) {
+                span { "Sign In to Your Account" }
+                (svg::arrow_right(16, 16, 2))
+            }
+        }
+
+        div.auth-footer {
+            p.auth-footer__text {
+                "Need help? "
+                a.form-link href=(format!("mailto:{TEAM_EMAIL}")) { "Contact support" }
+            }
+        }
+    }
+}
+
 pub(crate) fn api() -> Router {
     Router::new()
         .route(
-            "/signup/validate-email",
+            "/signup/validate",
             get({
                 #[derive(Debug, Deserialize)]
                 struct ValidateEmailQuery {
@@ -198,7 +312,19 @@ pub(crate) fn api() -> Router {
                     // Redirect to verify page
                     info!(%_user_id, %_email, "sign up completed");
 
-                    AppResult::Ok(Redirect::to(crate::pages::verify::PATH).into_response())
+                    AppResult::Ok(verify_card())
+                }
+            }),
+        )
+        .route(
+            "/signup/verify",
+            get({
+                #[derive(Debug, Deserialize)]
+                struct VerifyEmailQuery {
+                    token: String,
+                }
+                async |Query(VerifyEmailQuery { token }): Query<VerifyEmailQuery>| {
+                    AppResult::Ok(verify_card())
                 }
             }),
         )

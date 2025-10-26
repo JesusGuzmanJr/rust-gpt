@@ -36,6 +36,8 @@ const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
 
 const PROJECT_NAME: &str = "rust-gpt";
 const PROJECT_URL: &str = formatcp!("https://{PROJECT_NAME}.marzipanclub.com");
+const TEAM_NAME: &str = "Rust GPT Devs";
+const TEAM_EMAIL: &str = "hello@marzipanclub.com";
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -79,7 +81,6 @@ async fn main() -> Result<()> {
             .route(pages::signin::PATH, get(pages::signin::page))
             .route(pages::signup::PATH, get(pages::signup::page))
             .route(pages::terms::PATH, get(pages::terms::page))
-            .route(pages::verify::PATH, get(pages::verify::page))
             .route(
                 "/style.css",
                 get((

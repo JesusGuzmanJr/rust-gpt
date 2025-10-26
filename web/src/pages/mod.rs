@@ -9,7 +9,6 @@ pub(crate) mod privacy;
 pub(crate) mod signin;
 pub(crate) mod signup;
 pub(crate) mod terms;
-pub(crate) mod verify;
 
 /// Compiled and minified javascript.
 mod scripts {
