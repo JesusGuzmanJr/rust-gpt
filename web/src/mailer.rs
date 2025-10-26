@@ -58,7 +58,7 @@ fn sender_email_address() -> &'static Address {
 }
 
 /// Creates a SMTP transport and tests the connection.
-#[deny(dead_code)]
+// #[deny(dead_code)]
 pub(crate) async fn init(config: MailerConfig) -> Result<()> {
     SENDER_NAME
         .set(config.sender_name.0.clone())

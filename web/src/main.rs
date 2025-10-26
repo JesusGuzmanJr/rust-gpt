@@ -39,10 +39,31 @@ async fn main() -> Result<()> {
 
     auth::init(config.auth);
     persistence::init(&config.persistence)?;
-    mailer::init(config.mailer).await?;
+    // mailer::init(config.mailer).await?;
 
     let bind_address = "127.0.0.1:3000";
     let listener = tokio::net::TcpListener::bind(bind_address).await?;
+
+    println!(
+        "{}",
+        auth::verification_email(
+            user::Name::new("Jesus Guzman, Jr."),
+            "https://www.google.com".to_string(),
+        )?
+    );
+
+    std::process::exit(0);
+
+    // mailer::send_email(
+    //     &user::EmailAddress::new("jesusguzmanjr@icloud.com"),
+    //     "Verify your email address",
+    //     auth::verification_email(
+    //         user::Name::new("Jesus Guzman, Jr."),
+    //         "https://www.google.com".to_string(),
+    //     )?,
+    //     lettre::message::header::ContentType::TEXT_HTML,
+    // )
+    // .await?;
 
     info!(%bind_address, "listening");
     axum::serve(
