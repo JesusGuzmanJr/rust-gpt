@@ -23,7 +23,7 @@ use {
     tracing::*,
 };
 
-type TokenVec = SmallVec<[Token; 32]>;
+type TokenVec = SmallVec<[Token; 16]>;
 
 /// Start or resume training the tokenizer using approximate byte-level byte
 /// pair encoding (BPE).
