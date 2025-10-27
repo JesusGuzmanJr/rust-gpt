@@ -31,84 +31,97 @@ pub(crate) async fn page() -> impl IntoResponse {
         html! {
             div.auth-container {
                 div.auth-card {
-                    div.auth-card__header {
-                        div.auth-logo {
-                            span.auth-logo__text { "AI" }
-                        }
-                        h1.auth-title { "Create Account" }
-                        p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
-                    }
-
-                    form.auth-form hx-post="/api/signup" hx-target=".auth-card" {
-                        div.form-group {
-                            label.form-label for="name" { "Full Name" }
-                            div.input-wrapper {
-                                (svg::user(20, 20))
-                                input."form-input"#name type="text" name="name" placeholder="Jane Doe" required autofocus;
-                            }
-                        }
-
-                        div.form-group {
-                            label.form-label for="email" { "Email" }
-                            div.input-wrapper {
-                                (svg::envelope("input-icon", 20, 20))
-                                input."form-input"#email
-                                    type="email"
-                                    name="email"
-                                    placeholder="you@example.com"
-                                    required
-                                    hx-get="/api/signup/validate"
-                                    hx-trigger="keyup changed delay:500ms"
-                                    hx-target="#email-error";
-                            }
-                            div id="email-error" {}
-                        }
-
-                        div.form-group {
-                            label.form-label for="password" { "Password" }
-                            div.input-wrapper {
-                                (svg::lock(20, 20))
-                                input."form-input"#password type="password" name="password" placeholder="Create a strong password" required minlength="8";
-                            }
-                            p.form-hint { "Must be at least 8 characters" }
-                        }
-
-                        div.form-group {
-                            label.form-label for="confirm-password" { "Confirm Password" }
-                            div.input-wrapper {
-                                (svg::lock(20, 20))
-                                input."form-input" id="confirm-password" type="password" name="confirm_password" placeholder="Re-enter your password" required minlength="8";
-                            }
-                        }
-
-                        div.form-group {
-                            label.checkbox-label {
-                                input.form-checkbox type="checkbox" name="terms" required;
-                                span {
-                                    "I agree to the "
-                                    a.form-link href="/terms" target="_blank" { "Terms of Service" }
-                                    " and "
-                                    a.form-link href="/privacy" target="_blank" { "Privacy Policy" }
-                                }
-                            }
-                        }
-
-                        button.button.button--primary.button--full type="submit" {
-                            span { "Create Account" }
-                            (svg::arrow_right(16, 16, 2))
-                        }
-                    }
-
-                    div.auth-footer {
-                        p.auth-footer__text {
-                            "Already have an account? "
-                            a.form-link href="/signin" { "Sign in" }
-                        }
-                    }
+                    (signup_card(false))
                 }
             }
         },
     )
+}
+
+fn signup_card(email_is_taken: bool) -> Markup {
+    html! {
+        div.auth-card__header {
+            div.auth-logo {
+                span.auth-logo__text { "AI" }
+            }
+            h1.auth-title { "Create Account" }
+            p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
+        }
+
+        form.auth-form hx-post="/api/signup" hx-target=".auth-card" {
+            @if email_is_taken {
+                div.auth-error {
+                    (svg::x_circle("auth-error__icon", 20, 20))
+                    span.auth-error__text { "This email address is already registered. Please sign in instead." }
+                }
+            }
+
+            div.form-group {
+                label.form-label for="name" { "Full Name" }
+                div.input-wrapper {
+                    (svg::user(20, 20))
+                    input."form-input"#name type="text" name="name" placeholder="Jane Doe" required autofocus;
+                }
+            }
+
+            div.form-group {
+                label.form-label for="email" { "Email" }
+                div.input-wrapper {
+                    (svg::envelope("input-icon", 20, 20))
+                    input."form-input"#email
+                        type="email"
+                        name="email"
+                        placeholder="you@example.com"
+                        required
+                        hx-get="/api/signup/validate"
+                        hx-trigger="keyup changed delay:500ms"
+                        hx-target="#email-error";
+                }
+                div id="email-error" {}
+            }
+
+            div.form-group {
+                label.form-label for="password" { "Password" }
+                div.input-wrapper {
+                    (svg::lock(20, 20))
+                    input."form-input"#password type="password" name="password" placeholder="Create a strong password" required minlength="8";
+                }
+                p.form-hint { "Must be at least 8 characters" }
+            }
+
+            div.form-group {
+                label.form-label for="confirm-password" { "Confirm Password" }
+                div.input-wrapper {
+                    (svg::lock(20, 20))
+                    input."form-input" id="confirm-password" type="password" name="confirm_password" placeholder="Re-enter your password" required minlength="8";
+                }
+            }
+
+            div.form-group {
+                label.checkbox-label {
+                    input.form-checkbox type="checkbox" name="terms" required;
+                    span {
+                        "I agree to the "
+                        a.form-link href="/terms" target="_blank" { "Terms of Service" }
+                        " and "
+                        a.form-link href="/privacy" target="_blank" { "Privacy Policy" }
+                    }
+                }
+            }
+
+            button.button.button--primary.button--full type="submit" {
+                span { "Create Account" }
+                (svg::arrow_right(16, 16, 2))
+            }
+        }
+
+        div.auth-footer {
+            p.auth-footer__text {
+                "Already have an account? "
+                a.form-link href="/signin" { "Sign in" }
+            }
+        }
+    }
 }
 
 pub(crate) fn verify_card() -> Markup {
@@ -381,6 +394,12 @@ pub(crate) fn api() -> Router {
                        })): Garde<Form<SignUpForm>>| {
                     info!(%name, %email, "sign up requested");
 
+                    // Check if email is already registered
+                    if User::by_email(&email).await?.is_some() {
+                        warn!(%email, "email already registered");
+                        return AppResult::Ok(signup_card(true));
+                    }
+
                     let user = User::new(name.clone(), email.clone(), password.clone()).await?;
                     let user_id = user.id;
 
@@ -403,7 +422,7 @@ pub(crate) fn api() -> Router {
                     .await?;
 
                     info!(%user_id, %email, "sign up completed");
-                    AppResult::Ok(verify_card())
+                    Ok(verify_card())
                 }
             }),
         )
