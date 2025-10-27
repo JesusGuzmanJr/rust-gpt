@@ -26,14 +26,14 @@ pub(crate) async fn page() -> impl IntoResponse {
         html! {
             div.auth-container {
                 div.auth-card {
-                    (signin_card(false))
+                    (signin_card(Some("test@example.com".into())))
                 }
             }
         },
     )
 }
 
-fn signin_card(show_error: bool) -> Markup {
+fn signin_card(invalid_credentials: Option<EmailAddress>) -> Markup {
     html! {
         div.auth-card__header {
             div.auth-logo {
@@ -44,7 +44,7 @@ fn signin_card(show_error: bool) -> Markup {
         }
 
         form.auth-form hx-post="/api/signin" hx-target=".auth-card" {
-            @if show_error {
+            @if invalid_credentials.is_some() {
                 div.auth-error {
                     (svg::x_circle("auth-error__icon", 20, 20))
                     span.auth-error__text { "Invalid email or password" }
@@ -55,7 +55,11 @@ fn signin_card(show_error: bool) -> Markup {
                 label.form-label for="email" { "Email" }
                 div.input-wrapper {
                     (svg::envelope("input-icon", 20, 20))
-                    input."form-input"#email type="email" name="email" placeholder="you@example.com" required autofocus;
+                    @if let Some(email) = invalid_credentials {
+                        input."form-input"#email type="email" name="email" required autofocus value=(email.to_string());
+                    } @else {
+                        input."form-input"#email type="email" name="email" placeholder="you@example.com" required autofocus;
+                    }
                 }
             }
 
@@ -116,7 +120,7 @@ pub(crate) fn api() -> Router {
                     Some(user) => user,
                     None => {
                         warn!(%email, "user not found");
-                        return AppResult::Ok(signin_card(true).into_response());
+                        return AppResult::Ok(signin_card(Some(email)).into_response());
                     }
                 };
 
@@ -125,7 +129,7 @@ pub(crate) fn api() -> Router {
                 // consumes user because needs to move to CPU-bound thread pool
                 if !user.verify_password(password).await? {
                     warn!(%user_id, "invalid password");
-                    return AppResult::Ok(signin_card(true).into_response());
+                    return AppResult::Ok(signin_card(Some(email)).into_response());
                 }
 
                 let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id)?;
