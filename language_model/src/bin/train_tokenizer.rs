@@ -2,12 +2,12 @@ use {
     ahash::AHashMap,
     anyhow::{Context, Result},
     clap::Parser,
-    rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
-    regex::Regex,
     language_model::{
         tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
         utils::{Bincode, Ron, byte_size},
     },
+    rayon::iter::{IntoParallelRefIterator, IntoParallelRefMutIterator, ParallelIterator},
+    regex::Regex,
     smallvec::SmallVec,
     std::{
         fs::File,
@@ -132,11 +132,7 @@ fn main() -> Result<()> {
     })
     .expect("error setting Ctrl-C handler");
 
-    let file_paths = std::fs::read_dir(config.input_dir)?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| entry.path())
-        .filter(|path| path.is_file() && path.extension().unwrap_or_default() == "zst")
-        .collect::<Vec<_>>();
+    let file_paths = language_model::utils::collect_files_recursive(&config.input_dir, "zst")?;
 
     info!(
         num_files = %file_paths.len().separate_with_commas(),

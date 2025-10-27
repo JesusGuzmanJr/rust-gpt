@@ -2,7 +2,7 @@ use {
     anyhow::{Context, Result},
     arrow_array::{GenericByteArray, RecordBatch, types::GenericStringType},
     serde::{Serialize, de::DeserializeOwned},
-    std::path::Path,
+    std::path::{Path, PathBuf},
 };
 
 /// End of text character U+0003 as UTF-8 encoded bytes.
@@ -67,4 +67,30 @@ pub trait Ron: DeserializeOwned {
         ron::de::from_bytes::<Self>(&std::fs::read(file_path)?)
             .with_context(|| format!("failed to parse: {}", file_path.display()))
     }
+}
+
+/// Recursively collect all files with a given extension from a directory.
+pub fn collect_files_recursive(dir: &Path, extension: &str) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+
+    if !dir.is_dir() {
+        anyhow::bail!("input-dir is not a directory: {}", dir.display());
+    }
+
+    let entries = std::fs::read_dir(dir)
+        .with_context(|| format!("failed to read directory: {}", dir.display()))?;
+
+    for entry in entries {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_dir() {
+            // recurse!
+            files.extend(collect_files_recursive(&path, extension)?);
+        } else if path.is_file() && path.extension().unwrap_or_default() == extension {
+            files.push(path);
+        }
+    }
+
+    Ok(files)
 }
