@@ -38,19 +38,19 @@ pub(crate) fn init(hash_key: HashKey) -> Result<()> {
 ///
 /// Serializes to URL safe base64 encoded string.
 #[derive(Serialize, Deserialize)]
-pub(crate) struct Container<T> {
+pub(crate) struct GlassVault<T> {
     data: T,
     signature: [u8; blake3::OUT_LEN],
 }
 
-impl<T> Container<T> {
+impl<T> GlassVault<T> {
     /// Extracts the inner data from the container.
     pub(crate) fn into_inner(self) -> T {
         self.data
     }
 }
 
-impl<T> Container<T> {
+impl<T> GlassVault<T> {
     pub(crate) fn new(data: T) -> Result<Self>
     where
         T: Serialize,
@@ -62,7 +62,7 @@ impl<T> Container<T> {
     }
 }
 
-impl<T> fmt::Display for Container<T>
+impl<T> fmt::Display for GlassVault<T>
 where
     T: Serialize,
 {
@@ -75,14 +75,14 @@ where
     }
 }
 
-impl<T> std::str::FromStr for Container<T>
+impl<T> std::str::FromStr for GlassVault<T>
 where
     T: Serialize + DeserializeOwned,
 {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let container = bincode::deserialize::<Container<T>>(&BASE_64.decode(s)?)?;
+        let container = bincode::deserialize::<GlassVault<T>>(&BASE_64.decode(s)?)?;
 
         if Hash::from(container.signature)
             != blake3::keyed_hash(key(), &bincode::serialize(&container.data)?)

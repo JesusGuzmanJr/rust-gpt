@@ -300,6 +300,18 @@
       opacity: 1;
     }
   }
+
+  &--success {
+    color: #10b981; // Green for success
+  }
+
+  &--error {
+    color: #ef4444; // Red for error/expired
+  }
+
+  &--info {
+    color: #3b82f6; // Blue for info/already verified
+  }
 }
 
 .verification-message {

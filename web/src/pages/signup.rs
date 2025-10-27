@@ -2,7 +2,7 @@ use {
     crate::{
         TEAM_EMAIL,
         error::AppResult,
-        hash::Container,
+        hash::GlassVault,
         mailer, svg,
         user::{EmailAddress, Name, Password, User},
     },
@@ -12,15 +12,18 @@ use {
         response::IntoResponse,
         routing::{get, post},
     },
-    axum_extra::extract::CookieJar,
     axum_valid::Garde,
+    chrono::{DateTime, Duration, Utc},
     garde::{Validate, util::nested_path},
     maud::{Markup, html},
-    serde::Deserialize,
+    serde::{Deserialize, Serialize},
+    std::str::FromStr,
     tracing::*,
 };
 
 pub(crate) const PATH: &str = "/signup";
+
+const VERIFICATION_LINK_EXPIRATION: Duration = Duration::hours(24);
 
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
@@ -169,56 +172,130 @@ enum VerificationStatus {
     Expired,
     Success,
     AlreadyVerified,
+    Error,
 }
 
-pub(crate) fn verification_card(status: VerificationStatus) -> Markup {
+fn verification_page(status: VerificationStatus) -> impl IntoResponse {
     use VerificationStatus::*;
-    html! {
-        div.auth-card__header {
-            div.auth-logo {
-                span.auth-logo__text { "AI" }
-            }
-            h1.auth-title { (match status {
-                Expired => "Verification Link Expired",
-                Success => "Email Verified!",
-                AlreadyVerified => "Email Already Verified",
-            }) }
-            p.auth-subtitle { (match status {
-                Expired => "The verification link has expired",
-                Success => "Your account has been successfully verified",
-                AlreadyVerified => "Your email address has already been verified",
-            }) }
-        }
+    super::page(
+        match status {
+            Expired => "Link Expired",
+            Success => "Verified",
+            AlreadyVerified => "Already Verified",
+            Error => "Unable to verify email",
+        },
+        html! {
+            div.auth-container {
+                div.auth-card {
+                    div.auth-card__header {
+                        div.auth-logo {
+                            span.auth-logo__text { "AI" }
+                        }
+                        h1.auth-title { (match status {
+                            Expired => "Verification Link Expired",
+                            Success => "Email Verified!",
+                            AlreadyVerified => "Email Already Verified",
+                            Error => "Unable to verify email",
+                        }) }
+                        p.auth-subtitle { (match status {
+                            Expired => "The verification link has expired",
+                            Success => "Your account has been successfully verified",
+                            AlreadyVerified => "Your email address has already been verified",
+                            Error => "Unable to verify email. Please try signing up again.",
+                        }) }
+                    }
 
-        div.auth-form {
-            div.verification-icon.verification-icon--success {
-                (svg::check_circle("", 64, 64))
-            }
+                    div.auth-form {
+                        @match status {
+                            Success => {
+                                div.verification-icon.verification-icon--success {
+                                    (svg::check_circle("", 64, 64))
+                                }
+                            }
+                            Expired | Error => {
+                                div.verification-icon.verification-icon--error {
+                                    (svg::x_circle("", 64, 64))
+                                }
+                            }
+                            AlreadyVerified => {
+                                div.verification-icon.verification-icon--info {
+                                    (svg::info_circle("", 64, 64))
+                                }
+                            }
+                        }
 
-            div.verification-message {
-                p.verification-message__main {
-                    "Great! Your email address has been verified. "
-                    "You're all set to start using " (crate::PROJECT_NAME) "."
+                        div.verification-message {
+                            @match status {
+                                Success => {
+                                    p.verification-message__main {
+                                        "Great! Your email address has been verified. "
+                                        "You're all set to start using " (crate::PROJECT_NAME) "."
+                                    }
+                                    p.verification-message__note {
+                                        "You can now sign in with your credentials and start exploring."
+                                    }
+                                }
+                                Expired => {
+                                    p.verification-message__main {
+                                        "This verification link has expired or is no longer valid. "
+                                        "Please sign up again to receive a new verification link."
+                                    }
+                                    p.verification-message__note {
+                                        (format!("Verification links expire after {} hours for security reasons.", VERIFICATION_LINK_EXPIRATION.num_hours()))
+                                    }
+                                }
+                                AlreadyVerified => {
+                                    p.verification-message__main {
+                                        "Good news! Your email address has already been verified. "
+                                        "You can sign in to your account right away."
+                                    }
+                                    p.verification-message__note {
+                                        "No further action is needed on your part."
+                                    }
+                                }
+                                Error => {
+                                    p.verification-message__main {
+                                        "Unable to verify email. Please try signing up again."
+                                    }
+                                    p.verification-message__note {
+                                        "If the problem persists, please contact support."
+                                    }
+                                }
+                            }
+                        }
+
+                        @match status {
+                            Success | AlreadyVerified => {
+                                a.button.button--primary.button--full href=(crate::pages::signin::PATH) {
+                                    span { "Sign In to Your Account" }
+                                    (svg::arrow_right(16, 16, 2))
+                                }
+                            }
+                            Expired | Error => {
+                                a.button.button--primary.button--full href=(PATH) {
+                                    span { "Sign Up Again" }
+                                    (svg::arrow_right(16, 16, 2))
+                                }
+                            }
+                        }
+                    }
+
+                    div.auth-footer {
+                        p.auth-footer__text {
+                            "Need help? "
+                            a.form-link href=(format!("mailto:{TEAM_EMAIL}")) { "Contact support" }
+                        }
+                    }
                 }
-
-                p.verification-message__note {
-                    "You can now sign in with your credentials and start exploring."
-                }
             }
+        },
+    )
+}
 
-            a.button.button--primary.button--full href=(crate::pages::signin::PATH) {
-                span { "Sign In to Your Account" }
-                (svg::arrow_right(16, 16, 2))
-            }
-        }
-
-        div.auth-footer {
-            p.auth-footer__text {
-                "Need help? "
-                a.form-link href=(format!("mailto:{TEAM_EMAIL}")) { "Contact support" }
-            }
-        }
-    }
+#[derive(Debug, Serialize, Deserialize)]
+struct Link {
+    user: User,
+    created_at: DateTime<Utc>,
 }
 
 pub(crate) fn api() -> Router {
@@ -234,12 +311,21 @@ pub(crate) fn api() -> Router {
                     trace!(%email, "email to check");
                     match email.validate() {
                         Ok(()) if mailer::is_sendable(&email).await => html! {},
-                        Err(_) => html! {}, // user is still typing the email
-                        _ => {
-                            html! {
-                                p.form-hint { "Please enter a valid email address" }
+                        Ok(()) => {
+                            // check if email is already in use
+                            match User::by_email(&email).await {
+                                Ok(Some(_)) => html! {
+                                    p.form-hint { "Email already in use" }
+                                },
+                                Ok(None) => html! {
+                                    p.form-hint { "Email is available" }
+                                },
+                                Err(_) => html! {
+                                    p.form-hint { "Failed to check email" }
+                                },
                             }
                         }
+                        Err(_validation_report) => html! {}, // user is still typing the email
                     }
                 }
             }),
@@ -287,8 +373,7 @@ pub(crate) fn api() -> Router {
                     }
                 }
 
-                async |_cookie_jar: CookieJar,
-                       Garde(Form(SignUpForm {
+                async |Garde(Form(SignUpForm {
                            name,
                            email,
                            password,
@@ -296,21 +381,32 @@ pub(crate) fn api() -> Router {
                        })): Garde<Form<SignUpForm>>| {
                     info!(%name, %email, "sign up requested");
 
-                    let user = User::new(name, email, password)?;
-                    let _user_id = user.id;
-                    let _email = user.email.clone();
+                    let user = User::new(name.clone(), email.clone(), password.clone()).await?;
+                    let user_id = user.id;
 
-                    let _verify_link = format!(
-                        "{}/api/signup/verify?token={}",
-                        crate::PROJECT_URL,
-                        Container::new(user)?
-                    );
+                    mailer::send_email(
+                        &email,
+                        "Verify Your Email",
+                        crate::auth::verification_email(
+                            &name,
+                            &format!(
+                                "{}/api/signup/verify?token={}",
+                                crate::PROJECT_URL,
+                                GlassVault::new(Link {
+                                    user,
+                                    created_at: Utc::now(),
+                                })?
+                            ),
+                        ),
+                        lettre::message::header::ContentType::TEXT_HTML,
+                    )
+                    .await?;
 
                     // TODO: Send verification email with _verify_link
                     // TODO: Check if email is already in use
 
                     // Redirect to verify page
-                    info!(%_user_id, %_email, "sign up completed");
+                    info!(%user_id, %email, "sign up completed");
 
                     AppResult::Ok(verify_card())
                 }
@@ -324,7 +420,36 @@ pub(crate) fn api() -> Router {
                     token: String,
                 }
                 async |Query(VerifyEmailQuery { token }): Query<VerifyEmailQuery>| {
-                    AppResult::Ok(verify_card())
+                    let Link { user, created_at } = match GlassVault::<Link>::from_str(&token) {
+                        Ok(container) => container.into_inner(),
+                        Err(error) => {
+                            error!(?error, "invalid email verification token");
+                            return AppResult::Ok(verification_page(VerificationStatus::Expired));
+                        }
+                    };
+                    let user_id = user.id;
+                    let user_email = user.email.clone();
+
+                    if Utc::now() - created_at > VERIFICATION_LINK_EXPIRATION {
+                        warn!(%user_id, %user_email, "email verification link expired");
+                        return AppResult::Ok(verification_page(VerificationStatus::Expired));
+                    }
+                    match user.save().await {
+                        Ok(()) => Ok(verification_page(VerificationStatus::Success)),
+                        Err(error) => {
+                            use native_db::db_type::Error as NativeDbError;
+                            if let Some(NativeDbError::DuplicateKey {
+                                key_name: _key_name,
+                            }) = error.downcast_ref::<NativeDbError>()
+                            {
+                                warn!(%user_id, %user_email, "user tried to verify again");
+                                Ok(verification_page(VerificationStatus::AlreadyVerified))
+                            } else {
+                                error!(?error, %user_id, %user_email, "failed to save user");
+                                Ok(verification_page(VerificationStatus::Error))
+                            }
+                        }
+                    }
                 }
             }),
         )

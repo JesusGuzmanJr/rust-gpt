@@ -5,7 +5,6 @@ use {
     },
     axum::{
         Form, Router,
-        http::StatusCode,
         response::{IntoResponse, Redirect},
         routing::post,
     },

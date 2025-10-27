@@ -1,8 +1,5 @@
 use {
-    crate::{
-        error::{AppError, AppResult},
-        persistence::db,
-    },
+    crate::{error::AppResult, persistence::db},
     anyhow::{Context, Result},
     argon2::Argon2,
     chrono::{DateTime, Utc},
@@ -11,6 +8,7 @@ use {
     native_db::{Key, Models, ToKey, native_db},
     native_model::{Model, native_model},
     serde::{Deserialize, Serialize},
+    tokio::task::spawn_blocking,
 };
 
 const SALT_LEN: usize = argon2::RECOMMENDED_SALT_LEN;
@@ -116,63 +114,68 @@ pub(crate) fn define(models: &mut Models) -> Result<()> {
 }
 
 impl User {
-    pub(crate) fn new(name: Name, email: EmailAddress, password: Password) -> AppResult<Self> {
-        let mut salt = [0u8; SALT_LEN];
-        rand::fill(&mut salt);
+    pub(crate) async fn new(name: Name, email: EmailAddress, password: Password) -> Result<Self> {
+        spawn_blocking(move || {
+            let mut salt = [0u8; SALT_LEN];
+            rand::fill(&mut salt);
 
-        let mut hash = [0u8; HASH_LEN];
-        Argon2::default()
-            .hash_password_into(password.0.as_bytes(), &salt, &mut hash)
-            .map_err(|error| anyhow::anyhow!("failed to hash password: {error}"))?;
+            let mut hash = [0u8; HASH_LEN];
+            Argon2::default()
+                .hash_password_into(password.0.as_bytes(), &salt, &mut hash)
+                .map_err(|error| anyhow::anyhow!("failed to hash password: {error}"))?;
 
-        Ok(Self {
-            id: UserId::new(),
-            name,
-            email,
-            hash,
-            salt,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            Ok(Self {
+                id: UserId::new(),
+                name,
+                email,
+                hash,
+                salt,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            })
         })
+        .await?
     }
 
-    pub(crate) fn save(self) -> AppResult<()> {
-        let rw = db()
-            .rw_transaction()
-            .context("failed to create rw transaction")?;
+    pub(crate) async fn save(self) -> Result<()> {
+        spawn_blocking(move || {
+            let rw = db()
+                .rw_transaction()
+                .context("failed to create rw transaction")?;
 
-        match rw.insert(self) {
-            Ok(()) => (),
-            Err(native_db::db_type::Error::DuplicateKey { key_name: _ }) => {
-                // ignore the key_name, it's just "email"
-                return Err(AppError::DuplicateEmail);
-            }
-            Err(error) => return Err(AppError::InternalServerError(error.into())),
-        };
+            rw.insert(self)?;
+            rw.commit()
+                .context("failed to commit transaction that saves user")?;
 
-        rw.commit()
-            .context("failed to commit transaction that saves user")?;
-
-        Ok(())
+            Ok(())
+        })
+        .await?
     }
 
-    pub(crate) fn by_email(email: &EmailAddress) -> Result<Option<Self>> {
-        db().r_transaction()?
-            .get()
-            .secondary(UserKey::email, email.to_key())
-            .map_err(Into::into)
+    pub(crate) async fn by_email(email: &EmailAddress) -> Result<Option<Self>> {
+        let email = email.to_key();
+        spawn_blocking(move || {
+            db().r_transaction()?
+                .get()
+                .secondary(UserKey::email, email)
+                .map_err(Into::into)
+        })
+        .await?
     }
 
-    pub(crate) fn by_id(id: UserId) -> Result<Option<Self>> {
-        db().r_transaction()?.get().primary(id).map_err(Into::into)
+    pub(crate) async fn by_id(id: UserId) -> Result<Option<Self>> {
+        spawn_blocking(move || db().r_transaction()?.get().primary(id).map_err(Into::into)).await?
     }
 
-    pub(crate) fn verify_password(&self, password: &Password) -> Result<bool> {
-        let mut hash = [0u8; HASH_LEN];
-        Argon2::default()
-            .hash_password_into(password.0.as_bytes(), &self.salt, &mut hash)
-            .map_err(|error| anyhow::anyhow!("failed to hash password: {error}"))?;
+    pub(crate) async fn verify_password(self, password: Password) -> Result<bool> {
+        spawn_blocking(move || {
+            let mut hash = [0u8; HASH_LEN];
+            Argon2::default()
+                .hash_password_into(password.0.as_bytes(), &self.salt, &mut hash)
+                .map_err(|error| anyhow::anyhow!("failed to hash password: {error}"))?;
 
-        Ok(hash == self.hash)
+            Ok(hash == self.hash)
+        })
+        .await?
     }
 }

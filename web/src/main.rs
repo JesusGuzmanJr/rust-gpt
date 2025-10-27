@@ -7,7 +7,6 @@ use {
         routing::get,
     },
     bytesize::ByteSize,
-    const_format::formatcp,
     std::thread,
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
@@ -26,7 +25,6 @@ mod pages;
 mod persistence;
 mod svg;
 mod user;
-mod verification;
 
 /// Set low to prevent abuse.
 const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(32);
@@ -35,8 +33,7 @@ const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];
 
 const PROJECT_NAME: &str = "rust-gpt";
-const PROJECT_URL: &str = formatcp!("https://{PROJECT_NAME}.marzipanclub.com");
-const TEAM_NAME: &str = "Rust GPT Devs";
+const PROJECT_URL: &str = "https://rust-gpt.marzipanclub.com";
 const TEAM_EMAIL: &str = "hello@marzipanclub.com";
 
 #[tokio::main]
@@ -54,10 +51,10 @@ async fn main() -> Result<()> {
 
     println!(
         "{}",
-        verification::verification_email(
-            user::Name::new("Jesus Guzman, Jr."),
-            "https://www.google.com".to_string(),
-        )?
+        auth::verification_email(
+            &user::Name::new("Jesus Guzman, Jr."),
+            "https://www.google.com",
+        )
     );
 
     // mailer::send_email(

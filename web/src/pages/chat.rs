@@ -25,7 +25,7 @@ pub(crate) const PATH: &str = "/chat";
 
 pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
     tracing::info!("chat page requested");
-    let user = require_auth_user(&cookie_jar)?;
+    let user = require_auth_user(&cookie_jar).await?;
     dbg!(&user);
 
     Ok(super::page(
@@ -78,7 +78,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
 
                     div.chat-sidebar__footer {
                         a.chat-sidebar__link href="/about" {
-                            (svg::info_circle(12, 12))
+                            (svg::info_circle("icon icon--xs", 12, 12))
                             span { "About" }
                         }
                     }

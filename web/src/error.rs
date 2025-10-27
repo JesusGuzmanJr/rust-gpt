@@ -16,9 +16,6 @@ pub(crate) enum AppError {
 
     #[error("❌ You're not logged in")]
     Unauthorized,
-
-    #[error("⚠️ Unable to create user account because the email is already in use")]
-    DuplicateEmail,
 }
 
 impl axum::response::IntoResponse for AppError {
@@ -27,7 +24,6 @@ impl axum::response::IntoResponse for AppError {
         let status = match self {
             InternalServerError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             Unauthorized => StatusCode::UNAUTHORIZED,
-            DuplicateEmail => StatusCode::BAD_REQUEST,
         };
 
         if matches!(self, Unauthorized) {

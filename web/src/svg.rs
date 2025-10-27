@@ -19,11 +19,11 @@ pub(crate) fn chat_bubble(width: u32, height: u32) -> Markup {
     }
 }
 
-pub(crate) fn info_circle(width: u32, height: u32) -> Markup {
+pub(crate) fn info_circle(class: &'static str, width: u32, height: u32) -> Markup {
     html! {
-        svg.icon.icon--xs width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" {
-            circle cx="12" cy="12" r="10";
-            path d="M12 16v-4M12 8h.01";
+        svg class=(class) width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+            circle cx="12" cy="12" r="10" {}
+            path d="M12 16v-4M12 8h.01" {}
         }
     }
 }
@@ -33,6 +33,15 @@ pub(crate) fn check_circle(class: &'static str, width: u32, height: u32) -> Mark
         svg class=(class) width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
             circle cx="12" cy="12" r="10" {}
             path d="m9 12 2 2 4-4" {}
+        }
+    }
+}
+
+pub(crate) fn x_circle(class: &'static str, width: u32, height: u32) -> Markup {
+    html! {
+        svg class=(class) width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+            circle cx="12" cy="12" r="10" {}
+            path d="m15 9-6 6M9 9l6 6" {}
         }
     }
 }
