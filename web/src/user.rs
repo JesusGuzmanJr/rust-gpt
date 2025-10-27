@@ -1,5 +1,5 @@
 use {
-    crate::{error::AppResult, persistence::db},
+    crate::persistence::db,
     anyhow::{Context, Result},
     argon2::Argon2,
     chrono::{DateTime, Utc},

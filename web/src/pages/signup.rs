@@ -402,12 +402,7 @@ pub(crate) fn api() -> Router {
                     )
                     .await?;
 
-                    // TODO: Send verification email with _verify_link
-                    // TODO: Check if email is already in use
-
-                    // Redirect to verify page
                     info!(%user_id, %email, "sign up completed");
-
                     AppResult::Ok(verify_card())
                 }
             }),

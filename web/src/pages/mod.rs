@@ -36,8 +36,8 @@ fn html_page(status_code: StatusCode, title: &str, content: Markup) -> impl Into
             html {
                 head {
                     title { (title) };
-                    link rel="stylesheet" href="style.css";
-                    script src="htmx.min.js" {}
+                    link rel="stylesheet" href="/style.css";
+                    script src="/htmx.min.js" {}
                     (scripts::main_script())
                 }
                 body {

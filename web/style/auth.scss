@@ -64,6 +64,40 @@
   gap: 1.25rem;
 }
 
+// Auth Error Message
+.auth-error {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  color: #991b1b;
+  font-size: 0.875rem;
+  line-height: 1.5;
+
+  @media (prefers-color-scheme: dark) {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+  }
+}
+
+.auth-error__icon {
+  flex-shrink: 0;
+  color: #dc2626;
+
+  @media (prefers-color-scheme: dark) {
+    color: #f87171;
+  }
+}
+
+.auth-error__text {
+  flex: 1;
+  font-weight: 500;
+}
+
 // Input Wrapper with Icon
 .input-wrapper {
   position: relative;
@@ -303,14 +337,26 @@
 
   &--success {
     color: #10b981; // Green for success
+
+    @media (prefers-color-scheme: dark) {
+      color: #34d399;
+    }
   }
 
   &--error {
     color: #ef4444; // Red for error/expired
+
+    @media (prefers-color-scheme: dark) {
+      color: #f87171;
+    }
   }
 
   &--info {
     color: #3b82f6; // Blue for info/already verified
+
+    @media (prefers-color-scheme: dark) {
+      color: #60a5fa;
+    }
   }
 }
 

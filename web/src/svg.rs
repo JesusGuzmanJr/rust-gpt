@@ -1,7 +1,4 @@
-use {
-    maud::{Markup, html},
-    std::borrow::Cow,
-};
+use maud::{Markup, html};
 
 pub(crate) fn plus(width: u32, height: u32) -> Markup {
     html! {
