@@ -107,27 +107,13 @@ fn main() -> Result<()> {
     };
 
     ctrlc::set_handler({
-        let merges = merges.clone();
-        let save_tokenizer = save_tokenizer.clone();
-        let output_file = config.output_file.clone();
         let should_stop = should_stop.clone();
         move || {
             // no racy conditions; flag transitions from false to true only once
             // and also not synching multiple atomic operations
             should_stop.store(true, Ordering::Relaxed);
-            if let Err(error) = (|| {
-                let merges = merges.lock().expect("failed to lock merges").clone();
-                warn!(
-                    elapsed = ?start.elapsed(),
-                    current_vocab_size = %(merges.len() + 256).separate_with_commas(),
-                    target_vocab_size = %config.vocab_size.separate_with_commas(),
-                );
-                save_tokenizer(merges, &output_file)?;
-                info!("Training interrupted");
-                anyhow::Ok(())
-            })() {
-                error!(%error);
-            }
+            // eprintln! uses write() syscall which is signal-safe
+            eprintln!("\nReceived interrupt signal. Saving progress...");
         }
     })
     .expect("error setting Ctrl-C handler");
@@ -209,7 +195,12 @@ fn main() -> Result<()> {
         .collect::<Vec<_>>();
 
     if should_stop.load(Ordering::SeqCst) {
-        // exit main
+        // save any existing merges before exiting
+        let merges = lock_merges().clone();
+        if !merges.is_empty() {
+            save_tokenizer(merges, &config.output_file)?;
+        }
+        info!("Training interrupted during file reading");
         return Ok(());
     }
 
@@ -285,6 +276,15 @@ fn main() -> Result<()> {
         let most_frequent = most_frequent_pair.0.clone();
 
         if should_stop.load(Ordering::SeqCst) {
+            // save progress before exiting
+            let merges = lock_merges().clone();
+            save_tokenizer(merges.clone(), &config.output_file)?;
+            warn!(
+                elapsed = ?start.elapsed(),
+                current_vocab_size = %(merges.len() + 256).separate_with_commas(),
+                target_vocab_size = %config.vocab_size.separate_with_commas(),
+                "Training interrupted"
+            );
             return anyhow::Ok(());
         }
 
