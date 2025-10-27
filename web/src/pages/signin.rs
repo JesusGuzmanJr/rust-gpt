@@ -5,11 +5,7 @@ use {
         svg,
         user::{EmailAddress, Password, User},
     },
-    axum::{
-        Form, Router,
-        response::{IntoResponse, Redirect},
-        routing::post,
-    },
+    axum::{Form, Router, response::IntoResponse, routing::post},
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
     garde::Validate,
@@ -26,7 +22,7 @@ pub(crate) async fn page() -> impl IntoResponse {
         html! {
             div.auth-container {
                 div.auth-card {
-                    (signin_card(Some("test@example.com".into())))
+                    (signin_card(None))
                 }
             }
         },
@@ -135,7 +131,9 @@ pub(crate) fn api() -> Router {
                 let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id)?;
 
                 info!(%user_id, "sign in successful");
-                AppResult::Ok((cookie_jar, Redirect::to(crate::pages::chat::PATH)).into_response())
+                AppResult::Ok(
+                    (cookie_jar, [("hx-redirect", crate::pages::chat::PATH)]).into_response(),
+                )
             }
         }),
     )
