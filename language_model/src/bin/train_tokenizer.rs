@@ -133,7 +133,8 @@ fn main() -> Result<()> {
     let bytes_read: AtomicUsize = AtomicUsize::new(0);
     let files_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
-    let word_frequency_files = file_paths
+    let mut buffer = Vec::new();
+    let mut word_frequencies = file_paths
         .par_iter()
         .map(|file_path| {
             let file = File::open(file_path)?;
@@ -182,23 +183,24 @@ fn main() -> Result<()> {
                 error!(%error);
             }
             result.ok().flatten()
-        })
-        .collect::<Vec<_>>();
-
-    let mut buffer = Vec::new();
-    let mut word_frequencies = word_frequency_files
+        }).collect::<Vec<_>>()
         .into_iter()
         .map(|mut file| {
+            // short circuit if the user has pressed Ctrl-C
+            if should_stop.load(Ordering::Relaxed) {
+                return Ok(None);
+            }
             buffer.clear();
             file.rewind()?;
             file.read_to_end(&mut buffer)?;
-            bincode::deserialize::<AHashMap<Token, u32>>(&buffer)
+            let word_frequencies = bincode::deserialize::<AHashMap<Token, u32>>(&buffer)?;
+            Ok(Some(word_frequencies))
         })
-        .filter_map(|result| {
+        .filter_map(|result: Result<Option<_>>| {
             if let Err(error) = &result {
                 error!(%error);
             }
-            result.ok()
+            result.ok().flatten()
         })
         .reduce(|mut acc, other| {
             for (word, count) in other {
