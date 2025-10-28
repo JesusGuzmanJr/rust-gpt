@@ -1,6 +1,11 @@
 export RUST_LOG := env("RUST_LOG", "info")
 set positional-arguments
 
+# Run the specified binary
+run bin *args:
+    #!/usr/bin/env bash
+    cargo run --release --bin {{bin}} -- "${@:2}"
+
 # Install all binaries in /usr/local/bin
 install:
     #!/usr/bin/env bash

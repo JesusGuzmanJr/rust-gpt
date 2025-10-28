@@ -60,6 +60,7 @@
         "stylesheet",
         "subword",
         "subwords",
+        "syscall",
         "thiserror",
         "tiktoken",
         "Timelike",

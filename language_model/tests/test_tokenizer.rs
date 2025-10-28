@@ -19,7 +19,7 @@ fn test_train_tokenizer() {
             .arg("run")
             .arg("train_tokenizer")
             .arg("--config")
-            .arg("crates/language_model/tests/tokenizer-training-config.ron")
+            .arg("tests/tokenizer-training-config.ron")
             .output()
             .expect("failed to run train_tokenizer"),
     );
@@ -38,8 +38,8 @@ fn test_train_tokenizer() {
         ],
     };
 
-    let model_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/test/tokenizer.bin");
+    let model_path =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../target/test/tokenizer");
     let model = TokenizerModel::from_bytes(&std::fs::read(model_path).unwrap()).unwrap();
 
     assert_eq!(model, control_model);

@@ -2,7 +2,11 @@ use {
     anyhow::{Context, Result},
     arrow_array::{GenericByteArray, RecordBatch, types::GenericStringType},
     serde::{Serialize, de::DeserializeOwned},
-    std::path::{Path, PathBuf},
+    std::{
+        fs::File,
+        path::{Path, PathBuf},
+        sync::LazyLock,
+    },
 };
 
 /// End of text character U+0003 as UTF-8 encoded bytes.
@@ -74,7 +78,10 @@ pub fn collect_files_recursive(dir: &Path, extension: &str) -> Result<Vec<PathBu
     let mut files = Vec::new();
 
     if !dir.is_dir() {
-        anyhow::bail!("input-dir is not a directory: {}", dir.display());
+        anyhow::bail!(
+            "input-dir is not a directory or does not exist: {}",
+            dir.display()
+        );
     }
 
     let entries = std::fs::read_dir(dir)
@@ -93,4 +100,15 @@ pub fn collect_files_recursive(dir: &Path, extension: &str) -> Result<Vec<PathBu
     }
 
     Ok(files)
+}
+
+/// Create a temporary file in the user's cache directory.
+pub fn tempfile() -> Result<File> {
+    static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
+        xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))
+            .cache_home
+            .expect("failed to get cache directory")
+    });
+
+    tempfile::tempfile_in(&*DIR).context("failed to create temp file")
 }

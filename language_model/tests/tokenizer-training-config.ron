@@ -1,6 +1,6 @@
 TokenizerTrainingConfig (
-    input_dir: "training-data",
-    output_file: "target/test/tokenizer.bin",
+    input_dir: "../training-data",
+    output_file: "../target/test/tokenizer",
     vocab_size: 264,
     pre_tokenization_regex: "\\p{L}+ ?"
 )

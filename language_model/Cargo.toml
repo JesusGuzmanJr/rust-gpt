@@ -14,7 +14,7 @@ workspace = true
 cuda = []
 
 [dependencies]
-ahash = "0.8.12"
+ahash = { version = "0.8.12", features = ["serde"] }
 anyhow.workspace = true
 arrow-array = "57.0.0"
 arrow-cast = "57.0.0"
@@ -23,7 +23,7 @@ bytes = "1.10.1"
 bytesize.workspace = true
 clap = { version = "4.5.49", features = ["derive"] }
 common = { path = "../common" }
-comrak = "0.45.0"
+comrak = "0.46.0"
 crossbeam-channel = "0.5.15"
 ctrlc = "3.5.0"
 derive_more.workspace = true

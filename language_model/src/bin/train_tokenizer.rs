@@ -2,6 +2,7 @@ use {
     ahash::AHashMap,
     anyhow::{Context, Result},
     clap::Parser,
+    common::bincode,
     language_model::{
         tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
         utils::{Bincode, Ron, byte_size},
@@ -11,7 +12,7 @@ use {
     smallvec::SmallVec,
     std::{
         fs::File,
-        io::{BufRead, Write},
+        io::{BufRead, Read, Seek, Write},
         path::{Path, PathBuf},
         sync::{
             Arc, Mutex,
@@ -96,6 +97,9 @@ fn main() -> Result<()> {
     // Upsert the tokenizer file.
     let save_tokenizer = move |merges: Vec<Token>, tokenizer_file: &Path| -> Result<()> {
         info!(output_file = %tokenizer_file.display(), "Saving tokenizer");
+        if let Some(parent) = tokenizer_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
         File::create(tokenizer_file)?.write_all(
             &TokenizerModel {
                 pre_tokenization_regex: config.pre_tokenization_regex.clone(),
@@ -118,7 +122,8 @@ fn main() -> Result<()> {
     })
     .expect("error setting Ctrl-C handler");
 
-    let file_paths = language_model::utils::collect_files_recursive(&config.input_dir, "zst")?;
+    let mut file_paths = language_model::utils::collect_files_recursive(&config.input_dir, "zst")?;
+    file_paths.sort();
 
     info!(
         num_files = %file_paths.len().separate_with_commas(),
@@ -126,11 +131,12 @@ fn main() -> Result<()> {
     );
 
     let bytes_read: AtomicUsize = AtomicUsize::new(0);
+    let files_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
-    let mut word_frequencies = file_paths
-        .into_iter()
+    let word_frequency_files = file_paths
+        .par_iter()
         .map(|file_path| {
-            let file = File::open(&file_path)?;
+            let file = File::open(file_path)?;
             file.lock_shared()?; // advisory lock, not mandatory
 
             let mut word_frequencies: AHashMap<Token, u32> = AHashMap::default();
@@ -140,7 +146,7 @@ fn main() -> Result<()> {
             loop {
                 // short circuit if the user has pressed Ctrl-C
                 if should_stop.load(Ordering::Relaxed) {
-                    return Ok(AHashMap::default()); // identify value to flow fast through
+                    return Ok(None);
                 }
 
                 // Clearing is O(1).
@@ -164,8 +170,29 @@ fn main() -> Result<()> {
                     });
             }
 
-            info!(file_path = %file_path.display(), "Finished reading file");
-            anyhow::Ok(word_frequencies)
+            let mut word_frequency_file = language_model::utils::tempfile()?;
+            word_frequency_file.write_all(&bincode::serialize(&word_frequencies)?)?;
+            let files_read = files_read.fetch_add(1, Ordering::Relaxed) + 1;
+
+            info!(files_read = %files_read.separate_with_commas(), file_path = %file_path.display(), "Finished counting words in file");
+            anyhow::Ok(Some(word_frequency_file))
+        })
+        .filter_map(|result| {
+            if let Err(error) = &result {
+                error!(%error);
+            }
+            result.ok().flatten()
+        })
+        .collect::<Vec<_>>();
+
+    let mut buffer = Vec::new();
+    let mut word_frequencies = word_frequency_files
+        .into_iter()
+        .map(|mut file| {
+            buffer.clear();
+            file.rewind()?;
+            file.read_to_end(&mut buffer)?;
+            bincode::deserialize::<AHashMap<Token, u32>>(&buffer)
         })
         .filter_map(|result| {
             if let Err(error) = &result {
@@ -194,7 +221,7 @@ fn main() -> Result<()> {
         })
         .collect::<Vec<_>>();
 
-    if should_stop.load(Ordering::SeqCst) {
+    if should_stop.load(Ordering::Relaxed) {
         // save any existing merges before exiting
         let merges = lock_merges().clone();
         if !merges.is_empty() {
@@ -275,7 +302,7 @@ fn main() -> Result<()> {
 
         let most_frequent = most_frequent_pair.0.clone();
 
-        if should_stop.load(Ordering::SeqCst) {
+        if should_stop.load(Ordering::Relaxed) {
             // save progress before exiting
             let merges = lock_merges().clone();
             save_tokenizer(merges.clone(), &config.output_file)?;

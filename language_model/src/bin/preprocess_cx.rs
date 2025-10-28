@@ -4,20 +4,20 @@ use {
     clap::Parser,
     futures::stream::StreamExt,
     itertools::Itertools,
-    parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
-    rayon::iter::{ParallelBridge, ParallelIterator},
-    reqwest::Client,
     language_model::{
         tokenization::normalize_text,
         utils::{END_OF_TEXT, get_parquet_column},
     },
+    parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
+    rayon::iter::{ParallelBridge, ParallelIterator},
+    reqwest::Client,
     std::{
         fs::File,
-        io::{BufWriter, Seek, SeekFrom, Write},
+        io::{BufWriter, Seek, Write},
         os::unix::ffi::OsStrExt,
         path::PathBuf,
         sync::{
-            Arc, LazyLock,
+            Arc,
             atomic::{AtomicBool, AtomicUsize, Ordering},
         },
         time::{Duration, Instant},
@@ -188,7 +188,7 @@ fn main() -> Result<()> {
             info!(i, "Processing file...");
 
             let mut encoder = zstd::Encoder::new(
-                BufWriter::new(tempfile()?),
+                BufWriter::new(language_model::utils::tempfile()?),
                 // The compression level for the zstd encoder.
                 // The higher the level, the more compressed the data will be.
                 // Decompressing is same speed regardless of the level.
@@ -243,7 +243,7 @@ fn main() -> Result<()> {
             encoder.flush()?;
             let mut temp_file = encoder.finish()?.into_inner()?;
 
-            temp_file.seek(SeekFrom::Start(0))?;
+            temp_file.rewind()?;
 
             std::io::copy(
                 &mut temp_file,
@@ -296,25 +296,14 @@ async fn download_file(i: usize, client: Client) -> Result<(usize, File)> {
         .error_for_status()?
         .bytes_stream();
 
-    let mut temp_file = tempfile()?;
+    let mut temp_file = language_model::utils::tempfile()?;
     let mut size = 0;
     while let Some(Ok(bytes)) = stream.next().await {
         temp_file.write_all(&bytes)?;
         size += bytes.len();
     }
 
-    temp_file.seek(SeekFrom::Start(0))?;
+    temp_file.rewind()?;
 
     Ok((size, temp_file))
-}
-
-/// Create a temporary file in the user's cache directory.
-fn tempfile() -> Result<File> {
-    static DIR: LazyLock<PathBuf> = LazyLock::new(|| {
-        xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))
-            .cache_home
-            .expect("failed to get cache directory")
-    });
-
-    tempfile::tempfile_in(&*DIR).context("failed to create temp file")
 }
