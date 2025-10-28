@@ -128,10 +128,9 @@ fn main() -> Result<()> {
     let bytes_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
     let mut word_frequencies = file_paths
-        .par_iter()
-        .map(|file| {
-            let file_path = file;
-            let file = File::open(file)?;
+        .into_iter()
+        .map(|file_path| {
+            let file = File::open(&file_path)?;
             file.lock_shared()?; // advisory lock, not mandatory
 
             let mut word_frequencies: AHashMap<Token, u32> = AHashMap::default();
@@ -174,13 +173,14 @@ fn main() -> Result<()> {
             }
             result.ok()
         })
-        .reduce(AHashMap::default, |mut vocab, v| {
-            for (word, count) in v {
-                *vocab.entry(word).or_default() += count;
+        .reduce(|mut acc, other| {
+            for (word, count) in other {
+                *acc.entry(word).or_default() += count;
             }
-            vocab
+            acc
         })
-        .par_iter()
+        .context("Not enough vocabulary to compute word frequencies")?
+        .into_iter()
         .map(|(word, count)| {
             // break down words into byte tokens as starting point for byte-level BPE
             // b"low" -> [b"l", b"o", b"w"]
@@ -189,7 +189,7 @@ fn main() -> Result<()> {
                     .iter()
                     .map(|b| Token::from_slice(&[*b]))
                     .collect::<TokenVec>(),
-                *count,
+                count,
             )
         })
         .collect::<Vec<_>>();
