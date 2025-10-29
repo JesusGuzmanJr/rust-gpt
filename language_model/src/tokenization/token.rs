@@ -8,9 +8,9 @@ use {
 
 /// A byte string representation of a token.
 ///
-/// Up to 16 bytes can be allocated on the stack before heap allocating.
+/// Up to 8 bytes can be allocated on the stack before heap allocating.
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct Token(SmallVec<[u8; 4]>);
+pub struct Token(SmallVec<[u8; 8]>);
 
 /// A unique identifier for a token. Up to 4,294,967,296 tokens can be
 /// represented.

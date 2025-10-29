@@ -2,7 +2,6 @@ use {
     ahash::AHashMap,
     anyhow::{Context, Result},
     clap::Parser,
-    common::bincode,
     language_model::{
         tokenization::{Token, Tokenizer, TokenizerModel, TokenizerTrainingConfig},
         utils::{Bincode, Ron, byte_size},
@@ -12,7 +11,7 @@ use {
     smallvec::SmallVec,
     std::{
         fs::File,
-        io::{BufRead, Read, Seek, Write},
+        io::{BufRead, Write},
         path::{Path, PathBuf},
         sync::{
             Arc, Mutex,
@@ -24,7 +23,7 @@ use {
     tracing::*,
 };
 
-type TokenVec = SmallVec<[Token; 8]>;
+type TokenVec = SmallVec<[Token; 16]>;
 
 /// Start or resume training the tokenizer using approximate byte-level byte
 /// pair encoding (BPE).
@@ -133,21 +132,22 @@ fn main() -> Result<()> {
     let bytes_read: AtomicUsize = AtomicUsize::new(0);
     let files_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
-    let mut buffer = Vec::new();
-    let mut word_frequencies = file_paths
-        .par_iter()
+
+    // counts of all the individual words split up the pre-tokenization regex
+    let mut word_counts = AHashMap::default();
+    file_paths
+        .into_iter()
         .map(|file_path| {
-            let file = File::open(file_path)?;
+            let file = File::open(&file_path)?;
             file.lock_shared()?; // advisory lock, not mandatory
 
-            let mut word_frequencies: AHashMap<Token, u32> = AHashMap::default();
             let mut buffer = String::new();
             let mut reader = std::io::BufReader::new(zstd::Decoder::new(file)?);
 
             loop {
                 // short circuit if the user has pressed Ctrl-C
                 if should_stop.load(Ordering::Relaxed) {
-                    return Ok(None);
+                    return Ok(());
                 }
 
                 // Clearing is O(1).
@@ -165,63 +165,35 @@ fn main() -> Result<()> {
 
                 pre_tokenization_regex
                     .find_iter(&buffer)
-                    .map(|w| Token::from_slice(w.as_str().as_bytes()))
-                    .for_each(|w| {
-                        *word_frequencies.entry(w).or_default() += 1;
+                    .map(|word| Token::from_slice(word.as_str().as_bytes()))
+                    .for_each(|word| {
+                        // break down words into byte tokens as starting point for byte-level BPE
+                        // word -> [b"l", b"o", b"w"]
+                        *word_counts.entry(word.as_slice()
+                                .iter()
+                                .map(|b| Token::from_slice(&[*b]))
+                                .collect::<TokenVec>()).or_default() += 1;
                     });
             }
 
-            let mut word_frequency_file = language_model::utils::tempfile()?;
-            word_frequency_file.write_all(&bincode::serialize(&word_frequencies)?)?;
             let files_read = files_read.fetch_add(1, Ordering::Relaxed) + 1;
-
             info!(files_read = %files_read.separate_with_commas(), file_path = %file_path.display(), "Finished counting words in file");
-            anyhow::Ok(Some(word_frequency_file))
+            anyhow::Ok(())
         })
-        .filter_map(|result| {
+        .for_each(|result| {
             if let Err(error) = &result {
                 error!(%error);
             }
-            result.ok().flatten()
-        }).collect::<Vec<_>>()
-        .into_iter()
-        .map(|mut file| {
-            // short circuit if the user has pressed Ctrl-C
-            if should_stop.load(Ordering::Relaxed) {
-                return Ok(None);
-            }
-            buffer.clear();
-            file.rewind()?;
-            file.read_to_end(&mut buffer)?;
-            let word_frequencies = bincode::deserialize::<AHashMap<Token, u32>>(&buffer)?;
-            Ok(Some(word_frequencies))
-        })
-        .filter_map(|result: Result<Option<_>>| {
-            if let Err(error) = &result {
-                error!(%error);
-            }
-            result.ok().flatten()
-        })
-        .reduce(|mut acc, other| {
-            for (word, count) in other {
-                *acc.entry(word).or_default() += count;
-            }
-            acc
-        })
-        .context("Not enough vocabulary to compute word frequencies")?
-        .into_iter()
-        .map(|(word, count)| {
-            // break down words into byte tokens as starting point for byte-level BPE
-            // b"low" -> [b"l", b"o", b"w"]
-            (
-                word.as_slice()
-                    .iter()
-                    .map(|b| Token::from_slice(&[*b]))
-                    .collect::<TokenVec>(),
-                count,
-            )
-        })
-        .collect::<Vec<_>>();
+
+        });
+
+    // convert the word frequencies into a vec
+    info!(unique_words = %word_counts.len().separate_with_commas(), "Converting word counts to vector");
+    let mut word_frequencies = word_counts.into_iter().collect::<Vec<_>>();
+
+    if should_stop.load(Ordering::Relaxed) {
+        return Ok(());
+    }
 
     if should_stop.load(Ordering::Relaxed) {
         // save any existing merges before exiting
