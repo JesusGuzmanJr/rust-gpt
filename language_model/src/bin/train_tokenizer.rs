@@ -133,21 +133,20 @@ fn main() -> Result<()> {
     let files_read: AtomicUsize = AtomicUsize::new(0);
     let reading_start = Instant::now();
 
-    // counts of all the individual words split up the pre-tokenization regex
-    let mut word_counts = AHashMap::default();
-    file_paths
-        .into_iter()
+    let mut word_frequencies = file_paths
+        .par_iter()
         .map(|file_path| {
-            let file = File::open(&file_path)?;
+            let file = File::open(file_path)?;
             file.lock_shared()?; // advisory lock, not mandatory
 
             let mut buffer = String::new();
             let mut reader = std::io::BufReader::new(zstd::Decoder::new(file)?);
+            let mut word_frequencies = AHashMap::default();
 
             loop {
                 // short circuit if the user has pressed Ctrl-C
                 if should_stop.load(Ordering::Relaxed) {
-                    return Ok(());
+                    return Ok(None);
                 }
 
                 // Clearing is O(1).
@@ -169,7 +168,7 @@ fn main() -> Result<()> {
                     .for_each(|word| {
                         // break down words into byte tokens as starting point for byte-level BPE
                         // word -> [b"l", b"o", b"w"]
-                        *word_counts.entry(word.as_slice()
+                        *word_frequencies.entry(word.as_slice()
                                 .iter()
                                 .map(|b| Token::from_slice(&[*b]))
                                 .collect::<TokenVec>()).or_default() += 1;
@@ -178,22 +177,19 @@ fn main() -> Result<()> {
 
             let files_read = files_read.fetch_add(1, Ordering::Relaxed) + 1;
             info!(files_read = %files_read.separate_with_commas(), file_path = %file_path.display(), "Finished counting words in file");
-            anyhow::Ok(())
+            anyhow::Ok(Some(word_frequencies))
         })
-        .for_each(|result| {
+        .filter_map(|result| {
             if let Err(error) = &result {
                 error!(%error);
             }
-
-        });
-
-    // convert the word frequencies into a vec
-    info!(unique_words = %word_counts.len().separate_with_commas(), "Converting word counts to vector");
-    let mut word_frequencies = word_counts.into_iter().collect::<Vec<_>>();
-
-    if should_stop.load(Ordering::Relaxed) {
-        return Ok(());
-    }
+            result.ok().flatten()
+        }).reduce(AHashMap::default, |mut acc, map| {
+            for (word, count) in map {
+                *acc.entry(word).or_default() += count;
+            }
+            acc
+        }).into_iter().collect::<Vec<_>>();
 
     if should_stop.load(Ordering::Relaxed) {
         // save any existing merges before exiting
