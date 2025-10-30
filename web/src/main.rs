@@ -58,6 +58,7 @@ async fn main() -> Result<()> {
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::to(pages::chat::PATH) }))
+        .route(pages::about::PATH, get(pages::about::page))
         .route(pages::chat::PATH, get(pages::chat::page))
         .route(pages::privacy::PATH, get(pages::privacy::page))
         .route(pages::signin::PATH, get(pages::signin::page))

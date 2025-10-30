@@ -1,4 +1,4 @@
-use {axum::response::IntoResponse, maud::html};
+use {crate::TEAM_EMAIL, axum::response::IntoResponse, maud::html};
 
 pub(crate) const PATH: &str = "/terms";
 
@@ -104,8 +104,8 @@ pub(crate) async fn page() -> impl IntoResponse {
                         section.legal-section {
                             h2 { "10. Contact Information" }
                             p {
-                                "If you have any questions about these Terms, please contact the development team "
-                                "through the appropriate channels provided in the service."
+                                "If you have any questions about these Terms, please email me at:"
+                                a.legal-link href=(format!("mailto:{TEAM_EMAIL}")) { (TEAM_EMAIL) }
                             }
                         }
                     }

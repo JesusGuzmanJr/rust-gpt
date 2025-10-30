@@ -17,6 +17,7 @@ pub(crate) fn db() -> &'static Database<'static> {
 pub(super) fn init(db_path: &Path) -> Result<()> {
     let mut models: Models = Models::new();
     crate::user::define(&mut models)?;
+    crate::thread::define(&mut models)?;
 
     drop(MODELS.set(models));
     let mut db =

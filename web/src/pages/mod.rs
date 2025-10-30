@@ -3,6 +3,7 @@ use {
     maud::{Markup, html},
 };
 
+pub(crate) mod about;
 pub(crate) mod chat;
 pub(crate) mod not_found;
 pub(crate) mod privacy;

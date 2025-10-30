@@ -5,7 +5,7 @@ use {
     chrono::{DateTime, Utc},
     common::{key_type, string_type, uuid_type},
     garde::Validate,
-    native_db::{Key, Models, ToKey, native_db},
+    native_db::{Models, ToKey, native_db},
     native_model::{Model, native_model},
     serde::{Deserialize, Serialize},
     tokio::task::spawn_blocking,
