@@ -19,6 +19,7 @@ argon2 = { version = "0.5.3", default-features = false, features = ["alloc"] }
 axum = "0.8.6"
 axum-extra = { version = "0.10.3", features = ["cookie"] }
 axum-htmx = { version = "0.8.1", features = ["auto-vary"] }
+axum-server = { version = "0.7.2", features = ["tls-rustls"] }
 axum-valid = { version = "0.24.0", default-features = false, features = [
     "garde",
     "basic",
@@ -50,8 +51,7 @@ native_model = { version = "0.6.2", features = ["bincode_2"] }
 quick_cache = "0.6.18"
 rand = "0.9.2"
 ron.workspace = true
-rustls = "0.23.34"
-rustls-pemfile = "2.2.0"
+rustls = { version = "0.23.34", features = ["ring"] }
 serde.workspace = true
 strum.workspace = true
 thiserror.workspace = true
