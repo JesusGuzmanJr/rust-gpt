@@ -120,3 +120,19 @@ pub(crate) fn home(width: u32, height: u32) -> Markup {
         }
     }
 }
+
+pub(crate) fn check(width: u32, height: u32) -> Markup {
+    html! {
+        svg.icon width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+            path d="M20 6 9 17l-5-5";
+        }
+    }
+}
+
+pub(crate) fn x(width: u32, height: u32) -> Markup {
+    html! {
+        svg.icon width=(width) height=(height) viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" {
+            path d="M18 6 6 18M6 6l12 12";
+        }
+    }
+}

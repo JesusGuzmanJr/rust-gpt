@@ -92,7 +92,19 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                             div.chat-header__logo {
                                 span { "AI" }
                             }
-                            h1.chat-header__title { "New Chat" }
+                            // Title display mode
+                            h1.chat-header__title id="chat-title-display" { "New Chat" }
+
+                            // Title edit mode (initially hidden)
+                            div.chat-header__title-edit id="chat-title-edit" style="display: none;" {
+                                input.chat-header__title-input id="chat-title-input" type="text" value="New Chat";
+                                button.chat-header__title-btn.chat-header__title-btn--confirm id="chat-title-confirm" {
+                                    (svg::check(16, 16))
+                                }
+                                button.chat-header__title-btn.chat-header__title-btn--cancel id="chat-title-cancel" {
+                                    (svg::x(16, 16))
+                                }
+                            }
                         }
 
                         div.chat-header__right {

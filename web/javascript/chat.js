@@ -1,3 +1,64 @@
+// Chat title editing functionality
+document.addEventListener('DOMContentLoaded', () => {
+    const titleDisplay = document.getElementById('chat-title-display');
+    const titleEdit = document.getElementById('chat-title-edit');
+    const titleInput = document.getElementById('chat-title-input');
+    const confirmButton = document.getElementById('chat-title-confirm');
+    const cancelButton = document.getElementById('chat-title-cancel');
+
+    if (titleDisplay && titleEdit && titleInput && confirmButton && cancelButton) {
+        // Enter edit mode when clicking the title
+        titleDisplay.addEventListener('click', () => {
+            titleInput.value = titleDisplay.textContent;
+            titleDisplay.style.display = 'none';
+            titleEdit.style.display = 'flex';
+            titleInput.focus();
+            titleInput.select();
+        });
+
+        // Save title
+        const saveTitle = () => {
+            const newTitle = titleInput.value.trim();
+            if (newTitle) {
+                titleDisplay.textContent = newTitle;
+            }
+            titleEdit.style.display = 'none';
+            titleDisplay.style.display = 'block';
+        };
+
+        // Cancel edit
+        const cancelEdit = () => {
+            titleEdit.style.display = 'none';
+            titleDisplay.style.display = 'block';
+        };
+
+        // Confirm button click
+        confirmButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            saveTitle();
+        });
+
+        // Cancel button click
+        cancelButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            cancelEdit();
+        });
+
+        // Keyboard shortcuts
+        titleInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                saveTitle();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                cancelEdit();
+            }
+        });
+    }
+});
+
 // Settings popover functionality
 document.addEventListener('DOMContentLoaded', () => {
     const popover = document.getElementById('settings-popover');

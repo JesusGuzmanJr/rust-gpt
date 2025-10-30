@@ -1,4 +1,4 @@
-use {axum::response::IntoResponse, maud::html};
+use {crate::PROJECT_NAME, axum::response::IntoResponse, maud::html};
 
 pub(crate) const PATH: &str = "/about";
 
@@ -9,12 +9,12 @@ pub(crate) async fn page() -> impl IntoResponse {
             div.legal-container {
                 div.legal-card {
                     div.legal-header {
-                        h1.legal-title { "About This Project" }
+                        h1.legal-title { "About " (PROJECT_NAME) }
                     }
 
                     div.legal-content {
                         section.legal-section {
-                            h2 { "Purpose" }
+                            h2 { "Why make this?" }
                             p {
                                 "This project's mission is to push boundaries: How much can a developer "
                                 "design, train, and operate a chat-based GPT model entirely from scratch? "
@@ -25,7 +25,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         }
 
                         section.legal-section {
-                            h2 { "Technology Stack" }
+                            h2 { "Why Rust?" }
                             p {
                                 "This application is built with Rust because its type system allows me to model "
                                 "problems that would require too much boilerplate, comments, or linter checks "
@@ -34,7 +34,7 @@ pub(crate) async fn page() -> impl IntoResponse {
                         }
 
                         section.legal-section {
-                            h2 { "Experimental Nature" }
+                            h2 { "Beware what?" }
                             p {
                                 "As an experimental project, features are all alpha, may change "
                                 "without notice, or occasionally not work at all during planned "
