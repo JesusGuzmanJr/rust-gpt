@@ -5,12 +5,13 @@ use {
         svg,
         user::{EmailAddress, Password, User},
     },
-    axum::{Form, Router, response::IntoResponse, routing::post},
+    axum::{Form, Router, extract::ConnectInfo, response::IntoResponse, routing::post},
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
     garde::Validate,
     maud::{Markup, html},
     serde::{Deserialize, Deserializer},
+    std::net::SocketAddr,
     tracing::*,
 };
 
@@ -112,13 +113,14 @@ pub(crate) fn api() -> Router {
                 Ok(&String::deserialize(deserializer)? == "on") // default checkbox value is "on"
             }
 
-            async |cookie_jar: CookieJar,
+            async |ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
+                   cookie_jar: CookieJar,
                    Garde(Form(SignInForm {
                        email,
                        password,
                        remember,
                    })): Garde<Form<SignInForm>>| {
-                info!(%email, ?remember,"sign in requested");
+                info!(%email, ?remember, %socket_address, "sign in requested");
 
                 let user = match User::by_email(&email).await? {
                     Some(user) => user,

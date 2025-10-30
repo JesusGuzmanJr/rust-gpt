@@ -8,7 +8,7 @@ use {
     },
     axum::{
         Form, Router,
-        extract::Query,
+        extract::{ConnectInfo, Query},
         response::IntoResponse,
         routing::{get, post},
     },
@@ -17,7 +17,7 @@ use {
     garde::{Validate, util::nested_path},
     maud::{Markup, html},
     serde::{Deserialize, Serialize},
-    std::str::FromStr,
+    std::{net::SocketAddr, str::FromStr},
     tracing::*,
 };
 
@@ -388,13 +388,14 @@ pub(crate) fn api() -> Router {
                     }
                 }
 
-                async |Garde(Form(SignUpForm {
+                async |ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
+                       Garde(Form(SignUpForm {
                            name,
                            email,
                            password,
                            confirm_password: _,
                        })): Garde<Form<SignUpForm>>| {
-                    info!(%name, %email, "sign up requested");
+                    info!(%name, %email, %socket_address, "sign up requested");
 
                     // Check if email is already registered
                     if User::by_email(&email).await?.is_some() {
