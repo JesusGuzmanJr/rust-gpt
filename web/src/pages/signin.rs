@@ -10,7 +10,7 @@ use {
     axum_valid::Garde,
     garde::Validate,
     maud::{Markup, html},
-    serde::Deserialize,
+    serde::{Deserialize, Deserializer},
     tracing::*,
 };
 
@@ -43,7 +43,7 @@ fn signin_card(invalid_credentials: Option<EmailAddress>) -> Markup {
             @if invalid_credentials.is_some() {
                 div.auth-error {
                     (svg::x_circle("auth-error__icon", 20, 20))
-                    span.auth-error__text { "Invalid email or password" }
+                    span.auth-error__text { "Invalid email or password." }
                 }
             }
 
@@ -101,16 +101,24 @@ pub(crate) fn api() -> Router {
                 #[garde(skip)]
                 password: Password,
                 #[garde(skip)]
-                remember: Option<String>,
+                #[serde(deserialize_with = "deserialize_checkbox", default)]
+                remember: bool,
+            }
+
+            fn deserialize_checkbox<'de, D>(deserializer: D) -> Result<bool, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                Ok(&String::deserialize(deserializer)? == "on") // default checkbox value is "on"
             }
 
             async |cookie_jar: CookieJar,
                    Garde(Form(SignInForm {
                        email,
                        password,
-                       remember: _remember,
+                       remember,
                    })): Garde<Form<SignInForm>>| {
-                info!(%email, "sign in requested");
+                info!(%email, ?remember,"sign in requested");
 
                 let user = match User::by_email(&email).await? {
                     Some(user) => user,
@@ -128,7 +136,7 @@ pub(crate) fn api() -> Router {
                     return AppResult::Ok(signin_card(Some(email)).into_response());
                 }
 
-                let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id)?;
+                let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id, remember)?;
 
                 info!(%user_id, "sign in successful");
                 AppResult::Ok(

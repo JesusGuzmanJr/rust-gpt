@@ -22,7 +22,11 @@ struct Session {
     create_at: DateTime<Utc>,
 }
 
-pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Result<CookieJar> {
+pub(crate) fn create_auth_cookie(
+    cookie_jar: CookieJar,
+    user_id: UserId,
+    remember: bool,
+) -> Result<CookieJar> {
     let session = Session {
         user_id,
         create_at: Utc::now(),
@@ -32,9 +36,12 @@ pub(crate) fn create_auth_cookie(cookie_jar: CookieJar, user_id: UserId) -> Resu
 
     cookie.set_same_site(axum_extra::extract::cookie::SameSite::Strict);
     cookie.set_http_only(true);
-    cookie.set_max_age(time::Duration::seconds(SESSION_DURATION.num_seconds()));
     cookie.set_secure(!cfg!(debug_assertions));
     cookie.set_path("/");
+
+    if remember {
+        cookie.set_max_age(time::Duration::seconds(SESSION_DURATION.num_seconds()));
+    }
 
     Ok(cookie_jar.add(cookie))
 }
