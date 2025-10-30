@@ -48,11 +48,11 @@ fn signup_card(email_is_taken: bool) -> Markup {
             p.auth-subtitle { "Sign up to get started with " (crate::PROJECT_NAME) }
         }
 
-        form.auth-form hx-post="/api/signup" hx-target=".auth-card" {
+        form.auth-form hx-post="/api/signup" hx-target=".auth-card" autocomplete="on" {
             @if email_is_taken {
                 div.auth-error {
                     (svg::x_circle("auth-error__icon", 20, 20))
-                    span.auth-error__text { "This email address is already registered. Please sign in instead." }
+                    span.auth-error__text { "This email address is already in use. Please sign in instead." }
                 }
             }
 
@@ -60,7 +60,7 @@ fn signup_card(email_is_taken: bool) -> Markup {
                 label.form-label for="name" { "Full Name" }
                 div.input-wrapper {
                     (svg::user(20, 20))
-                    input."form-input"#name type="text" name="name" placeholder="Jane Doe" required autofocus;
+                    input."form-input"#name type="text" name="name" placeholder="Jane Doe" autocomplete="name" required autofocus;
                 }
             }
 
@@ -71,6 +71,8 @@ fn signup_card(email_is_taken: bool) -> Markup {
                     input."form-input"#email
                         type="email"
                         name="email"
+                        autocomplete="username"
+                        inputmode="email"
                         placeholder="you@example.com"
                         required
                         hx-get="/api/signup/validate"
@@ -84,7 +86,7 @@ fn signup_card(email_is_taken: bool) -> Markup {
                 label.form-label for="password" { "Password" }
                 div.input-wrapper {
                     (svg::lock(20, 20))
-                    input."form-input"#password type="password" name="password" placeholder="Create a strong password" required minlength="8";
+                    input."form-input"#password type="password" name="password" placeholder="Create a strong password" autocomplete="new-password" required minlength="8";
                 }
                 p.form-hint { "Must be at least 8 characters" }
             }
@@ -93,7 +95,7 @@ fn signup_card(email_is_taken: bool) -> Markup {
                 label.form-label for="confirm-password" { "Confirm Password" }
                 div.input-wrapper {
                     (svg::lock(20, 20))
-                    input."form-input" id="confirm-password" type="password" name="confirm_password" placeholder="Re-enter your password" required minlength="8";
+                    input."form-input" id="confirm-password" type="password" name="confirm_password" placeholder="Re-enter your password" autocomplete="new-password" required minlength="8";
                 }
             }
 
