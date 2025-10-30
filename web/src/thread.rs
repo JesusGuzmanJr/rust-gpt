@@ -17,9 +17,9 @@ uuid_type!(
 );
 
 string_type!(
-    /// The name of a chat thread.
+    /// The title of a chat thread.
     #[derive(Validate)]
-    pub(crate) ThreadName(#[garde(length(min = 1, max = 64))])
+    pub(crate) ThreadTitle(#[garde(length(min = 1, max = 64))])
 );
 
 pub(crate) type Thread = v1::Thread;
@@ -37,7 +37,7 @@ pub(crate) mod v1 {
         pub(crate) id: ThreadId,
         #[secondary_key]
         pub(crate) user_id: UserId,
-        pub(crate) thread_name: ThreadName,
+        pub(crate) thread_title: ThreadTitle,
         pub(crate) created_at: DateTime<Utc>,
         pub(crate) updated_at: DateTime<Utc>,
     }
@@ -50,11 +50,11 @@ pub(crate) fn define(models: &mut Models) -> Result<()> {
 }
 
 impl Thread {
-    pub(crate) fn new(user_id: UserId, thread_name: ThreadName) -> Self {
+    pub(crate) fn new(user_id: UserId, thread_title: ThreadTitle) -> Self {
         Thread {
             id: ThreadId::new(),
             user_id,
-            thread_name,
+            thread_title,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -73,7 +73,7 @@ impl Thread {
         .await?
     }
 
-    pub(crate) async fn get_all_chat_threads(user_id: UserId) -> Result<Vec<Thread>> {
+    pub(crate) async fn get_all_chat_threads(user_id: UserId) -> Result<Vec<Self>> {
         spawn_blocking(move || {
             Ok(db()
                 .r_transaction()?
@@ -86,7 +86,33 @@ impl Thread {
                     }
                     result.ok()
                 })
-                .collect::<Vec<Thread>>())
+                .collect())
+        })
+        .await?
+    }
+
+    pub(crate) async fn get_by_id(thread_id: ThreadId) -> Result<Option<Self>> {
+        spawn_blocking(move || {
+            let r = db().r_transaction()?;
+            Ok(r.get().primary(thread_id)?)
+        })
+        .await?
+    }
+
+    pub(crate) async fn update_title(thread_id: ThreadId, new_title: ThreadTitle) -> Result<()> {
+        spawn_blocking(move || {
+            let rw = db().rw_transaction()?;
+
+            let mut thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
+
+            thread.thread_title = new_title;
+            thread.updated_at = Utc::now();
+
+            rw.insert(thread)?;
+            rw.commit()
+                .context("failed to commit transaction that updates thread name")?;
+
+            Ok(())
         })
         .await?
     }

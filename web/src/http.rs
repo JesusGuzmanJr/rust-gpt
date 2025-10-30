@@ -18,40 +18,37 @@ pub(crate) const HTML_CONTENT_TYPE: (HeaderName, HeaderValue) = (
     HeaderValue::from_static("text/html; charset=utf-8"),
 );
 
+/// Helper to get a T from the given cookie name.
+fn extract<T>(cookie_name: &str, cookie_jar: &CookieJar) -> Option<T>
+where
+    T: std::str::FromStr,
+{
+    cookie_jar
+        .get(cookie_name)
+        .map(|cookie| cookie.value())
+        .and_then(|value| value.parse::<T>().ok())
+}
+
 /// Helper to get the user's locale from the cookies set by the
 /// frontend script.
 pub(crate) fn extract_locale(cookie_jar: &CookieJar) -> Locale {
-    cookie_jar
-        .get("locale")
-        .map(|cookie| cookie.value())
-        .unwrap_or("en-US")
-        .parse()
-        .unwrap_or(icu::locale::locale!("en-US"))
+    extract("locale", cookie_jar).unwrap_or(icu::locale::locale!("en-US"))
 }
 
 /// Helper to get the user's timezone from the cookies set by the
 /// frontend script (chrono-tz format).
 pub(crate) fn extract_timezone(cookie_jar: &CookieJar) -> Tz {
-    cookie_jar
-        .get("timezone")
-        .and_then(|cookie| cookie.value().parse().ok())
-        .unwrap_or(chrono_tz::America::Los_Angeles)
+    extract("timezone", cookie_jar).unwrap_or(chrono_tz::America::Los_Angeles)
 }
 
 /// Helper to get the current thread ID from the cookies.
 pub(crate) fn extract_thread_id(cookie_jar: &CookieJar) -> Option<ThreadId> {
-    cookie_jar
-        .get("chat_id")
-        .map(|cookie| cookie.value())
-        .and_then(|value| ThreadId::try_parse(value).ok())
+    extract("thread_id", cookie_jar)
 }
 
 /// Helper to get the current user ID from the cookies.
 pub(crate) fn extract_user_id(cookie_jar: &CookieJar) -> Option<UserId> {
-    cookie_jar
-        .get("user_id")
-        .map(|cookie| cookie.value())
-        .and_then(|value| UserId::try_parse(value).ok())
+    extract("user_id", cookie_jar)
 }
 
 #[cfg(test)]
