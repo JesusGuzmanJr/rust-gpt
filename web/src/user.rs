@@ -64,26 +64,6 @@ fn validate_entropy(password: &str, context: &PasswordValidationContext) -> gard
     }
 }
 
-impl ToKey for UserId {
-    fn to_key(&self) -> Key {
-        Key::new(self.0.as_bytes().to_vec())
-    }
-
-    fn key_names() -> Vec<String> {
-        vec!["UserId".to_string()]
-    }
-}
-
-impl ToKey for EmailAddress {
-    fn to_key(&self) -> Key {
-        Key::new(self.0.as_bytes().to_vec())
-    }
-
-    fn key_names() -> Vec<String> {
-        vec!["EmailAddress".to_string()]
-    }
-}
-
 pub(crate) type User = v1::User;
 pub(crate) type UserKey = v1::UserKey;
 

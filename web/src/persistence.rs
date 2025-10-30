@@ -2,6 +2,7 @@ use {
     anyhow::Result,
     native_db::{Database, Models},
     std::{path::Path, sync::OnceLock},
+    tracing::*,
 };
 
 static MODELS: OnceLock<Models> = OnceLock::new();
@@ -18,8 +19,11 @@ pub(super) fn init(db_path: &Path) -> Result<()> {
     crate::user::define(&mut models)?;
 
     drop(MODELS.set(models));
-    let db =
+    let mut db =
         native_db::Builder::new().create(MODELS.get().expect("models not initialized"), db_path)?;
+
+    info!(db_path = %db_path.display(), "compacting database");
+    db.compact()?;
 
     drop(DB.set(db));
 

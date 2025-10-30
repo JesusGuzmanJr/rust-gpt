@@ -9,17 +9,13 @@ use {
     },
     axum_extra::extract::Host,
     bytesize::ByteSize,
-    std::{
-        net::{IpAddr, Ipv4Addr, SocketAddr},
-        thread,
-    },
+    std::net::{IpAddr, Ipv4Addr, SocketAddr},
     tower::service_fn,
     tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
     tracing::*,
 };
 
 mod auth;
-mod chat;
 mod config;
 mod datetime;
 mod error;
@@ -29,6 +25,7 @@ mod mailer;
 mod pages;
 mod persistence;
 mod svg;
+mod thread;
 mod user;
 
 /// Set low to prevent abuse.
@@ -114,9 +111,9 @@ async fn main() -> Result<()> {
 
             let governor_limiter = governor_config.limiter().clone();
 
-            thread::spawn(move || {
+            std::thread::spawn(move || {
                 loop {
-                    thread::sleep(std::time::Duration::from_secs(20));
+                    std::thread::sleep(std::time::Duration::from_secs(20));
                     governor_limiter.retain_recent();
                 }
             });

@@ -1,5 +1,5 @@
 use {
-    crate::{chat::ThreadId, user::UserId},
+    crate::{thread::ThreadId, user::UserId},
     axum::http::{HeaderName, HeaderValue, header},
     axum_extra::extract::CookieJar,
     chrono_tz::Tz,

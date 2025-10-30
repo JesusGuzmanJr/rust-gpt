@@ -10,10 +10,14 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[features]
+native_db = ["dep:native_db"]
+
 [dependencies]
 anyhow.workspace = true
 bincode = { version = "2.0.1", features = ["serde"] }
 derive_more.workspace = true
+native_db = { workspace = true, optional = true }
 ron.workspace = true
 serde.workspace = true
 uuid.workspace = true

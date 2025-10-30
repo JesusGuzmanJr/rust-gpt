@@ -69,6 +69,17 @@ macro_rules! string_type {
                 &self.0
             }
         }
+
+        #[cfg(feature = "native_db")]
+        impl ::native_db::ToKey for $name {
+            fn to_key(&self) -> ::native_db::Key {
+                ::native_db::Key::new(self.0.as_bytes().to_vec())
+            }
+
+            fn key_names() -> ::std::vec::Vec<::std::string::String> {
+                ::std::vec![stringify!($name).to_string()]
+            }
+        }
     };
     ($(#[$attr:meta])* $vis:vis $name:ident($(#[$inner_attr:meta])+)) => {
         string_type! {
@@ -179,6 +190,17 @@ macro_rules! uuid_type {
         impl ::std::convert::AsRef<::uuid::Uuid> for $name {
             fn as_ref(&self) -> &::uuid::Uuid {
                 &self.0
+            }
+        }
+
+        #[cfg(feature = "native_db")]
+        impl ::native_db::ToKey for $name {
+            fn to_key(&self) -> ::native_db::Key {
+                ::native_db::Key::new(self.0.as_bytes().to_vec())
+            }
+
+            fn key_names() -> ::std::vec::Vec<::std::string::String> {
+                ::std::vec![stringify!($name).to_string()]
             }
         }
     };
