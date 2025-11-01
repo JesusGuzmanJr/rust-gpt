@@ -19,7 +19,7 @@ uuid_type!(
 string_type!(
     /// The title of a chat thread.
     #[derive(Validate)]
-    pub(crate) ThreadTitle(#[garde(length(min = 1, max = 64))])
+    pub(crate) ThreadTitle(#[garde(length(min = 1, max = 32))])
 );
 
 pub(crate) type Thread = v1::Thread;
@@ -29,7 +29,7 @@ pub(crate) mod v1 {
     use super::*;
 
     /// A chat thread.
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Debug, Clone, Serialize, Deserialize)]
     #[native_model(id = 2, version = 1, with = native_model::bincode_2::Bincode)]
     #[native_db]
     pub(crate) struct Thread {

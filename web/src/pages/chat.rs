@@ -37,12 +37,10 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
     let user = require_auth_user(&cookie_jar).await?;
 
     let threads = {
-        let mut t = Thread::get_all_chat_threads(user.id).await?;
-        t.sort_unstable_by_key(|t| Reverse(t.created_at));
-        t
+        let mut threads = Thread::get_all_chat_threads(user.id).await?;
+        threads.sort_unstable_by_key(|t| Reverse(t.created_at));
+        threads
     };
-
-    dbg!(&user);
 
     let chat_title = threads
         .first()
@@ -119,10 +117,17 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                             // Title edit mode (initially hidden)
                             div.chat-header__title-edit id="chat-title-edit" style="display: none;" {
                                 input.chat-header__title-input id="chat-title-input" type="text" name="thread_title" value=(chat_title);
-                                button.chat-header__title-btn.chat-header__title-btn--confirm id="chat-title-confirm" hx-post="/api/chat/title" hx-include="#chat-title-input" hx-swap="none"{
+
+                                button.chat-header__title-btn.chat-header__title-btn--confirm
+                                    id="chat-title-confirm"
+                                    hx-post="/api/chat/title"
+                                    hx-include="#chat-title-input"
+                                    hx-swap="none"{
                                     (svg::check(16, 16))
                                 }
-                                button.chat-header__title-btn.chat-header__title-btn--cancel id="chat-title-cancel" {
+
+                                button.chat-header__title-btn.chat-header__title-btn--cancel
+                                    id="chat-title-cancel" {
                                     (svg::x(16, 16))
                                 }
                             }
@@ -242,9 +247,23 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                                 }
                             }
 
-                            textarea.chat-input__textarea id="message-input" placeholder="Type your message..." rows="1" name="message" hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-swap="beforeend" hx-trigger="keydown[key=='Enter' && !shiftKey]" {}
+                            textarea.chat-input__textarea
+                                id="message-input"
+                                placeholder="Type your message..."
+                                rows="1"
+                                name="message"
+                                hx-post="/api/chat/send"
+                                hx-target=".chat-messages__inner"
+                                hx-swap="beforeend"
+                                hx-trigger="keydown[key=='Enter' && !shiftKey]" {}
 
-                            button.button.button--primary.chat-input__send-btn id="send-btn" disabled hx-post="/api/chat/send" hx-target=".chat-messages__inner" hx-include="#message-input" hx-swap="beforeend"{
+                            button.button.button--primary.chat-input__send-btn
+                                id="send-btn"
+                                disabled
+                                hx-post="/api/chat/send"
+                                hx-target=".chat-messages__inner"
+                                hx-include="#message-input"
+                                hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
                         }
@@ -327,17 +346,19 @@ pub(crate) fn api() -> Router {
                         let thread_id = match http::extract_thread_id(&cookie_jar) {
                             Some(thread_id) => thread_id,
                             None => {
-                                // TODO: generate new thread ID and return the id as cookie
-                                return (StatusCode::BAD_REQUEST, "No thread ID found")
-                                    .into_response();
+                                // thread doesn't exist (yet)
+                               return StatusCode::OK;
                             }
                         };
 
                         match Thread::update_title(thread_id, thread_title.clone()).await {
-                            Ok(_) => StatusCode::OK.into_response(),
+                            Ok(_) => {
+                                debug!(%thread_id, "thread title updated");
+                                StatusCode::OK
+                            },
                             Err(error) => {
                                 error!(?error, %thread_id, "failed to update thread title");
-                                StatusCode::INTERNAL_SERVER_ERROR.into_response()
+                                StatusCode::INTERNAL_SERVER_ERROR
                             }
                         }
                     }
