@@ -22,6 +22,7 @@ mod error;
 mod hash;
 mod http;
 mod mailer;
+mod message;
 mod pages;
 mod persistence;
 mod svg;

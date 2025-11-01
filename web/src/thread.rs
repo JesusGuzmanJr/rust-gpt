@@ -73,7 +73,7 @@ impl Thread {
         .await?
     }
 
-    pub(crate) async fn get_all_chat_threads(user_id: UserId) -> Result<Vec<Self>> {
+    pub(crate) async fn get_all(user_id: UserId) -> Result<Vec<Self>> {
         spawn_blocking(move || {
             Ok(db()
                 .r_transaction()?
@@ -82,7 +82,7 @@ impl Thread {
                 .start_with(user_id)?
                 .filter_map(|result| {
                     if let Err(error) = &result {
-                        warn!(%user_id, %error, "failed to get chat thread");
+                        warn!(%user_id, %error, "failed to get thread");
                     }
                     result.ok()
                 })

@@ -18,6 +18,7 @@ pub(super) fn init(db_path: &Path) -> Result<()> {
     let mut models: Models = Models::new();
     crate::user::define(&mut models)?;
     crate::thread::define(&mut models)?;
+    crate::message::define(&mut models)?;
 
     drop(MODELS.set(models));
     let mut db =

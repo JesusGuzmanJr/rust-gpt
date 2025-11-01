@@ -2,7 +2,9 @@ use {
     crate::{
         auth::require_auth_user,
         error::ResponseResult,
-        http, svg,
+        http,
+        message::Message,
+        svg,
         thread::{Thread, ThreadTitle},
     },
     axum::{
@@ -37,9 +39,19 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
     let user = require_auth_user(&cookie_jar).await?;
 
     let threads = {
-        let mut threads = Thread::get_all_chat_threads(user.id).await?;
+        let mut threads = Thread::get_all(user.id).await?;
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
         threads
+    };
+
+    let messages = {
+        if let Some(thread) = threads.first() {
+            let mut messages = Message::get_all_messages(thread.id).await?;
+            messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+            messages
+        } else {
+            Vec::with_capacity(0)
+        }
     };
 
     let chat_title = threads
