@@ -4,7 +4,7 @@ use {
         error::{AppResult, ResponseResult},
         http::extract,
         internationalization::Internationalization,
-        message::{Feedback, Message, Payload, UserMessageContent},
+        message::{Feedback, Message, Payload, SystemMessageContent, UserMessageContent},
         svg,
         thread::{Thread, ThreadId, ThreadTitle},
         user::UserId,
@@ -49,7 +49,13 @@ pub(crate) async fn page(
             messages.sort_unstable_by_key(|m| Reverse(m.created_at));
             messages
         } else {
-            Vec::with_capacity(0)
+            vec![Message::new(
+                ThreadId::new(),
+                Payload::SystemMessage {
+                    content: SystemMessageContent::greeting(),
+                    feedback: None,
+                },
+            )]
         }
     };
 
@@ -174,53 +180,9 @@ pub(crate) async fn page(
                     // Messages area
                     main.chat-messages {
                         div.chat-messages__inner {
-                            // System message
-                            div.message.message--system {
-                                div.message__wrapper {
-                                    div.message__bubble.message__bubble--system {
-                                        p { "Hello! How can I assist you today?" }
-                                    }
-                                    div.message__meta {
-                                        span.message__time { "2:30 PM" }
-                                        button.message__feedback-btn {
-                                            (svg::thumbs_up(16, 16))
-                                        }
-                                        button.message__feedback-btn {
-                                            (svg::thumbs_down(16, 16))
-                                        }
-                                    }
-                                }
+                            @for message in messages {
+                                (render_message(&message, &internationalization))
                             }
-
-                            // // User message
-                            // (render_user_message(
-                            //     &UserMessage::new("I need help with my project."),
-                            //     Utc::now(),
-                            //     &http::extract_locale(&cookie_jar),
-                            //     &http::extract_timezone(&cookie_jar),
-                            // ))
-
-                            // System message
-                            div.message.message--system {
-                                div.message__wrapper {
-                                    div.message__bubble.message__bubble--system {
-                                        p { "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?" }
-                                    }
-                                    div.message__meta {
-                                        span.message__time { "2:31 PM" }
-                                        button.message__feedback-btn {
-                                            (svg::thumbs_up(16, 16))
-                                        }
-                                        button.message__feedback-btn {
-                                            (svg::thumbs_down(16, 16))
-                                        }
-                                    }
-                                }
-                            }
-                            (render_message(
-                                &Message::new(crate::thread::ThreadId::new(), Payload::SystemMessage { content: "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?".into(), feedback: Some(Feedback::ThumbsUp) }),
-                                &internationalization,
-                            ))
                         }
                     }
 
@@ -451,10 +413,14 @@ fn render_message(message: &Message, internationalization: &Internationalization
                         }
                         div.message__meta {
                             span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
-                            button class=(feedback.map(|f| if matches!(f, Feedback::ThumbsUp) { "message__feedback-btn active" } else { "" }).unwrap_or_default()) {
+                            button class=(
+                              format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsUp)) { " active" } else { "" })
+                            ) {
                                 (svg::thumbs_up(16, 16))
                             }
-                            button class=(feedback.map(|f| if matches!(f, Feedback::ThumbsDown) { "message__feedback-btn active" } else { "" }).unwrap_or_default()) {
+                            button class=(
+                              format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsDown)) { " active" } else { "" })
+                            ) {
                                 (svg::thumbs_down(16, 16))
                             }
                         }

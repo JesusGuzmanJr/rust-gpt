@@ -27,6 +27,13 @@ string_type!(
     pub(crate) SystemMessageContent
 );
 
+impl SystemMessageContent {
+    /// The default system greeting message.
+    pub(crate) fn greeting() -> Self {
+        "Hello! How can I assist you today?".into()
+    }
+}
+
 pub(crate) type Message = v1::Message;
 pub(crate) type MessageKey = v1::MessageKey;
 
