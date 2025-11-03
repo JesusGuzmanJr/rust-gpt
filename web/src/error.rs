@@ -43,8 +43,9 @@ impl tower_http::catch_panic::ResponseForPanic for PanicResponder {
 
     fn response_for_panic(
         &mut self,
-        err: Box<dyn Any + Send + 'static>,
+        panic: Box<dyn Any + Send + 'static>,
     ) -> Response<Self::ResponseBody> {
+        tracing::error!(?panic);
         crate::pages::internal_server_error_page().into_response()
     }
 }

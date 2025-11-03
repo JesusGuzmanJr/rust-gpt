@@ -1,10 +1,7 @@
 use {
+    crate::internationalization::Internationalization,
     chrono::{DateTime, Datelike, Timelike, Utc},
-    chrono_tz::Tz,
-    icu::{
-        datetime::input::{Date, Time},
-        locale::Locale,
-    },
+    icu::datetime::input::{Date, Time},
 };
 
 /// Formats a UTC datetime in a human-readable format according to the user's
@@ -28,8 +25,7 @@ use {
 /// ```
 pub(crate) fn today_implied_human_datetime(
     datetime: &DateTime<Utc>,
-    locale: &Locale,
-    timezone: &Tz,
+    Internationalization { locale, timezone }: &Internationalization,
 ) -> String {
     let local_datetime = datetime.with_timezone(timezone);
 

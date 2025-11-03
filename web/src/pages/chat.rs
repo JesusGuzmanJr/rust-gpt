@@ -2,28 +2,27 @@ use {
     crate::{
         auth::require_auth_user,
         error::{AppResult, ResponseResult},
-        http,
+        http::extract,
+        internationalization::Internationalization,
         message::{Feedback, Message, Payload, UserMessageContent},
         svg,
-        thread::{Thread, ThreadTitle},
+        thread::{Thread, ThreadId, ThreadTitle},
+        user::UserId,
     },
     axum::{
         Form, Router,
-        extract::Query,
-        http::StatusCode,
+        extract::{FromRequestParts, Query},
+        http::{StatusCode, request::Parts},
         response::{IntoResponse, Redirect},
         routing::{get, post},
     },
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
-    chrono::{DateTime, Utc},
-    chrono_tz::Tz,
     garde::Validate,
-    icu::locale::Locale,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
     serde::Deserialize,
-    std::cmp::Reverse,
+    std::{cmp::Reverse, convert::Infallible},
     strum::{Display, EnumIter, IntoEnumIterator},
     thousands::Separable,
     tracing::*,
@@ -31,7 +30,10 @@ use {
 
 pub(crate) const PATH: &str = "/chat";
 
-pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
+pub(crate) async fn page(
+    internationalization: Internationalization,
+    cookie_jar: CookieJar,
+) -> ResponseResult {
     tracing::info!("chat page requested");
     let user = require_auth_user(&cookie_jar).await?;
 
@@ -217,8 +219,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                             }
                             (render_message(
                                 &Message::new(crate::thread::ThreadId::new(), Payload::SystemMessage { content: "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?".into(), feedback: Some(Feedback::ThumbsUp) }),
-                                &http::extract_locale(&cookie_jar),
-                                &http::extract_timezone(&cookie_jar),
+                                &internationalization,
                             ))
                         }
                     }
@@ -317,16 +318,17 @@ pub(crate) fn api() -> Router {
                         content: UserMessageContent,
                     }
 
-                    async |cookie_jar: CookieJar,
+                    async |internationalization: Internationalization, CurrUserId(user_id): CurrUserId,
+                            CurrThreadId(thread_id): CurrThreadId,
                            Garde(Form(MessageQuery { content })): Garde<Form<MessageQuery>>| {
-                        let user_id = match http::extract_user_id(&cookie_jar) {
+                        let user_id = match user_id {
                             Some(user_id) => user_id,
                             None => {
                                 return Ok((StatusCode::BAD_REQUEST, "No user ID found")
                                     .into_response());
                             }
                         };
-                        let thread_id = match http::extract_thread_id(&cookie_jar) {
+                        let thread_id = match thread_id {
                             Some(thread_id) => thread_id,
                             None => {
                                 let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
@@ -342,9 +344,7 @@ pub(crate) fn api() -> Router {
 
                         AppResult::Ok(render_message(
                             &message,
-
-                            &http::extract_locale(&cookie_jar),
-                            &http::extract_timezone(&cookie_jar),
+                            &internationalization,
                         )
                         .into_response())
                     }
@@ -359,11 +359,11 @@ pub(crate) fn api() -> Router {
                         thread_title: ThreadTitle,
                     }
 
-                    async |cookie_jar: CookieJar,
+                    async |CurrThreadId(thread_id): CurrThreadId,
                            Garde(Form(TitleForm {
                                thread_title,
                            })): Garde<Form<TitleForm>>| {
-                        let thread_id = match http::extract_thread_id(&cookie_jar) {
+                        let thread_id = match thread_id {
                             Some(thread_id) => thread_id,
                             None => {
                                 // thread doesn't exist (yet)
@@ -422,7 +422,7 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-fn render_message(message: &Message, locale: &Locale, timezone: &Tz) -> Markup {
+fn render_message(message: &Message, internationalization: &Internationalization) -> Markup {
     match &message.payload {
         Payload::UserMessage { content } => {
             // Note the user message needs to be escaped; htmx escapes by default.
@@ -433,7 +433,7 @@ fn render_message(message: &Message, locale: &Locale, timezone: &Tz) -> Markup {
                             p { (content) }
                         }
                         div.message__meta.message__meta--user {
-                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &locale, &timezone)) }
+                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-btn {
                                 (svg::edit(16, 16))
                             }
@@ -450,7 +450,7 @@ fn render_message(message: &Message, locale: &Locale, timezone: &Tz) -> Markup {
                             p { (content) }
                         }
                         div.message__meta {
-                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &locale, &timezone)) }
+                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
                             button class=(feedback.map(|f| if matches!(f, Feedback::ThumbsUp) { "message__feedback-btn active" } else { "" }).unwrap_or_default()) {
                                 (svg::thumbs_up(16, 16))
                             }
@@ -462,5 +462,32 @@ fn render_message(message: &Message, locale: &Locale, timezone: &Tz) -> Markup {
                 }
             }
         }
+    }
+}
+
+/// Extract the current thread ID from the cookies.
+#[derive(Debug)]
+struct CurrThreadId(Option<ThreadId>);
+
+impl FromRequestParts<()> for CurrThreadId {
+    type Rejection = Infallible;
+
+    // Required method
+    async fn from_request_parts(parts: &mut Parts, _: &()) -> Result<Self, Self::Rejection> {
+        let cookie_jar = CookieJar::from_headers(&parts.headers);
+        Ok(Self(extract("thread_id", &cookie_jar)))
+    }
+}
+
+#[derive(Debug)]
+struct CurrUserId(Option<UserId>);
+
+impl FromRequestParts<()> for CurrUserId {
+    type Rejection = Infallible;
+
+    // Required method
+    async fn from_request_parts(parts: &mut Parts, _: &()) -> Result<Self, Self::Rejection> {
+        let cookie_jar = CookieJar::from_headers(&parts.headers);
+        Ok(Self(extract("user_id", &cookie_jar)))
     }
 }

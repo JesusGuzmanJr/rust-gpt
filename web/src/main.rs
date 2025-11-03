@@ -27,6 +27,7 @@ mod datetime;
 mod error;
 mod hash;
 mod http;
+mod internationalization;
 mod mailer;
 mod message;
 mod pages;
