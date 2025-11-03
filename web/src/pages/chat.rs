@@ -5,7 +5,9 @@ use {
         hash::GlassVault,
         http::extract,
         internationalization::Internationalization,
-        message::{Feedback, Message, Payload, SystemMessageContent, UserMessageContent},
+        message::{
+            Feedback, Message, MessageId, Payload, SystemMessageContent, UserMessageContent,
+        },
         svg,
         thread::{Thread, ThreadId, ThreadTitle},
     },
@@ -193,7 +195,7 @@ pub(crate) async fn page(
                     main.chat-messages {
                         div.chat-messages__inner {
                             @for message in messages {
-                                (render_message(&message, &internationalization))
+                                (render_message(&message, &internationalization)?)
                             }
                         }
                     }
@@ -349,6 +351,30 @@ pub(crate) fn api() -> Router {
                         )
                     }
                 }),
+            )
+            .route(
+                "/feedback",
+                post({
+                    #[derive(Debug, Deserialize, Validate)]
+                    struct FeedbackForm {
+                        #[garde(skip)]
+                        message_id: GlassVault<MessageId>,
+                        #[garde(skip)]
+                        feedback: Feedback,
+                    }
+
+                    async |Garde(Form(FeedbackForm {
+                               message_id,
+                               feedback,
+                           })): Garde<Form<FeedbackForm>>| {
+                        let message_id = message_id.into_inner();
+                        debug!(%message_id, ?feedback, "updating message feedback");
+                        Message::update_feedback(message_id, feedback).await?;
+                        AppResult::Ok(
+                            render_feedback_form(message_id, Some(feedback)).into_response(),
+                        )
+                    }
+                }),
             ),
     )
 }
@@ -377,8 +403,11 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-fn render_message(message: &Message, internationalization: &Internationalization) -> Markup {
-    match &message.payload {
+fn render_message(
+    message: &Message,
+    internationalization: &Internationalization,
+) -> AppResult<Markup> {
+    Ok(match &message.payload {
         Payload::UserMessage { content } => {
             // Note the user message needs to be escaped; htmx escapes by default.
             html! {
@@ -406,20 +435,41 @@ fn render_message(message: &Message, internationalization: &Internationalization
                         }
                         div.message__meta {
                             span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
-                            button class=(
-                              format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsUp)) { " active" } else { "" })
-                            ) {
-                                (svg::thumbs_up(16, 16))
-                            }
-                            button class=(
-                              format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsDown)) { " active" } else { "" })
-                            ) {
-                                (svg::thumbs_down(16, 16))
-                            }
+                            (render_feedback_form(message.id, *feedback)?)
                         }
                     }
                 }
             }
         }
-    }
+    })
+}
+
+fn render_feedback_form(message_id: MessageId, feedback: Option<Feedback>) -> AppResult<Markup> {
+    let form_id = format!("feedback-form-{message_id}");
+    Ok(html! {
+        form."feedback-form" id=(form_id) {
+            input type="hidden" name="message_id" value=(GlassVault::new(message_id)?);
+
+            button class=(
+                format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsUp)) { " active" } else { "" })
+            )
+            type="button"
+            name="feedback"
+            value="ThumbsUp"
+            hx-post="/api/chat/feedback"
+            hx-target=(format!("#{form_id}")) {
+                (svg::thumbs_up(16, 16))
+            }
+            button class=(
+                format!("message__feedback-btn{}", if matches!(feedback, Some(Feedback::ThumbsDown)) { " active" } else { "" })
+            )
+            type="button"
+            name="feedback"
+            value="ThumbsDown"
+            hx-post="/api/chat/feedback"
+            hx-target=(format!("#{form_id}")) {
+                (svg::thumbs_down(16, 16))
+            }
+        }
+    })
 }

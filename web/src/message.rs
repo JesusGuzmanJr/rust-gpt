@@ -125,4 +125,38 @@ impl Message {
         })
         .await?
     }
+
+    pub(crate) async fn update_feedback(message_id: MessageId, feedback: Feedback) -> Result<()> {
+        spawn_blocking(move || {
+            let rw = db().rw_transaction()?;
+
+            let mut message: Message =
+                rw.get().primary(message_id)?.context("message not found")?;
+
+            // Only system messages can have feedback
+            if let Payload::SystemMessage { content, .. } = message.payload {
+                message.payload = Payload::SystemMessage {
+                    content,
+                    feedback: Some(feedback),
+                };
+
+                rw.auto_update(message.clone())?;
+                rw.commit()
+                    .context("failed to commit transaction that updates message feedback")?;
+            } else {
+                anyhow::bail!("cannot set feedback on user messages");
+            }
+
+            Ok(())
+        })
+        .await?
+    }
+
+    pub(crate) async fn get_by_id(message_id: MessageId) -> Result<Option<Self>> {
+        spawn_blocking(move || {
+            let r = db().r_transaction()?;
+            Ok(r.get().primary(message_id)?)
+        })
+        .await?
+    }
 }
