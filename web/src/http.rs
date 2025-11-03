@@ -1,7 +1,5 @@
 use {
-    axum::
-        http::{HeaderName, HeaderValue, header}
-    ,
+    axum::http::{HeaderName, HeaderValue, header},
     axum_extra::extract::CookieJar,
 };
 

@@ -14,7 +14,7 @@ use {
 };
 
 const SESSION_DURATION: Duration = Duration::days(30);
-const COOKIE_NAME: &str = "auth";
+const SESSION_COOKIE_NAME: &str = "auth";
 
 #[derive(Serialize, Deserialize)]
 struct Session {
@@ -32,7 +32,7 @@ pub(crate) fn create_auth_cookie(
         create_at: Utc::now(),
     };
 
-    let mut cookie = Cookie::new(COOKIE_NAME, GlassVault::new(session)?.to_string());
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, GlassVault::new(session)?.to_string());
 
     cookie.set_same_site(axum_extra::extract::cookie::SameSite::Strict);
     cookie.set_http_only(true);
@@ -47,7 +47,7 @@ pub(crate) fn create_auth_cookie(
 }
 
 pub(crate) fn remove_auth_cookie(cookie_jar: CookieJar) -> CookieJar {
-    let mut cookie = Cookie::new(COOKIE_NAME, "");
+    let mut cookie = Cookie::new(SESSION_COOKIE_NAME, "");
     cookie.set_same_site(axum_extra::extract::cookie::SameSite::Strict);
     cookie.set_path("/");
     cookie.set_max_age(Some(time::Duration::seconds(0)));
@@ -55,7 +55,7 @@ pub(crate) fn remove_auth_cookie(cookie_jar: CookieJar) -> CookieJar {
 }
 
 fn extract_session(cookie_jar: &CookieJar) -> Result<Option<Session>> {
-    let cookie = match cookie_jar.get(COOKIE_NAME) {
+    let cookie = match cookie_jar.get(SESSION_COOKIE_NAME) {
         None => return Ok(None),
         Some(cookie) => cookie,
     };

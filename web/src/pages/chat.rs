@@ -2,17 +2,17 @@ use {
     crate::{
         auth::require_auth_user,
         error::{AppResult, ResponseResult},
+        hash::GlassVault,
         http::extract,
         internationalization::Internationalization,
         message::{Feedback, Message, Payload, SystemMessageContent, UserMessageContent},
         svg,
         thread::{Thread, ThreadId, ThreadTitle},
-        user::UserId,
     },
     axum::{
         Form, Router,
-        extract::{FromRequestParts, Query},
-        http::{StatusCode, request::Parts},
+        extract::Query,
+        http::StatusCode,
         response::{IntoResponse, Redirect},
         routing::{get, post},
     },
@@ -23,7 +23,7 @@ use {
     maud::{Markup, html},
     nonempty::NonEmpty,
     serde::Deserialize,
-    std::{cmp::Reverse, convert::Infallible},
+    std::cmp::Reverse,
     strum::{Display, EnumIter, IntoEnumIterator},
     thousands::Separable,
     tracing::*,
@@ -53,7 +53,7 @@ pub(crate) async fn page(
 
     let messages = match NonEmpty::from_vec({
         let mut messages = Message::get_all_messages(threads.first().id).await?;
-        messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+        messages.sort_unstable_by_key(|m| m.created_at);
         messages
     }) {
         Some(messages) => messages,
@@ -141,7 +141,11 @@ pub(crate) async fn page(
 
                             // Title edit mode (initially hidden)
                             div.chat-header__title-edit id="chat-title-edit" style="display: none;" {
-                                input.chat-header__title-input id="chat-title-input" type="text" name="thread_title" value=(current_thread_title);
+                                input.chat-header__title-input
+                                id="chat-title-input"
+                                type="text"
+                                name="thread_title"
+                                value=(current_thread_title);
 
                                 button.chat-header__title-btn.chat-header__title-btn--confirm
                                     id="chat-title-confirm"
@@ -236,18 +240,16 @@ pub(crate) async fn page(
                                 id="message-input"
                                 placeholder="Type your message..."
                                 rows="1"
-                                name="content"
-                                hx-post="/api/chat/send"
-                                hx-target=".chat-messages__inner"
-                                hx-swap="beforeend"
-                                hx-trigger="keydown[key=='Enter' && !shiftKey]" {}
+                                name="content" {}
+
+                            input type="hidden" id="thread-id-input" name="thread_id" value=(GlassVault::new(threads.first().id)?);
 
                             button.button.button--primary.chat-input__send-btn
                                 id="send-btn"
                                 disabled
                                 hx-post="/api/chat/send"
                                 hx-target=".chat-messages__inner"
-                                hx-include="#message-input"
+                                hx-include="#message-input, #thread-id-input"
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
@@ -283,40 +285,23 @@ pub(crate) fn api() -> Router {
                 post({
                     #[derive(Debug, Validate, Deserialize)]
                     struct MessageQuery {
-                        // must match the "name" attribute
                         #[garde(dive)]
                         content: UserMessageContent,
+                        #[garde(skip)]
+                        thread_id: GlassVault<ThreadId>,
                     }
 
-                    async |internationalization: Internationalization, CurrUserId(user_id): CurrUserId,
-                            CurrThreadId(thread_id): CurrThreadId,
-                           Garde(Form(MessageQuery { content })): Garde<Form<MessageQuery>>| {
-                        let user_id = match user_id {
-                            Some(user_id) => user_id,
-                            None => {
-                                return Ok((StatusCode::BAD_REQUEST, "No user ID found")
-                                    .into_response());
-                            }
-                        };
-                        let thread_id = match thread_id {
-                            Some(thread_id) => thread_id,
-                            None => {
-                                let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
-                                let thread_id = thread.id;
-                                thread.save().await?;
-                                thread_id
-                            }
-                        };
-                        let message = Message::new(thread_id,
+                    async |internationalization: Internationalization,
+                           Garde(Form(MessageQuery { content, thread_id })): Garde<
+                        Form<MessageQuery>,
+                    >| {
+                        let message =
+                            Message::new(thread_id.into_inner(), Payload::UserMessage { content });
+                        message.clone().save().await?;
 
-                            Payload::UserMessage { content });
-
-
-                        AppResult::Ok(render_message(
-                            &message,
-                            &internationalization,
+                        AppResult::Ok(
+                            render_message(&message, &internationalization).into_response(),
                         )
-                        .into_response())
                     }
                 }),
             )
@@ -329,11 +314,11 @@ pub(crate) fn api() -> Router {
                         thread_title: ThreadTitle,
                     }
 
-                    async |CurrThreadId(thread_id): CurrThreadId,
+                    async |cookie_jar: CookieJar,
                            Garde(Form(TitleForm {
                                thread_title,
                            })): Garde<Form<TitleForm>>| {
-                        let thread_id = match thread_id {
+                        let thread_id = match extract("thread_id", &cookie_jar) {
                             Some(thread_id) => thread_id,
                             None => {
                                 // thread doesn't exist (yet)
@@ -436,32 +421,5 @@ fn render_message(message: &Message, internationalization: &Internationalization
                 }
             }
         }
-    }
-}
-
-/// Extract the current thread ID from the cookies.
-#[derive(Debug)]
-struct CurrThreadId(Option<ThreadId>);
-
-impl FromRequestParts<()> for CurrThreadId {
-    type Rejection = Infallible;
-
-    // Required method
-    async fn from_request_parts(parts: &mut Parts, _: &()) -> Result<Self, Self::Rejection> {
-        let cookie_jar = CookieJar::from_headers(&parts.headers);
-        Ok(Self(extract("thread_id", &cookie_jar)))
-    }
-}
-
-#[derive(Debug)]
-struct CurrUserId(Option<UserId>);
-
-impl FromRequestParts<()> for CurrUserId {
-    type Rejection = Infallible;
-
-    // Required method
-    async fn from_request_parts(parts: &mut Parts, _: &()) -> Result<Self, Self::Rejection> {
-        let cookie_jar = CookieJar::from_headers(&parts.headers);
-        Ok(Self(extract("user_id", &cookie_jar)))
     }
 }

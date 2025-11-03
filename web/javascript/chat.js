@@ -205,5 +205,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearInput();
             }
         });
+
+        // Handle Enter key to trigger send button
+        messageInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                if (!sendButton.disabled) {
+                    sendButton.click();
+                }
+            }
+        });
     }
 });

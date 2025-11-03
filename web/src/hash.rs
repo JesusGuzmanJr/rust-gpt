@@ -7,7 +7,7 @@ use {
     blake3::{Hash, KEY_LEN},
     common::{bincode, key_type},
     hex::FromHex,
-    serde::{Deserialize, Serialize, de::DeserializeOwned},
+    serde::{Deserialize, Deserializer, Serialize, Serializer, de::DeserializeOwned},
     std::{fmt, sync::OnceLock},
 };
 
@@ -37,8 +37,11 @@ pub(crate) fn init(hash_key: HashKey) -> Result<()> {
 /// A Blake3 backed hashed data container.
 ///
 /// Serializes to URL safe base64 encoded string.
-#[derive(Serialize, Deserialize)]
-pub(crate) struct GlassVault<T> {
+#[derive(Debug)]
+pub(crate) struct GlassVault<T>(Container<T>);
+
+#[derive(Debug, Serialize, Deserialize)]
+struct Container<T> {
     data: T,
     signature: [u8; blake3::OUT_LEN],
 }
@@ -46,7 +49,7 @@ pub(crate) struct GlassVault<T> {
 impl<T> GlassVault<T> {
     /// Extracts the inner data from the container.
     pub(crate) fn into_inner(self) -> T {
-        self.data
+        self.0.data
     }
 }
 
@@ -55,10 +58,10 @@ impl<T> GlassVault<T> {
     where
         T: Serialize,
     {
-        Ok(Self {
+        Ok(Self(Container {
             signature: *blake3::keyed_hash(key(), &bincode::serialize(&data)?).as_bytes(),
             data,
-        })
+        }))
     }
 }
 
@@ -70,7 +73,7 @@ where
         write!(
             f,
             "{}",
-            BASE_64.encode(bincode::serialize(&self).map_err(|_| fmt::Error)?)
+            BASE_64.encode(bincode::serialize(&self.0).map_err(|_| fmt::Error)?)
         )
     }
 }
@@ -82,7 +85,7 @@ where
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self> {
-        let container = bincode::deserialize::<GlassVault<T>>(&BASE_64.decode(s)?)?;
+        let container = bincode::deserialize::<Container<T>>(&BASE_64.decode(s)?)?;
 
         if Hash::from(container.signature)
             != blake3::keyed_hash(key(), &bincode::serialize(&container.data)?)
@@ -90,6 +93,31 @@ where
             anyhow::bail!("invalid hash signature");
         }
 
-        Ok(container)
+        Ok(Self(container))
+    }
+}
+
+impl<'de, T> Deserialize<'de> for GlassVault<T>
+where
+    T: Serialize + DeserializeOwned,
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        std::str::FromStr::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+impl<T> Serialize for GlassVault<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
     }
 }
