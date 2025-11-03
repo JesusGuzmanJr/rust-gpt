@@ -21,6 +21,7 @@ use {
     garde::Validate,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
+    nonempty::NonEmpty,
     serde::Deserialize,
     std::{cmp::Reverse, convert::Infallible},
     strum::{Display, EnumIter, IntoEnumIterator},
@@ -40,29 +41,36 @@ pub(crate) async fn page(
     let threads = {
         let mut threads = Thread::get_all(user.id).await?;
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
-        threads
+        match NonEmpty::from_vec(threads) {
+            Some(threads) => threads,
+            None => {
+                let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
+                thread.clone().save().await?;
+                NonEmpty::new(thread)
+            }
+        }
     };
 
-    let messages = {
-        if let Some(thread) = threads.first() {
-            let mut messages = Message::get_all_messages(thread.id).await?;
-            messages.sort_unstable_by_key(|m| Reverse(m.created_at));
-            messages
-        } else {
-            vec![Message::new(
-                ThreadId::new(),
+    let messages = match NonEmpty::from_vec({
+        let mut messages = Message::get_all_messages(threads.first().id).await?;
+        messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+        messages
+    }) {
+        Some(messages) => messages,
+        None => {
+            let message = Message::new(
+                threads.first().id,
                 Payload::SystemMessage {
                     content: SystemMessageContent::greeting(),
                     feedback: None,
                 },
-            )]
+            );
+            message.clone().save().await?;
+            NonEmpty::new(message)
         }
     };
 
-    let current_thread_title = threads
-        .first()
-        .map(|t| t.thread_title.clone())
-        .unwrap_or_else(ThreadTitle::new_chat_title);
+    let current_thread_title = &threads.first().thread_title;
 
     Ok(super::page(
         "Chat",

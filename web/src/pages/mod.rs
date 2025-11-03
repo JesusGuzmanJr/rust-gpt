@@ -2,6 +2,7 @@ use {
     crate::svg,
     axum::{http::StatusCode, response::IntoResponse},
     maud::{Markup, html},
+    std::fmt::Display,
 };
 
 pub(crate) mod about;
@@ -30,13 +31,13 @@ pub(crate) fn not_found_page() -> impl IntoResponse {
     )
 }
 
-pub(crate) fn internal_server_error_page() -> impl IntoResponse {
+pub(crate) fn internal_server_error_page(message: &str) -> impl IntoResponse {
     error_page(
         StatusCode::INTERNAL_SERVER_ERROR,
         "Internal Server Error",
         "500",
         "Internal Server Error",
-        "😭 An unexpected error occurred while processing your request.",
+        message,
     )
 }
 

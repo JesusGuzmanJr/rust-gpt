@@ -1,5 +1,8 @@
 use {
-    crate::{persistence::db, thread::ThreadId},
+    crate::{
+        persistence::db,
+        thread::{Thread, ThreadId},
+    },
     anyhow::{Context, Result},
     chrono::{DateTime, Utc},
     common::{string_type, uuid_type},
@@ -90,6 +93,11 @@ impl Message {
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
             let rw = db().rw_transaction()?;
+
+            // assert that the thread exists
+            if rw.get().primary::<Thread>(self.thread_id)?.is_none() {
+                anyhow::bail!("thread not found");
+            }
 
             rw.insert(self)?;
             rw.commit()

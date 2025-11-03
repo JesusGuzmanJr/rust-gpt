@@ -1,5 +1,8 @@
 use {
-    crate::{persistence::db, user::UserId},
+    crate::{
+        persistence::db,
+        user::{User, UserId, UserKey},
+    },
     anyhow::{Context, Result},
     chrono::{DateTime, Utc},
     common::{string_type, uuid_type},
@@ -69,6 +72,11 @@ impl Thread {
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
             let rw = db().rw_transaction()?;
+
+            // assert that the user exists
+            if rw.get().primary::<User>(self.user_id)?.is_none() {
+                anyhow::bail!("user not found");
+            }
 
             rw.insert(self)?;
             rw.commit()

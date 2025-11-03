@@ -5,6 +5,7 @@ use {
     },
     std::any::Any,
     thiserror::Error,
+    tracing::*,
 };
 
 pub(crate) type AppResult<T> = Result<T, AppError>;
@@ -31,7 +32,13 @@ impl IntoResponse for AppError {
             return Redirect::to(crate::pages::signin::PATH).into_response();
         }
 
-        (status, self.to_string()).into_response()
+        error!(%status, %self);
+
+        (
+            status,
+            crate::pages::internal_server_error_page(self.to_string().as_str()),
+        )
+            .into_response()
     }
 }
 
@@ -46,6 +53,7 @@ impl tower_http::catch_panic::ResponseForPanic for PanicResponder {
         panic: Box<dyn Any + Send + 'static>,
     ) -> Response<Self::ResponseBody> {
         tracing::error!(?panic);
-        crate::pages::internal_server_error_page().into_response()
+        crate::pages::internal_server_error_page("A panic occurred while processing your request.")
+            .into_response()
     }
 }
