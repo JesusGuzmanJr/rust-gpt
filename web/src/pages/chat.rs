@@ -1,9 +1,9 @@
 use {
     crate::{
         auth::require_auth_user,
-        error::ResponseResult,
+        error::{AppResult, ResponseResult},
         http,
-        message::Message,
+        message::{Feedback, Message, Payload, UserMessageContent},
         svg,
         thread::{Thread, ThreadTitle},
     },
@@ -20,10 +20,7 @@ use {
     chrono_tz::Tz,
     garde::Validate,
     icu::locale::Locale,
-    language_model::{
-        message::UserMessage,
-        models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
-    },
+    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
     serde::Deserialize,
     std::cmp::Reverse,
@@ -54,10 +51,10 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
         }
     };
 
-    let chat_title = threads
+    let current_thread_title = threads
         .first()
-        .map(|t| t.thread_title.as_str())
-        .unwrap_or("New Chat");
+        .map(|t| t.thread_title.clone())
+        .unwrap_or_else(ThreadTitle::new_chat_title);
 
     Ok(super::page(
         "Chat",
@@ -124,11 +121,11 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                                 span { "AI" }
                             }
                             // Title display mode
-                            h1.chat-header__title id="chat-title-display" { (chat_title) }
+                            h1.chat-header__title id="chat-title-display" { (current_thread_title) }
 
                             // Title edit mode (initially hidden)
                             div.chat-header__title-edit id="chat-title-edit" style="display: none;" {
-                                input.chat-header__title-input id="chat-title-input" type="text" name="thread_title" value=(chat_title);
+                                input.chat-header__title-input id="chat-title-input" type="text" name="thread_title" value=(current_thread_title);
 
                                 button.chat-header__title-btn.chat-header__title-btn--confirm
                                     id="chat-title-confirm"
@@ -148,12 +145,12 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                         div.chat-header__right {
                             div.user-dropdown {
                                 button.chat-header__user-btn id="user-menu-btn" {
-                                    span { "Jesus Guzman, Jr." }
+                                    span { (user.name) }
                                 }
 
                                 div.dropdown-content id="user-dropdown" {
                                     div.dropdown-inner {
-                                        div.dropdown-label { "jesus@email.com" }
+                                        div.dropdown-label { (user.email) }
                                         div.dropdown-separator {}
 
                                         div.dropdown-item.dropdown-item--disabled {
@@ -193,13 +190,13 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                                 }
                             }
 
-                            // User message
-                            (render_user_message(
-                                &UserMessage::new("I need help with my project."),
-                                Utc::now(),
-                                &http::extract_locale(&cookie_jar),
-                                &http::extract_timezone(&cookie_jar),
-                            ))
+                            // // User message
+                            // (render_user_message(
+                            //     &UserMessage::new("I need help with my project."),
+                            //     Utc::now(),
+                            //     &http::extract_locale(&cookie_jar),
+                            //     &http::extract_timezone(&cookie_jar),
+                            // ))
 
                             // System message
                             div.message.message--system {
@@ -218,6 +215,11 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                                     }
                                 }
                             }
+                            (render_message(
+                                &Message::new(crate::thread::ThreadId::new(), Payload::SystemMessage { content: "I'd be happy to help! Could you tell me more about your project and what specific assistance you need?".into(), feedback: Some(Feedback::ThumbsUp) }),
+                                &http::extract_locale(&cookie_jar),
+                                &http::extract_timezone(&cookie_jar),
+                            ))
                         }
                     }
 
@@ -263,7 +265,7 @@ pub(crate) async fn page(cookie_jar: CookieJar) -> ResponseResult {
                                 id="message-input"
                                 placeholder="Type your message..."
                                 rows="1"
-                                name="message"
+                                name="content"
                                 hx-post="/api/chat/send"
                                 hx-target=".chat-messages__inner"
                                 hx-swap="beforeend"
@@ -308,37 +310,43 @@ pub(crate) fn api() -> Router {
             .route(
                 "/send",
                 post({
-                    #[derive(Debug, Deserialize)]
+                    #[derive(Debug, Validate, Deserialize)]
                     struct MessageQuery {
                         // must match the "name" attribute
-                        message: String,
+                        #[garde(dive)]
+                        content: UserMessageContent,
                     }
 
                     async |cookie_jar: CookieJar,
-                           Form(MessageQuery { message }): Form<MessageQuery>| {
-                        let _user_id = match http::extract_user_id(&cookie_jar) {
+                           Garde(Form(MessageQuery { content })): Garde<Form<MessageQuery>>| {
+                        let user_id = match http::extract_user_id(&cookie_jar) {
                             Some(user_id) => user_id,
                             None => {
-                                return (StatusCode::BAD_REQUEST, "No user ID found")
-                                    .into_response();
+                                return Ok((StatusCode::BAD_REQUEST, "No user ID found")
+                                    .into_response());
                             }
                         };
-                        let user_message = UserMessage::new(message);
-                        let _thread_id = match http::extract_thread_id(&cookie_jar) {
+                        let thread_id = match http::extract_thread_id(&cookie_jar) {
                             Some(thread_id) => thread_id,
                             None => {
-                                return (StatusCode::BAD_REQUEST, "No thread ID found")
-                                    .into_response();
+                                let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
+                                let thread_id = thread.id;
+                                thread.save().await?;
+                                thread_id
                             }
                         };
+                        let message = Message::new(thread_id,
 
-                        render_user_message(
-                            &user_message,
-                            Utc::now(),
+                            Payload::UserMessage { content });
+
+
+                        AppResult::Ok(render_message(
+                            &message,
+
                             &http::extract_locale(&cookie_jar),
                             &http::extract_timezone(&cookie_jar),
                         )
-                        .into_response()
+                        .into_response())
                     }
                 }),
             )
@@ -414,23 +422,42 @@ fn render_model_details(selection: ModelSelection) -> Markup {
     }
 }
 
-fn render_user_message(
-    user_message: &UserMessage,
-    datetime: DateTime<Utc>,
-    locale: &Locale,
-    timezone: &Tz,
-) -> Markup {
-    // Note the user message needs to be escaped; htmx escapes by default.
-    html! {
-        div.message.message--user {
-            div.message__wrapper {
-                div.message__bubble.message__bubble--user {
-                    p { (user_message) }
+fn render_message(message: &Message, locale: &Locale, timezone: &Tz) -> Markup {
+    match &message.payload {
+        Payload::UserMessage { content } => {
+            // Note the user message needs to be escaped; htmx escapes by default.
+            html! {
+                div.message.message--user {
+                    div.message__wrapper {
+                        div.message__bubble.message__bubble--user {
+                            p { (content) }
+                        }
+                        div.message__meta.message__meta--user {
+                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &locale, &timezone)) }
+                            button.message__edit-btn {
+                                (svg::edit(16, 16))
+                            }
+                        }
+                    }
                 }
-                div.message__meta.message__meta--user {
-                    span.message__time { (crate::datetime::today_implied_human_datetime(&datetime, &locale, &timezone)) }
-                    button.message__edit-btn {
-                        (svg::edit(16, 16))
+            }
+        }
+        Payload::SystemMessage { content, feedback } => {
+            html! {
+                div.message.message--system {
+                    div.message__wrapper {
+                        div.message__bubble.message__bubble--system {
+                            p { (content) }
+                        }
+                        div.message__meta {
+                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &locale, &timezone)) }
+                            button class=(feedback.map(|f| if matches!(f, Feedback::ThumbsUp) { "message__feedback-btn active" } else { "" }).unwrap_or_default()) {
+                                (svg::thumbs_up(16, 16))
+                            }
+                            button class=(feedback.map(|f| if matches!(f, Feedback::ThumbsDown) { "message__feedback-btn active" } else { "" }).unwrap_or_default()) {
+                                (svg::thumbs_down(16, 16))
+                            }
+                        }
                     }
                 }
             }

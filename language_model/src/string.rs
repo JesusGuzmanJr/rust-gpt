@@ -5,12 +5,12 @@ use {
     std::ops::Deref,
 };
 
-/// A container for a user message.
+/// A container for a normalized string.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Display)]
-pub struct UserMessage(String);
+pub struct NormString(String);
 
-impl UserMessage {
-    /// Create a new normalized string from a string.
+impl NormString {
+    /// Create a new normalized string from a string slice.
     pub fn new(text: impl AsRef<str>) -> Self {
         let mut text = normalize_text(text.as_ref().trim());
         text.shrink_to_fit();
@@ -32,7 +32,7 @@ impl UserMessage {
     }
 }
 
-impl Deref for UserMessage {
+impl Deref for NormString {
     type Target = String;
 
     fn deref(&self) -> &Self::Target {
@@ -40,7 +40,7 @@ impl Deref for UserMessage {
     }
 }
 
-impl AsRef<str> for UserMessage {
+impl AsRef<str> for NormString {
     fn as_ref(&self) -> &str {
         &self.0
     }

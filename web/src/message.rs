@@ -1,5 +1,5 @@
 use {
-    crate::{persistence::db, thread::ThreadId, user::UserId},
+    crate::{persistence::db, thread::ThreadId},
     anyhow::{Context, Result},
     chrono::{DateTime, Utc},
     common::{string_type, uuid_type},
@@ -19,22 +19,32 @@ uuid_type!(
 string_type!(
     /// The content of a chat message.
     #[derive(Validate)]
-    pub(crate) MessageContent(#[garde(length(min = 1, max = 1024))])
+    pub(crate) UserMessageContent(#[garde(length(min = 1, max = 1024))])
+);
+
+string_type!(
+    /// The content of a system message.
+    pub(crate) SystemMessageContent
 );
 
 pub(crate) type Message = v1::Message;
 pub(crate) type MessageKey = v1::MessageKey;
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-pub(crate) enum Author {
-    System,
-    User(UserId),
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 pub(crate) enum Feedback {
     ThumbsUp,
     ThumbsDown,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) enum Payload {
+    UserMessage {
+        content: UserMessageContent,
+    },
+    SystemMessage {
+        content: SystemMessageContent,
+        feedback: Option<Feedback>,
+    },
 }
 
 pub(crate) mod v1 {
@@ -49,10 +59,8 @@ pub(crate) mod v1 {
         pub(crate) id: MessageId,
         #[secondary_key]
         pub(crate) thread_id: ThreadId,
-        pub(crate) author: Author,
-        pub(crate) content: MessageContent,
-        pub(crate) feedback: Option<Feedback>,
         pub(crate) created_at: DateTime<Utc>,
+        pub(crate) payload: Payload,
     }
 }
 
@@ -63,19 +71,12 @@ pub(crate) fn define(models: &mut Models) -> Result<()> {
 }
 
 impl Message {
-    pub(crate) fn new(
-        thread_id: ThreadId,
-        author: Author,
-        content: MessageContent,
-        feedback: Option<Feedback>,
-    ) -> Self {
+    pub(crate) fn new(thread_id: ThreadId, payload: Payload) -> Self {
         Message {
             id: MessageId::new(),
             thread_id,
-            author,
-            content,
-            feedback,
             created_at: Utc::now(),
+            payload,
         }
     }
 

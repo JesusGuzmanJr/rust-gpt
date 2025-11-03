@@ -9,9 +9,15 @@ use {
     },
     axum_extra::extract::Host,
     bytesize::ByteSize,
-    std::net::{IpAddr, Ipv4Addr, SocketAddr},
-    tower::service_fn,
-    tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer},
+    std::{
+        net::{IpAddr, Ipv4Addr, SocketAddr},
+        time::Duration,
+    },
+    tower::{ServiceBuilder, service_fn, timeout::TimeoutLayer},
+    tower_http::{
+        catch_panic::CatchPanicLayer, compression::CompressionLayer, services::ServeDir,
+        set_header::SetResponseHeaderLayer,
+    },
     tracing::*,
 };
 
@@ -89,7 +95,7 @@ async fn main() -> Result<()> {
             ServeDir::new(concat!(env!("CARGO_MANIFEST_DIR"), "/assets")).fallback(service_fn(
                 |_| async move {
                     Ok::<Response, std::convert::Infallible>(
-                        pages::not_found::page().into_response(),
+                        pages::not_found_page().into_response(),
                     )
                 },
             )),
@@ -102,6 +108,13 @@ async fn main() -> Result<()> {
         .layer(axum::extract::DefaultBodyLimit::max(
             MAX_REQUEST_BODY_SIZE.as_u64() as _,
         ))
+        .layer(
+            ServiceBuilder::new()
+                .layer(axum::error_handling::HandleErrorLayer::new(
+                    |_: BoxError| async { axum::http::StatusCode::REQUEST_TIMEOUT },
+                ))
+                .layer(TimeoutLayer::new(Duration::from_secs(5))),
+        )
         .layer(tower_governor::GovernorLayer::new({
             // Allow bursts with up to ten requests per IP address
             // and replenishes one element every two seconds
@@ -115,13 +128,15 @@ async fn main() -> Result<()> {
 
             std::thread::spawn(move || {
                 loop {
-                    std::thread::sleep(std::time::Duration::from_secs(20));
+                    std::thread::sleep(Duration::from_secs(20));
                     governor_limiter.retain_recent();
                 }
             });
 
             governor_config
-        }));
+        }))
+        .layer(CatchPanicLayer::custom(error::PanicResponder))
+        .layer(CompressionLayer::new());
 
     let bind_address = if config.tls.is_some() {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), HTTPS_PORT)

@@ -62,7 +62,13 @@ thousands.workspace = true
 time = "0.3.44"
 tokio.workspace = true
 tower = "0.5"
-tower-http = { version = "0.6", features = ["fs", "set-header"] }
+tower-http = { version = "0.6", features = [
+    "fs",
+    "set-header",
+    "timeout",
+    "compression-zstd",
+    "catch-panic",
+] }
 tower_governor = { version = "0.8.0", features = ["axum", "tracing"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true

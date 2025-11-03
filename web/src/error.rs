@@ -1,8 +1,9 @@
 use {
     axum::{
         http::StatusCode,
-        response::{Redirect, Response},
+        response::{IntoResponse, Redirect, Response},
     },
+    std::any::Any,
     thiserror::Error,
 };
 
@@ -18,7 +19,7 @@ pub(crate) enum AppError {
     Unauthorized,
 }
 
-impl axum::response::IntoResponse for AppError {
+impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         use AppError::*;
         let status = match self {
@@ -31,5 +32,19 @@ impl axum::response::IntoResponse for AppError {
         }
 
         (status, self.to_string()).into_response()
+    }
+}
+
+#[derive(Copy, Clone)]
+pub(crate) struct PanicResponder;
+
+impl tower_http::catch_panic::ResponseForPanic for PanicResponder {
+    type ResponseBody = axum::body::Body;
+
+    fn response_for_panic(
+        &mut self,
+        err: Box<dyn Any + Send + 'static>,
+    ) -> Response<Self::ResponseBody> {
+        crate::pages::internal_server_error_page().into_response()
     }
 }

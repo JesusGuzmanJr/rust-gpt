@@ -22,6 +22,12 @@ string_type!(
     pub(crate) ThreadTitle(#[garde(length(min = 1, max = 32))])
 );
 
+impl ThreadTitle {
+    pub(crate) fn new_chat_title() -> Self {
+        "New Chat".into()
+    }
+}
+
 pub(crate) type Thread = v1::Thread;
 pub(crate) type ThreadKey = v1::ThreadKey;
 
