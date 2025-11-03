@@ -18,7 +18,7 @@ native_db = ["common/native_db"]
 anyhow.workspace = true
 argon2 = { version = "0.5.3", default-features = false, features = ["alloc"] }
 axum = "0.8.6"
-axum-extra = { version = "0.10.3", features = ["cookie"] }
+axum-extra = { version = "0.12.1", features = ["cookie"] }
 axum-htmx = { version = "0.8.1", features = ["auto-vary"] }
 axum-server = { version = "0.7.2", features = ["tls-rustls"] }
 axum-valid = { version = "0.24.0", default-features = false, features = [
