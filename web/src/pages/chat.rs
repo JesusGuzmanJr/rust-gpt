@@ -157,10 +157,12 @@ pub(crate) async fn page(
                             // Title edit mode (initially hidden)
                             div.chat-header__title-edit id="chat-title-edit" style="display: none;" {
                                 input.chat-header__title-input
-                                id="chat-title-input"
-                                type="text"
-                                name="title"
-                                value=(current_thread_title);
+                                    id="chat-title-input"
+                                    type="text"
+                                    name="title"
+                                    maxlength="32"
+                                    autocapitalize="words"
+                                    value=(current_thread_title);
 
                                 input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
 
