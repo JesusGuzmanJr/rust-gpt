@@ -307,7 +307,16 @@ pub(crate) fn api() -> Router {
                         message.clone().save().await?;
 
                         AppResult::Ok(
-                            render_message(&message, &internationalization).into_response(),
+                            html! {
+                                (render_message(&message, &internationalization)?)
+                                div.chat-item-preview id="chat-item-preview" hx-swap-oob="true" {
+                                    (match &message.payload {
+                                        Payload::UserMessage { content } => content.to_string(),
+                                        Payload::SystemMessage { content, .. } => content.to_string(),
+                                    }.trim().chars().take(10).collect::<String>())
+                                }
+                            }
+                            .into_response(),
                         )
                     }
                 }),
@@ -491,7 +500,7 @@ fn render_thread_item(
                     span.chat-item__title { (thread.title) }
                     span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
                 }
-                p.chat-item__preview { (thread.preview) }
+                p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
             }
         }
     })
