@@ -37,7 +37,7 @@ mod thread;
 mod user;
 
 /// Set low to prevent abuse.
-const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(32);
+const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(16);
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];
