@@ -64,6 +64,7 @@
     "stylesheet",
     "subword",
     "subwords",
+    "swipeable",
     "syscall",
     "thiserror",
     "tiktoken",

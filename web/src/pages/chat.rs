@@ -23,7 +23,6 @@ use {
     garde::Validate,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
-    nonempty::NonEmpty,
     serde::Deserialize,
     std::cmp::Reverse,
     strum::{Display, EnumIter, IntoEnumIterator},
@@ -58,16 +57,13 @@ pub(crate) async fn page(
 
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
 
-        let mut threads = match NonEmpty::from_vec(threads) {
-            Some(threads) => threads,
-            None => {
-                let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
-                thread.clone().save().await?;
-                NonEmpty::new(thread.into())
-            }
-        };
+        if threads.is_empty() {
+            let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
+            thread.clone().save().await?;
+            threads.push(thread.into());
+        }
 
-        for thread in &mut threads.iter_mut() {
+        for thread in &mut threads {
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| Reverse(m.created_at));
             let preview = messages
@@ -80,32 +76,47 @@ pub(crate) async fn page(
             thread.preview = preview;
         }
 
-        threads.first_mut().is_active = true;
+        if let Some(thread) = threads.first_mut() {
+            thread.is_active = true;
+        }
 
         threads
     };
 
+    let thread_id_json = match threads.first() {
+        Some(thread) => thread_id_json(thread.id)?,
+        None => "".to_string(),
+    };
+
     // the messages for the first thread
-    let messages = match NonEmpty::from_vec({
-        let mut messages = Message::get_all_messages(threads.first().id).await?;
-        messages.sort_unstable_by_key(|m| m.created_at);
-        messages
-    }) {
-        Some(messages) => messages,
-        None => {
-            let message = Message::new(
-                threads.first().id,
-                Payload::SystemMessage {
-                    content: SystemMessageContent::greeting(),
-                    feedback: None,
-                },
-            );
-            message.clone().save().await?;
-            NonEmpty::new(message)
+    let messages = {
+        if let Some(thread) = threads.first() {
+            let mut messages = Message::get_all_messages(thread.id).await?;
+            messages.sort_unstable_by_key(|m| m.created_at);
+
+            if messages.is_empty() {
+                let message = Message::new(
+                    thread.id,
+                    Payload::SystemMessage {
+                        content: SystemMessageContent::greeting(),
+                        feedback: None,
+                    },
+                );
+                message.clone().save().await?;
+                messages.push(message);
+            }
+
+            messages
+        } else {
+            // does not allocate
+            Vec::new()
         }
     };
 
-    let current_thread_title = &threads.first().title;
+    let current_thread_title = threads
+        .first()
+        .map(|thread| thread.title.as_str())
+        .unwrap_or_default();
 
     Ok(super::page(
         "Chat",
@@ -117,7 +128,6 @@ pub(crate) async fn page(
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
                     div.chat-sidebar__header {
-                        input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
                         button.button.button--primary.chat-sidebar__new-btn
                             hx-post="/api/chat/new"
                             hx-target=".chat-sidebar__list"
@@ -171,12 +181,11 @@ pub(crate) async fn page(
                                     autocapitalize="words"
                                     value=(current_thread_title);
 
-                                input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
-
                                 button.chat-header__title-btn.chat-header__title-btn--confirm
                                     id="chat-title-confirm"
                                     hx-post="/api/chat/title"
-                                    hx-include="#chat-title-input, previous input"
+                                    hx-include="#chat-title-input"
+                                    hx-vals=(thread_id_json)
                                     hx-target="#chat-item-title" {
                                     (svg::check(16, 16))
                                 }
@@ -269,14 +278,13 @@ pub(crate) async fn page(
                                 rows="1"
                                 name="content" {}
 
-                            input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
-
                             button.button.button--primary.chat-input__send-btn
                                 id="send-btn"
                                 disabled
                                 hx-post="/api/chat/send"
                                 hx-target=".chat-messages__inner"
-                                hx-include="#message-input, previous input"
+                                hx-include="#message-input"
+                                hx-vals=(thread_id_json)
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
@@ -582,4 +590,11 @@ impl From<Thread> for ThreadItem {
             is_active: false,
         }
     }
+}
+
+fn thread_id_json(thread_id: ThreadId) -> AppResult<String> {
+    Ok(format!(
+        r#"{{"thread_id": "{}"}}"#,
+        GlassVault::new(thread_id)?
+    ))
 }

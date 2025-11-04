@@ -50,7 +50,6 @@ mailchecker = "6.0.19"
 maud = { version = "0.27.0", features = ["axum"] }
 native_db.workspace = true
 native_model = { version = "0.6.2", features = ["bincode_2"] }
-nonempty.workspace = true
 quick_cache = "0.6.18"
 rand = "0.9.2"
 ron.workspace = true
