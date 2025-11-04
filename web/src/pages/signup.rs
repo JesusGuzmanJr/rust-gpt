@@ -400,7 +400,7 @@ pub(crate) fn api() -> Router {
                     // Check if email is already registered
                     if User::by_email(&email).await?.is_some() {
                         warn!(%email, "email already registered");
-                        return AppResult::Ok(signup_card(true));
+                        return Ok(signup_card(true));
                     }
 
                     let user = User::new(name.clone(), email.clone(), password.clone()).await?;
@@ -425,7 +425,7 @@ pub(crate) fn api() -> Router {
                     .await?;
 
                     info!(%user_id, %email, "sign up completed");
-                    Ok(verify_card())
+                    AppResult::Ok(verify_card())
                 }
             }),
         )
@@ -441,7 +441,7 @@ pub(crate) fn api() -> Router {
                         Ok(container) => container.into_inner(),
                         Err(error) => {
                             error!(?error, "invalid email verification token");
-                            return AppResult::Ok(verification_page(VerificationStatus::Expired));
+                            return Ok(verification_page(VerificationStatus::Expired));
                         }
                     };
                     let user_id = user.id;
@@ -449,10 +449,10 @@ pub(crate) fn api() -> Router {
 
                     if Utc::now() - created_at > VERIFICATION_LINK_EXPIRATION {
                         warn!(%user_id, %user_email, "email verification link expired");
-                        return AppResult::Ok(verification_page(VerificationStatus::Expired));
+                        return Ok(verification_page(VerificationStatus::Expired));
                     }
                     match user.save().await {
-                        Ok(()) => Ok(verification_page(VerificationStatus::Success)),
+                        Ok(()) => AppResult::Ok(verification_page(VerificationStatus::Success)),
                         Err(error) => {
                             use native_db::db_type::Error as NativeDbError;
                             if let Some(NativeDbError::DuplicateKey {

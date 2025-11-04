@@ -14,7 +14,6 @@ use {
     axum::{
         Form, Router,
         extract::Query,
-        http::StatusCode,
         response::{IntoResponse, Redirect},
         routing::{get, post},
     },
@@ -160,14 +159,16 @@ pub(crate) async fn page(
                                 input.chat-header__title-input
                                 id="chat-title-input"
                                 type="text"
-                                name="thread_title"
+                                name="title"
                                 value=(current_thread_title);
+
+                                input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
 
                                 button.chat-header__title-btn.chat-header__title-btn--confirm
                                     id="chat-title-confirm"
                                     hx-post="/api/chat/title"
-                                    hx-include="#chat-title-input"
-                                    hx-swap="none"{
+                                    hx-include="#chat-title-input, previous input"
+                                    hx-target="#chat-item-title" {
                                     (svg::check(16, 16))
                                 }
 
@@ -259,14 +260,14 @@ pub(crate) async fn page(
                                 rows="1"
                                 name="content" {}
 
-                            input type="hidden" id="thread-id-input" name="thread_id" value=(GlassVault::new(threads.first().id)?);
+                            input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
 
                             button.button.button--primary.chat-input__send-btn
                                 id="send-btn"
                                 disabled
                                 hx-post="/api/chat/send"
                                 hx-target=".chat-messages__inner"
-                                hx-include="#message-input, #thread-id-input"
+                                hx-include="#message-input, previous input"
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
@@ -301,7 +302,7 @@ pub(crate) fn api() -> Router {
                 "/send",
                 post({
                     #[derive(Debug, Validate, Deserialize)]
-                    struct MessageQuery {
+                    struct SendForm {
                         #[garde(dive)]
                         content: UserMessageContent,
                         #[garde(skip)]
@@ -309,8 +310,8 @@ pub(crate) fn api() -> Router {
                     }
 
                     async |internationalization: Internationalization,
-                           Garde(Form(MessageQuery { content, thread_id })): Garde<
-                        Form<MessageQuery>,
+                           Garde(Form(SendForm { content, thread_id })): Garde<
+                        Form<SendForm>,
                     >| {
                         let message =
                             Message::new(thread_id.into_inner(), Payload::UserMessage { content });
@@ -337,31 +338,20 @@ pub(crate) fn api() -> Router {
                     #[derive(Debug, Deserialize, Validate)]
                     struct TitleForm {
                         #[garde(dive)]
-                        thread_title: ThreadTitle,
+                        title: ThreadTitle,
+                        #[garde(skip)]
+                        thread_id: GlassVault<ThreadId>,
                     }
 
-                    async |cookie_jar: CookieJar,
-                           Garde(Form(TitleForm {
-                               thread_title,
+                    async |Garde(Form(TitleForm {
+                               title,
+                               thread_id,
                            })): Garde<Form<TitleForm>>| {
-                        let thread_id = match extract("thread_id", &cookie_jar) {
-                            Some(thread_id) => thread_id,
-                            None => {
-                                // thread doesn't exist (yet)
-                               return StatusCode::OK;
-                            }
-                        };
+                        let thread_id = thread_id.into_inner();
+                        Thread::update_title(thread_id, title.clone()).await?;
+                        debug!(%thread_id, %title, "thread title updated");
+                        AppResult::Ok(title.to_string())
 
-                        match Thread::update_title(thread_id, thread_title.clone()).await {
-                            Ok(_) => {
-                                debug!(%thread_id, "thread title updated");
-                                StatusCode::OK
-                            },
-                            Err(error) => {
-                                error!(?error, %thread_id, "failed to update thread title");
-                                StatusCode::INTERNAL_SERVER_ERROR
-                            }
-                        }
                     }
                 }),
             )
@@ -507,7 +497,7 @@ fn render_thread_item(
             div.chat-item__content {
                 div.chat-item__header {
                     (svg::chat_bubble(16, 16))
-                    span.chat-item__title { (thread.title) }
+                    span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
                     span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
                 }
                 p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }

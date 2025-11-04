@@ -114,7 +114,7 @@ impl Thread {
             thread.title = new_title;
             thread.updated_at = Utc::now();
 
-            rw.insert(thread)?;
+            rw.auto_update(thread)?;
             rw.commit()
                 .context("failed to commit transaction that updates thread name")?;
 

@@ -126,7 +126,7 @@ pub(crate) fn api() -> Router {
                     Some(user) => user,
                     None => {
                         warn!(%email, "user not found");
-                        return AppResult::Ok(signin_card(Some(email)).into_response());
+                        return Ok(signin_card(Some(email)).into_response());
                     }
                 };
 
@@ -135,7 +135,7 @@ pub(crate) fn api() -> Router {
                 // consumes user because needs to move to CPU-bound thread pool
                 if !user.verify_password(password).await? {
                     warn!(%user_id, "invalid password");
-                    return AppResult::Ok(signin_card(Some(email)).into_response());
+                    return Ok(signin_card(Some(email)).into_response());
                 }
 
                 let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id, remember)?;
