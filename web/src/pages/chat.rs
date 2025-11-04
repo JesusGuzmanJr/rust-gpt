@@ -13,6 +13,7 @@ use {
     axum::{
         Form, Router,
         extract::Query,
+        http::StatusCode,
         response::{IntoResponse, Redirect},
         routing::{get, post},
     },
@@ -116,7 +117,6 @@ pub(crate) async fn page(
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
                     div.chat-sidebar__header {
-                        // TODO: don't we need to update all elements that pull firs thread as current one?
                         input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
                         button.button.button--primary.chat-sidebar__new-btn
                             hx-post="/api/chat/new"
@@ -415,6 +415,21 @@ pub(crate) fn api() -> Router {
                         }.into_response())
                     }
                 )
+            ).route(
+                "/delete",
+                post({
+                    #[derive(Debug, Deserialize)]
+                    struct DeleteForm {
+                        thread_id: GlassVault<ThreadId>,
+                    }
+
+                    async |Form(DeleteForm { thread_id }): Form<DeleteForm>| {
+                        let thread_id = thread_id.into_inner();
+                        Thread::delete(thread_id).await?;
+                        debug!(%thread_id, "thread deleted");
+                        AppResult::Ok(StatusCode::OK)
+                    }
+                }),
             ),
     )
 }
@@ -519,14 +534,27 @@ fn render_thread_item(
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
     Ok(html! {
-        div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
-            div.chat-item__content {
-                div.chat-item__header {
-                    (svg::chat_bubble(16, 16))
-                    span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
-                    span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
+        div.chat-item-swipe-wrapper data-thread-id=(GlassVault::new(thread.id)?) {
+            // Delete button (hidden behind)
+            div.chat-item-delete-btn {
+                button.chat-item-delete-btn__button
+                    hx-post="/api/chat/delete"
+                    hx-vals=(format!(r#"{{"thread_id": "{}"}}"#, GlassVault::new(thread.id)?))
+                    hx-target=".chat-item-swipe-wrapper"
+                    hx-swap="outerHTML swap:300ms" {
+                    (svg::x(20, 20))
                 }
-                p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
+            }
+            // Chat item (swipeable)
+            div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
+                div.chat-item__content {
+                    div.chat-item__header {
+                        (svg::chat_bubble(16, 16))
+                        span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
+                        span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
+                    }
+                    p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
+                }
             }
         }
     })

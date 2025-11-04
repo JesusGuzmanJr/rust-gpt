@@ -256,3 +256,135 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+// Swipe-to-delete functionality for chat items
+document.addEventListener('DOMContentLoaded', () => {
+    let swipedThreadId = null;
+    let swipeOffset = 0;
+    let isDragging = false;
+    let startX = 0;
+    let currentDragThreadId = null;
+    const SWIPE_THRESHOLD = 60;
+    const SNAP_THRESHOLD = 30;
+
+    const initSwipeHandlers = () => {
+        const chatItems = document.querySelectorAll('.chat-item');
+
+        chatItems.forEach(chatItem => {
+            const wrapper = chatItem.closest('.chat-item-swipe-wrapper');
+            if (!wrapper) return;
+
+            const threadId = wrapper.dataset.threadId;
+
+            // Touch events
+            chatItem.addEventListener('touchstart', (e) => handleStart(e.touches[0].clientX, threadId, wrapper, chatItem));
+            chatItem.addEventListener('touchmove', (e) => {
+                if (isDragging && currentDragThreadId === threadId) {
+                    handleMove(e.touches[0].clientX, wrapper, chatItem);
+                }
+            });
+            chatItem.addEventListener('touchend', () => handleEnd(wrapper, chatItem));
+
+            // Mouse events
+            chatItem.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                handleStart(e.clientX, threadId, wrapper, chatItem);
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (isDragging && currentDragThreadId === threadId) {
+                    handleMove(e.clientX, wrapper, chatItem);
+                }
+            });
+
+            document.addEventListener('mouseup', () => {
+                if (currentDragThreadId === threadId) {
+                    handleEnd(wrapper, chatItem);
+                }
+            });
+        });
+    };
+
+    const handleStart = (clientX, threadId, wrapper, chatItem) => {
+        startX = clientX;
+        currentDragThreadId = threadId;
+        isDragging = true;
+
+        // If this item is already swiped, adjust the start position
+        if (swipedThreadId === threadId) {
+            startX = clientX + SWIPE_THRESHOLD;
+        }
+
+        // Remove transition for smooth dragging
+        chatItem.style.transition = 'none';
+    };
+
+    const handleMove = (clientX, wrapper, chatItem) => {
+        if (!isDragging) return;
+
+        const diff = startX - clientX;
+
+        // Constrain the swipe between 0 and SWIPE_THRESHOLD
+        if (diff >= 0 && diff <= SWIPE_THRESHOLD) {
+            swipeOffset = diff;
+            chatItem.style.transform = `translateX(-${diff}px)`;
+            swipedThreadId = currentDragThreadId;
+        }
+    };
+
+    const handleEnd = (wrapper, chatItem) => {
+        if (!isDragging) return;
+
+        isDragging = false;
+
+        // Re-enable transition for smooth snapping
+        chatItem.style.transition = 'transform 0.3s ease';
+
+        // Snap to open or closed position
+        if (swipeOffset > SNAP_THRESHOLD) {
+            // Snap to open
+            swipeOffset = SWIPE_THRESHOLD;
+            chatItem.style.transform = `translateX(-${SWIPE_THRESHOLD}px)`;
+        } else {
+            // Snap to closed
+            swipeOffset = 0;
+            chatItem.style.transform = 'translateX(0)';
+            swipedThreadId = null;
+        }
+
+        currentDragThreadId = null;
+    };
+
+    // Close swiped item when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!swipedThreadId) return;
+
+        const clickedItem = e.target.closest('.chat-item-swipe-wrapper');
+        const clickedDelete = e.target.closest('.chat-item-delete-btn__button');
+
+        // Don't close if clicking the delete button
+        if (clickedDelete) return;
+
+        // Close if clicking outside the swiped item
+        if (!clickedItem || clickedItem.dataset.threadId !== swipedThreadId) {
+            const swipedWrapper = document.querySelector(`.chat-item-swipe-wrapper[data-thread-id="${swipedThreadId}"]`);
+            if (swipedWrapper) {
+                const swipedChatItem = swipedWrapper.querySelector('.chat-item');
+                if (swipedChatItem) {
+                    swipedChatItem.style.transition = 'transform 0.3s ease';
+                    swipedChatItem.style.transform = 'translateX(0)';
+                }
+            }
+            swipedThreadId = null;
+            swipeOffset = 0;
+        }
+    });
+
+    // Initialize on page load
+    initSwipeHandlers();
+
+    // Re-initialize after HTMX swaps (for dynamically added items)
+    document.body.addEventListener('htmx:afterSwap', () => {
+        initSwipeHandlers();
+    });
+});

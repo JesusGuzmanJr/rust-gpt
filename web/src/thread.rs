@@ -122,4 +122,19 @@ impl Thread {
         })
         .await?
     }
+
+    pub(crate) async fn delete(thread_id: ThreadId) -> Result<()> {
+        spawn_blocking(move || {
+            let rw = db().rw_transaction()?;
+
+            let thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
+
+            rw.remove(thread)?;
+            rw.commit()
+                .context("failed to commit transaction that deletes thread")?;
+
+            Ok(())
+        })
+        .await?
+    }
 }

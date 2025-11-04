@@ -702,3 +702,60 @@
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
+
+// Swipe-to-delete functionality
+.chat-item-swipe-wrapper {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 0.25rem;
+}
+
+.chat-item-delete-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 50px;
+  background: var(--delete-btn-bg);
+  border-radius: 0.5rem;
+  z-index: 1;
+}
+
+.chat-item-delete-btn__button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  border-radius: 0.5rem;
+  color: white;
+  cursor: pointer;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.1);
+  }
+
+  &:active {
+    background: rgba(0, 0, 0, 0.2);
+  }
+}
+
+.chat-item-swipe-wrapper .chat-item {
+  position: relative;
+  z-index: 2;
+  background: var(--bg-sidebar);
+  transition: transform 0.3s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  cursor: grab;
+  margin-bottom: 0;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
