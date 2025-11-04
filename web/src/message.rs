@@ -151,12 +151,4 @@ impl Message {
         })
         .await?
     }
-
-    pub(crate) async fn get_by_id(message_id: MessageId) -> Result<Option<Self>> {
-        spawn_blocking(move || {
-            let r = db().r_transaction()?;
-            Ok(r.get().primary(message_id)?)
-        })
-        .await?
-    }
 }

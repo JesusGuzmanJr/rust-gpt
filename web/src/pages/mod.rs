@@ -2,7 +2,6 @@ use {
     crate::svg,
     axum::{http::StatusCode, response::IntoResponse},
     maud::{Markup, html},
-    std::fmt::Display,
 };
 
 pub(crate) mod about;

@@ -1,7 +1,7 @@
 use {
     crate::{
         persistence::db,
-        user::{User, UserId, UserKey},
+        user::{User, UserId},
     },
     anyhow::{Context, Result},
     chrono::{DateTime, Utc},
@@ -101,14 +101,6 @@ impl Thread {
                     result.ok()
                 })
                 .collect())
-        })
-        .await?
-    }
-
-    pub(crate) async fn get_by_id(thread_id: ThreadId) -> Result<Option<Self>> {
-        spawn_blocking(move || {
-            let r = db().r_transaction()?;
-            Ok(r.get().primary(thread_id)?)
         })
         .await?
     }

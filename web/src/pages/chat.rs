@@ -20,6 +20,7 @@ use {
     },
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
+    chrono::{DateTime, Utc},
     garde::Validate,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
@@ -33,6 +34,14 @@ use {
 
 pub(crate) const PATH: &str = "/chat";
 
+#[derive(Debug)]
+struct ThreadItem {
+    title: ThreadTitle,
+    created_at: DateTime<Utc>,
+    preview: String,
+    is_active: bool,
+}
+
 pub(crate) async fn page(
     internationalization: Internationalization,
     cookie_jar: CookieJar,
@@ -43,16 +52,30 @@ pub(crate) async fn page(
     let threads = {
         let mut threads = Thread::get_all(user.id).await?;
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
-        match NonEmpty::from_vec(threads) {
+
+        let threads = match NonEmpty::from_vec(threads) {
             Some(threads) => threads,
             None => {
                 let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
                 thread.clone().save().await?;
                 NonEmpty::new(thread)
             }
-        }
+        };
+
+        // let threads = threads
+        //     .into_iter()
+        //     .map(|t| ThreadItem {
+        //         title: t.thread_title,
+        //         created_at: t.created_at,
+        //         preview: "".to_string(),
+        //         is_active: false,
+        //     })
+        //     .collect::<NonEmpty<_>>();
+
+        threads
     };
 
+    // the messages for the first thread
     let messages = match NonEmpty::from_vec({
         let mut messages = Message::get_all_messages(threads.first().id).await?;
         messages.sort_unstable_by_key(|m| m.created_at);
@@ -469,6 +492,25 @@ fn render_feedback_form(message_id: MessageId, feedback: Option<Feedback>) -> Ap
             hx-post="/api/chat/feedback"
             hx-target=(format!("#{form_id}")) {
                 (svg::thumbs_down(16, 16))
+            }
+        }
+    })
+}
+
+fn render_thread_item(
+    thread: &Thread,
+    internationalization: &Internationalization,
+    preview: &str,
+) -> AppResult<Markup> {
+    Ok(html! {
+        div.chat-item.chat-item--active {
+            div.chat-item__content {
+                div.chat-item__header {
+                    (svg::chat_bubble(16, 16))
+                    span.chat-item__title { (thread.thread_title) }
+                    span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
+                }
+                p.chat-item__preview { (preview) }
             }
         }
     })
