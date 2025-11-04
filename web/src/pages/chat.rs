@@ -48,7 +48,7 @@ pub(crate) async fn page(
     tracing::info!("chat page requested");
     let user = require_auth_user(&cookie_jar).await?;
 
-    let threads = {
+    let mut threads = {
         let mut threads = Thread::get_all(user.id)
             .await?
             .into_iter()
@@ -83,27 +83,24 @@ pub(crate) async fn page(
         threads
     };
 
-    let thread_id_json = match threads.first() {
-        Some(thread) => thread_id_json(thread.id)?,
-        None => "".to_string(),
-    };
-
     // the messages for the first thread
     let messages = {
-        if let Some(thread) = threads.first() {
+        if let Some(thread) = threads.first_mut() {
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| m.created_at);
 
+            let content = SystemMessageContent::greeting();
             if messages.is_empty() {
                 let message = Message::new(
                     thread.id,
                     Payload::SystemMessage {
-                        content: SystemMessageContent::greeting(),
+                        content: content.clone(),
                         feedback: None,
                     },
                 );
                 message.clone().save().await?;
                 messages.push(message);
+                thread.preview = content.to_string();
             }
 
             messages
@@ -127,6 +124,7 @@ pub(crate) async fn page(
 
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
+                    input id="current-thread-id" type="hidden" name="thread_id" value=(if let Some(thread) = threads.first() { GlassVault::new(thread.id)?.to_string() } else { "".to_string() });
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn
                             hx-post="/api/chat/new"
@@ -184,8 +182,7 @@ pub(crate) async fn page(
                                 button.chat-header__title-btn.chat-header__title-btn--confirm
                                     id="chat-title-confirm"
                                     hx-post="/api/chat/title"
-                                    hx-include="#chat-title-input"
-                                    hx-vals=(thread_id_json)
+                                    hx-include="#chat-title-input, #current-thread-id"
                                     hx-target="#chat-item-title" {
                                     (svg::check(16, 16))
                                 }
@@ -283,8 +280,7 @@ pub(crate) async fn page(
                                 disabled
                                 hx-post="/api/chat/send"
                                 hx-target=".chat-messages__inner"
-                                hx-include="#message-input"
-                                hx-vals=(thread_id_json)
+                                hx-include="#message-input, #current-thread-id"
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
@@ -337,7 +333,7 @@ pub(crate) fn api() -> Router {
                         AppResult::Ok(
                             html! {
                                 (render_message(&message, &internationalization)?)
-                                div.chat-item-preview id="chat-item-preview" hx-swap-oob="true" {
+                                div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
                                     (match &message.payload {
                                         Payload::UserMessage { content } => content.to_string(),
                                         Payload::SystemMessage { content, .. } => content.to_string(),
@@ -432,6 +428,7 @@ pub(crate) fn api() -> Router {
 
                         AppResult::Ok(html! {
                             (render_thread_item(&thread, &internationalization)?)
+                            input id="current-thread-id" type="hidden" name="thread_id"  hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
                         }.into_response())
                     }
                 )
@@ -590,11 +587,4 @@ impl From<Thread> for ThreadItem {
             is_active: false,
         }
     }
-}
-
-fn thread_id_json(thread_id: ThreadId) -> AppResult<String> {
-    Ok(format!(
-        r#"{{"thread_id": "{}"}}"#,
-        GlassVault::new(thread_id)?
-    ))
 }

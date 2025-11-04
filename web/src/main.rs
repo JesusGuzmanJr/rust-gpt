@@ -120,8 +120,8 @@ async fn main() -> Result<()> {
             // Allow bursts with up to ten requests per IP address
             // and replenishes one element every two seconds
             let governor_config = tower_governor::governor::GovernorConfigBuilder::default()
-                .per_second(2)
-                .burst_size(15)
+                .per_second(1)
+                .burst_size(10)
                 .finish()
                 .context("invalid rate limiting governor configuration")?;
 
