@@ -121,7 +121,6 @@ pub(crate) async fn page(
                         button.button.button--primary.chat-sidebar__new-btn
                             hx-post="/api/chat/new"
                             hx-target=".chat-sidebar__list"
-                            hx-include=".chat-item--active"
                             hx-swap="afterbegin"
                             hx-on::before-request="\
                                 document.querySelector('#chat-item-preview')?.removeAttribute('id'); \
@@ -553,7 +552,7 @@ fn render_thread_item(
                 button.chat-item-delete-btn__button
                     hx-post="/api/chat/delete"
                     hx-vals=(format!(r#"{{"thread_id": "{}"}}"#, GlassVault::new(thread.id)?))
-                    hx-target=".chat-item-swipe-wrapper"
+                    hx-target="closest .chat-item-swipe-wrapper"
                     hx-swap="outerHTML swap:300ms" {
                     (svg::x(20, 20))
                 }

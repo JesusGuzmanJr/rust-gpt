@@ -264,8 +264,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDragging = false;
     let startX = 0;
     let currentDragThreadId = null;
-    const SWIPE_THRESHOLD = 60;
-    const SNAP_THRESHOLD = 30;
+    const SWIPE_THRESHOLD = 70;
+    const SNAP_THRESHOLD = 35;
 
     const initSwipeHandlers = () => {
         const chatItems = document.querySelectorAll('.chat-item');
@@ -355,15 +355,21 @@ document.addEventListener('DOMContentLoaded', () => {
         currentDragThreadId = null;
     };
 
-    // Close swiped item when clicking outside
+    // Handle delete button click
     document.addEventListener('click', (e) => {
+        const clickedDelete = e.target.closest('.chat-item-delete-btn__button');
+
+        if (clickedDelete) {
+            // Let HTMX handle the deletion animation - don't reset position
+            swipedThreadId = null;
+            swipeOffset = 0;
+            return;
+        }
+
+        // Close swiped item when clicking outside
         if (!swipedThreadId) return;
 
         const clickedItem = e.target.closest('.chat-item-swipe-wrapper');
-        const clickedDelete = e.target.closest('.chat-item-delete-btn__button');
-
-        // Don't close if clicking the delete button
-        if (clickedDelete) return;
 
         // Close if clicking outside the swiped item
         if (!clickedItem || clickedItem.dataset.threadId !== swipedThreadId) {

@@ -105,6 +105,7 @@
 .chat-sidebar__list {
   flex: 1;
   overflow-y: auto;
+  overflow-x: clip;
   padding: 0.5rem;
 }
 
@@ -706,8 +707,27 @@
 // Swipe-to-delete functionality
 .chat-item-swipe-wrapper {
   position: relative;
-  overflow: hidden;
+  overflow: clip;
   margin-bottom: 0.25rem;
+  transition: max-height 0.25s ease 0.25s, margin-bottom 0.25s ease 0.25s, opacity 0.15s ease 0.35s;
+  max-height: 200px;
+}
+
+// Deletion animation
+.chat-item-swipe-wrapper.htmx-swapping {
+  max-height: 0;
+  margin-bottom: 0;
+  opacity: 0;
+
+  .chat-item {
+    transform: translateX(-120%) !important;
+    transition: transform 0.3s ease-in-out !important;
+  }
+
+  .chat-item-delete-btn {
+    opacity: 0;
+    transition: opacity 0.2s ease-out;
+  }
 }
 
 .chat-item-delete-btn {
@@ -715,7 +735,7 @@
   top: 0;
   right: 0;
   bottom: 0;
-  width: 50px;
+  width: 60px;
   background: var(--delete-btn-bg);
   border-radius: 0.5rem;
   z-index: 1;
