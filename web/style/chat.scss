@@ -736,7 +736,6 @@
   right: 0;
   bottom: 0;
   width: 60px;
-  background: var(--delete-btn-bg);
   border-radius: 0.5rem;
   z-index: 1;
 }
@@ -747,19 +746,31 @@
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: transparent;
+  background: var(--delete-btn-bg);
   border: none;
   border-radius: 0.5rem;
   color: white;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background-color 0.2s ease;
 
-  &:hover {
-    background: rgba(0, 0, 0, 0.1);
+  @media (prefers-color-scheme: light) {
+    &:hover {
+      background-color: #b91c1c;
+    }
+
+    &:active {
+      background-color: #991b1b;
+    }
   }
 
-  &:active {
-    background: rgba(0, 0, 0, 0.2);
+  @media (prefers-color-scheme: dark) {
+    &:hover {
+      background-color: #991b1b;
+    }
+
+    &:active {
+      background-color: #7f1d1d;
+    }
   }
 }
 
