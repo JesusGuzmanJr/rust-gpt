@@ -407,9 +407,22 @@ pub(crate) fn api() -> Router {
                         let user = require_auth_user(&cookie_jar).await?;
                         let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
                         thread.clone().save().await?;
+
+                        let content = SystemMessageContent::greeting();
+                        let message = Message::new(
+                            thread.id,
+                            Payload::SystemMessage {
+                                content: content.clone(),
+                                feedback: None,
+                            },
+                        );
+                        message.save().await?;
+
+
                         let mut thread: ThreadItem = thread.into();
                         thread.is_active = true;
-                        thread.preview = SystemMessageContent::greeting().to_string();
+                        thread.preview = content.to_string();
+
                         AppResult::Ok(html! {
                             (render_thread_item(&thread, &internationalization)?)
                         }.into_response())

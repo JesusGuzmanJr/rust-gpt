@@ -1,5 +1,6 @@
 use {
     crate::{
+        message::{Message, MessageKey},
         persistence::db,
         user::{User, UserId},
     },
@@ -128,6 +129,22 @@ impl Thread {
             let rw = db().rw_transaction()?;
 
             let thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
+
+            rw.scan()
+                .secondary::<Message>(MessageKey::thread_id)?
+                .start_with(thread_id)?
+                .filter_map(|result| {
+                    if let Err(error) = &result {
+                        warn!(%thread_id, %error, "failed to get messages");
+                    }
+                    result.ok()
+                })
+                .map(|message| rw.remove(message))
+                .for_each(|result| {
+                    if let Err(error) = result {
+                        warn!(%thread_id, %error, "failed to delete message");
+                    }
+                });
 
             rw.remove(thread)?;
             rw.commit()
