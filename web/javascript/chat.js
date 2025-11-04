@@ -40,6 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const titleInput = document.getElementById('chat-title-input');
     const confirmButton = document.getElementById('chat-title-confirm');
     const cancelButton = document.getElementById('chat-title-cancel');
+    const chatHeader = document.querySelector('.chat-header');
 
     if (titleDisplay && titleEdit && titleInput && confirmButton && cancelButton) {
         // Enter edit mode when clicking the title
@@ -47,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleInput.value = titleDisplay.textContent;
             titleDisplay.style.display = 'none';
             titleEdit.style.display = 'flex';
+            if (chatHeader) chatHeader.classList.add('title-editing');
             titleInput.focus();
             titleInput.select();
         });
@@ -59,12 +61,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             titleEdit.style.display = 'none';
             titleDisplay.style.display = 'block';
+            if (chatHeader) chatHeader.classList.remove('title-editing');
         };
 
         // Cancel edit
         const cancelEdit = () => {
             titleEdit.style.display = 'none';
             titleDisplay.style.display = 'block';
+            if (chatHeader) chatHeader.classList.remove('title-editing');
         };
 
         // Confirm button click

@@ -363,6 +363,10 @@
     width: 2.5rem;
     height: 2.5rem;
     justify-content: center;
+
+    .chat-header.title-editing & {
+      display: none;
+    }
   }
 
   &:hover {
