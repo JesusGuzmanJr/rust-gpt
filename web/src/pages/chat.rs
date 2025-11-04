@@ -3,7 +3,6 @@ use {
         auth::require_auth_user,
         error::{AppResult, ResponseResult},
         hash::GlassVault,
-        http::extract,
         internationalization::Internationalization,
         message::{
             Feedback, Message, MessageId, Payload, SystemMessageContent, UserMessageContent,
@@ -117,9 +116,18 @@ pub(crate) async fn page(
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
                     div.chat-sidebar__header {
-                        button.button.button--primary.chat-sidebar__new-btn {
+                        // TODO: don't we need to update all elements that pull firs thread as current one?
+                        input type="hidden" name="thread_id" value=(GlassVault::new(threads.first().id)?);
+                        button.button.button--primary.chat-sidebar__new-btn
+                            hx-post="/api/chat/new"
+                            hx-target=".chat-sidebar__list"
+                            hx-include=".chat-item--active"
+                            hx-swap="afterbegin"
+                            hx-on::before-request="\
+                                document.querySelector('#chat-item-preview')?.removeAttribute('id'); \
+                                document.querySelector('.chat-item.chat-item--active')?.classList.remove('chat-item--active');" {
                             (svg::plus(16, 16))
-                            span { "New Chat" }
+                            span { (ThreadTitle::new_chat_title()) }
                         }
                         button.chat-sidebar__close-btn id="sidebar-close-btn" {
                             (svg::x(20, 20))
@@ -359,14 +367,14 @@ pub(crate) fn api() -> Router {
             )
             .route(
                 "/sign-out",
-                get({
+                get(
                     async |cookie_jar: CookieJar| {
                         (
                             crate::auth::remove_auth_cookie(cookie_jar),
                             Redirect::to(crate::pages::signin::PATH),
                         )
                     }
-                }),
+                ),
             )
             .route(
                 "/feedback",
@@ -391,6 +399,22 @@ pub(crate) fn api() -> Router {
                         )
                     }
                 }),
+            ).route(
+                "/new",
+                post(async |
+                    internationalization: Internationalization,
+                    cookie_jar: CookieJar| {
+                        let user = require_auth_user(&cookie_jar).await?;
+                        let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
+                        thread.clone().save().await?;
+                        let mut thread: ThreadItem = thread.into();
+                        thread.is_active = true;
+                        thread.preview = SystemMessageContent::greeting().to_string();
+                        AppResult::Ok(html! {
+                            (render_thread_item(&thread, &internationalization)?)
+                        }.into_response())
+                    }
+                )
             ),
     )
 }

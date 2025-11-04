@@ -1,6 +1,7 @@
 {
   "cSpell.words": [
     "aabb",
+    "afterbegin",
     "ahash",
     "autofocus",
     "autoreload",
@@ -87,8 +88,13 @@
   "rust-analyzer.showUnlinkedFileNotification": false,
   "rust-analyzer.check.command": "clippy",
   "rust-analyzer.cargo.features": [],
-  "rust-analyzer.rustfmt.extraArgs": ["+nightly"],
-  "cSpell.ignorePaths": ["Cargo.lock", ".vscode"],
+  "rust-analyzer.rustfmt.extraArgs": [
+    "+nightly"
+  ],
+  "cSpell.ignorePaths": [
+    "Cargo.lock",
+    ".vscode"
+  ],
   "scss.lint.unknownAtRules": "ignore",
   "cSpell.customDictionaries": {
     "custom-dictionary-workspace": {

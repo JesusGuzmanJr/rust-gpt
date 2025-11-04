@@ -1,2 +1,3 @@
 autocapitalize
+beforebegin
 maxlength
