@@ -181,7 +181,8 @@ pub(crate) async fn page(
                         div.chat-header__right {
                             div.user-dropdown {
                                 button.chat-header__user-btn id="user-menu-btn" {
-                                    span { (user.name) }
+                                    (svg::user("icon", 20, 20))
+                                    span.chat-header__user-name { (user.name) }
                                 }
 
                                 div.dropdown-content id="user-dropdown" {

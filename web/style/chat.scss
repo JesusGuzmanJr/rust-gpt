@@ -355,18 +355,31 @@
   border-radius: 0.5rem;
   cursor: pointer;
   transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 
-  span {
-    max-width: 150px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
+  @media (max-width: 768px) {
+    padding: 0.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    justify-content: center;
   }
 
   &:hover {
     background: var(--overlay-medium);
     border-color: var(--border-secondary);
+  }
+}
+
+.chat-header__user-name {
+  max-width: 150px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  @media (max-width: 768px) {
+    display: none;
   }
 }
 

@@ -59,7 +59,7 @@ fn signup_card(email_is_taken: bool) -> Markup {
             div.form-group {
                 label.form-label for="name" { "Full Name" }
                 div.input-wrapper {
-                    (svg::user(20, 20))
+                    (svg::user("input-icon", 20, 20))
                     input."form-input"#name type="text" name="name" placeholder="Jane Doe" autocomplete="name" required autofocus;
                 }
             }
