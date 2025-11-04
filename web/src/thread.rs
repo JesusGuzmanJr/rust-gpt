@@ -46,7 +46,7 @@ pub(crate) mod v1 {
         pub(crate) id: ThreadId,
         #[secondary_key]
         pub(crate) user_id: UserId,
-        pub(crate) thread_title: ThreadTitle,
+        pub(crate) title: ThreadTitle,
         pub(crate) created_at: DateTime<Utc>,
         pub(crate) updated_at: DateTime<Utc>,
     }
@@ -59,11 +59,11 @@ pub(crate) fn define(models: &mut Models) -> Result<()> {
 }
 
 impl Thread {
-    pub(crate) fn new(user_id: UserId, thread_title: ThreadTitle) -> Self {
+    pub(crate) fn new(user_id: UserId, title: ThreadTitle) -> Self {
         Thread {
             id: ThreadId::new(),
             user_id,
-            thread_title,
+            title,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -111,7 +111,7 @@ impl Thread {
 
             let mut thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
 
-            thread.thread_title = new_title;
+            thread.title = new_title;
             thread.updated_at = Utc::now();
 
             rw.insert(thread)?;

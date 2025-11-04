@@ -36,6 +36,7 @@ pub(crate) const PATH: &str = "/chat";
 
 #[derive(Debug)]
 struct ThreadItem {
+    id: ThreadId,
     title: ThreadTitle,
     created_at: DateTime<Utc>,
     preview: String,
@@ -50,27 +51,37 @@ pub(crate) async fn page(
     let user = require_auth_user(&cookie_jar).await?;
 
     let threads = {
-        let mut threads = Thread::get_all(user.id).await?;
+        let mut threads = Thread::get_all(user.id)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect::<Vec<ThreadItem>>();
+
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
 
-        let threads = match NonEmpty::from_vec(threads) {
+        let mut threads = match NonEmpty::from_vec(threads) {
             Some(threads) => threads,
             None => {
                 let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
                 thread.clone().save().await?;
-                NonEmpty::new(thread)
+                NonEmpty::new(thread.into())
             }
         };
 
-        // let threads = threads
-        //     .into_iter()
-        //     .map(|t| ThreadItem {
-        //         title: t.thread_title,
-        //         created_at: t.created_at,
-        //         preview: "".to_string(),
-        //         is_active: false,
-        //     })
-        //     .collect::<NonEmpty<_>>();
+        for thread in &mut threads.iter_mut() {
+            let mut messages = Message::get_all_messages(thread.id).await?;
+            messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+            let preview = messages
+                .first()
+                .map(|m| match &m.payload {
+                    Payload::UserMessage { content } => content.to_string(),
+                    Payload::SystemMessage { content, .. } => content.to_string(),
+                })
+                .unwrap_or_default();
+            thread.preview = preview;
+        }
+
+        threads.first_mut().is_active = true;
 
         threads
     };
@@ -95,7 +106,7 @@ pub(crate) async fn page(
         }
     };
 
-    let current_thread_title = &threads.first().thread_title;
+    let current_thread_title = &threads.first().title;
 
     Ok(super::page(
         "Chat",
@@ -111,37 +122,8 @@ pub(crate) async fn page(
                     }
 
                     div.chat-sidebar__list {
-                        div.chat-item.chat-item--active {
-                            div.chat-item__content {
-                                div.chat-item__header {
-                                    (svg::chat_bubble(16, 16))
-                                    span.chat-item__title { "Project Help" }
-                                    span.chat-item__time { "1h ago" }
-                                }
-                                p.chat-item__preview { "I need help with my project." }
-                            }
-                        }
-
-                        div.chat-item {
-                            div.chat-item__content {
-                                div.chat-item__header {
-                                    (svg::chat_bubble(16, 16))
-                                    span.chat-item__title { "Code Review" }
-                                    span.chat-item__time { "2h ago" }
-                                }
-                                p.chat-item__preview { "Can you review this code?" }
-                            }
-                        }
-
-                        div.chat-item {
-                            div.chat-item__content {
-                                div.chat-item__header {
-                                    (svg::chat_bubble(16, 16))
-                                    span.chat-item__title { "Design Feedback" }
-                                    span.chat-item__time { "1d ago" }
-                                }
-                                p.chat-item__preview { "What do you think about this design?" }
-                            }
+                        @for thread in &threads {
+                            (render_thread_item(thread, &internationalization)?)
                         }
                     }
 
@@ -498,20 +480,31 @@ fn render_feedback_form(message_id: MessageId, feedback: Option<Feedback>) -> Ap
 }
 
 fn render_thread_item(
-    thread: &Thread,
+    thread: &ThreadItem,
     internationalization: &Internationalization,
-    preview: &str,
 ) -> AppResult<Markup> {
     Ok(html! {
-        div.chat-item.chat-item--active {
+        div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
             div.chat-item__content {
                 div.chat-item__header {
                     (svg::chat_bubble(16, 16))
-                    span.chat-item__title { (thread.thread_title) }
+                    span.chat-item__title { (thread.title) }
                     span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
                 }
-                p.chat-item__preview { (preview) }
+                p.chat-item__preview { (thread.preview) }
             }
         }
     })
+}
+
+impl From<Thread> for ThreadItem {
+    fn from(thread: Thread) -> ThreadItem {
+        ThreadItem {
+            id: thread.id,
+            title: thread.title,
+            created_at: thread.created_at,
+            preview: String::new(), // does't allocate
+            is_active: false,
+        }
+    }
 }

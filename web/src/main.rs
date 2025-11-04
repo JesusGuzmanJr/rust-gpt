@@ -114,14 +114,14 @@ async fn main() -> Result<()> {
                 .layer(axum::error_handling::HandleErrorLayer::new(
                     |_: BoxError| async { axum::http::StatusCode::REQUEST_TIMEOUT },
                 ))
-                .layer(TimeoutLayer::new(Duration::from_secs(5))),
+                .layer(TimeoutLayer::new(Duration::from_secs(15))),
         )
         .layer(tower_governor::GovernorLayer::new({
             // Allow bursts with up to ten requests per IP address
             // and replenishes one element every two seconds
             let governor_config = tower_governor::governor::GovernorConfigBuilder::default()
-                .per_second(3)
-                .burst_size(10)
+                .per_second(2)
+                .burst_size(15)
                 .finish()
                 .context("invalid rate limiting governor configuration")?;
 
