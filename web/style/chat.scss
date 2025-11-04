@@ -63,6 +63,8 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-height: 4.5rem;
+  box-sizing: border-box;
 }
 
 .chat-sidebar__new-btn {
@@ -108,7 +110,7 @@
 
 .chat-sidebar__footer {
   border-top: 1px solid var(--border-primary);
-  padding: 1rem;
+  padding: 1.5rem 1rem;
   display: flex;
   justify-content: center;
 }
@@ -211,6 +213,8 @@
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border-primary);
   background: var(--bg-primary);
+  min-height: 4.5rem;
+  box-sizing: border-box;
 }
 
 .chat-header__left {
