@@ -1,3 +1,38 @@
+// Sidebar toggle functionality
+document.addEventListener('DOMContentLoaded', () => {
+    const sidebar = document.getElementById('chat-sidebar');
+    const backdrop = document.getElementById('sidebar-backdrop');
+    const menuBtn = document.getElementById('sidebar-menu-btn');
+    const closeBtn = document.getElementById('sidebar-close-btn');
+
+    if (sidebar && backdrop && menuBtn && closeBtn) {
+        // Open sidebar
+        menuBtn.addEventListener('click', () => {
+            sidebar.classList.add('is-open');
+            backdrop.classList.add('is-visible');
+        });
+
+        // Close sidebar
+        const closeSidebar = () => {
+            sidebar.classList.remove('is-open');
+            backdrop.classList.remove('is-visible');
+        };
+
+        closeBtn.addEventListener('click', closeSidebar);
+        backdrop.addEventListener('click', closeSidebar);
+
+        // Close sidebar when clicking outside on mobile
+        document.addEventListener('click', (event) => {
+            const isClickInsideSidebar = sidebar.contains(event.target);
+            const isClickOnMenuBtn = menuBtn.contains(event.target);
+
+            if (!isClickInsideSidebar && !isClickOnMenuBtn && sidebar.classList.contains('is-open')) {
+                closeSidebar();
+            }
+        });
+    }
+});
+
 // Chat title editing functionality
 document.addEventListener('DOMContentLoaded', () => {
     const titleDisplay = document.getElementById('chat-title-display');

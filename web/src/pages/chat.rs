@@ -112,12 +112,18 @@ pub(crate) async fn page(
         "Chat",
         html! {
             div.chat-container {
+                // Sidebar backdrop (mobile only)
+                div.chat-sidebar-backdrop id="sidebar-backdrop" {}
+
                 // Sidebar
-                aside.chat-sidebar {
+                aside.chat-sidebar id="chat-sidebar" {
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn {
                             (svg::plus(16, 16))
                             span { "New Chat" }
+                        }
+                        button.chat-sidebar__close-btn id="sidebar-close-btn" {
+                            (svg::x(20, 20))
                         }
                     }
 
@@ -140,6 +146,9 @@ pub(crate) async fn page(
                     // Header
                     header.chat-header {
                         div.chat-header__left {
+                            button.chat-header__menu-btn id="sidebar-menu-btn" {
+                                (svg::menu(24, 24))
+                            }
                             div.chat-header__logo {
                                 span { "AI" }
                             }
