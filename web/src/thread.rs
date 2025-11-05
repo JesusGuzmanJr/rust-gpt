@@ -134,23 +134,28 @@ impl Thread {
             debug!(%thread_id, "deleting thread");
             let rw = db().rw_transaction()?;
 
-            let thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
-
-            rw.scan()
-                .secondary::<Message>(MessageKey::thread_id)?
+            let messages: Vec<Message> = rw
+                .scan()
+                .secondary(MessageKey::thread_id)?
                 .start_with(thread_id)?
                 .filter_map(|result| {
                     if let Err(error) = &result {
-                        warn!(%thread_id, ?error, "failed to get messages");
+                        warn!(%thread_id, ?error, "failed to get message");
                     }
                     result.ok()
                 })
-                .map(|message| rw.remove(message))
-                .for_each(|result| {
-                    if let Err(error) = result {
-                        warn!(%thread_id, ?error, "failed to delete message");
-                    }
-                });
+                .collect();
+
+            let thread = rw
+                .get()
+                .primary::<Thread>(thread_id)?
+                .context("thread not found")?;
+
+            for message in messages {
+                if let Err(error) = rw.remove(message) {
+                    warn!(%thread_id, ?error, "failed to delete message");
+                }
+            }
 
             rw.remove(thread)?;
             rw.commit()
