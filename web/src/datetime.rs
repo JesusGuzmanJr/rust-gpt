@@ -56,7 +56,7 @@ pub(crate) fn today_implied_human_datetime(
 
         icu::datetime::DateTimeFormatter::try_new(
             locale.into(),
-            icu::datetime::fieldsets::YMDE::medium().with_time_hm(),
+            icu::datetime::fieldsets::YMDE::medium(),
         )
         .expect("failed to create DateTimeFormatter")
         .format(&icu::datetime::input::DateTime { date, time })

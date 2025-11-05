@@ -24,6 +24,14 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_secs(3);
 /// SMTP minimum idle connections.
 const MIN_IDLE_CONNECTIONS: u32 = 3;
 
+/// Timeout for DNS MX record lookup.
+const EMAIL_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
+
+const _: () = assert!(
+    EMAIL_CHECK_TIMEOUT.as_secs() < crate::REQUEST_TIMEOUT.as_secs(),
+    "EMAIL_CHECK_TIMEOUT must be less than REQUEST_TIMEOUT"
+);
+
 type SmtpTransport = AsyncSmtpTransport<Tokio1Executor>;
 
 static SMTP_TRANSPORT: OnceLock<SmtpTransport> = OnceLock::new();
@@ -106,10 +114,21 @@ pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
         trace!(%email, is_sendable, "email returned from cache");
         is_sendable
     } else {
-        let results = check_if_email_exists::check_email(
-            &check_if_email_exists::CheckEmailInput::new(email.to_string()),
+        let results = match tokio::time::timeout(
+            EMAIL_CHECK_TIMEOUT,
+            check_if_email_exists::check_email(&check_if_email_exists::CheckEmailInput::new(
+                email.to_string(),
+            )),
         )
-        .await;
+        .await
+        {
+            Ok(results) => results,
+            Err(_) => {
+                tracing::warn!(%email, "email validation check timed out; assuming email might be valid");
+                CACHE.insert(email.clone(), true);
+                return true;
+            }
+        };
 
         // only check mx records; we don't want to ask the receiver's email server if
         // *we* can email them because we're on a lowly residential ISP

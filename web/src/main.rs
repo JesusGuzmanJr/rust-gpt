@@ -50,6 +50,8 @@ const HTTP_PORT: u16 = 3000;
 const SRC_HTTP_PORT_REDIRECT: u16 = 3080;
 const HTTPS_PORT: u16 = 3443;
 
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
+
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt::init();
@@ -114,7 +116,7 @@ async fn main() -> Result<()> {
                 .layer(axum::error_handling::HandleErrorLayer::new(
                     |_: BoxError| async { axum::http::StatusCode::REQUEST_TIMEOUT },
                 ))
-                .layer(TimeoutLayer::new(Duration::from_secs(15))),
+                .layer(TimeoutLayer::new(REQUEST_TIMEOUT)),
         )
         .layer(tower_governor::GovernorLayer::new({
             // Allow bursts with up to ten requests per IP address

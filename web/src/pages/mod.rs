@@ -33,7 +33,7 @@ pub(crate) fn not_found_page() -> impl IntoResponse {
 pub(crate) fn internal_server_error_page(message: &str) -> impl IntoResponse {
     error_page(
         StatusCode::INTERNAL_SERVER_ERROR,
-        "Internal Server Error",
+        "Server Error",
         "500",
         "Internal Server Error",
         message,

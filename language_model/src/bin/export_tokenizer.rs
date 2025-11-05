@@ -33,7 +33,8 @@ fn main() -> Result<()> {
 
     // Get the pre-tokenization regex pattern
     // We need to access the model to get the regex pattern
-    let model = language_model::tokenization::TokenizerModel::from_bytes(&std::fs::read(&args.input)?)?;
+    let model =
+        language_model::tokenization::TokenizerModel::from_bytes(&std::fs::read(&args.input)?)?;
 
     // Create JSON structure
     let json_data = serde_json::json!({

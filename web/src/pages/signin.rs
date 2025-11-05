@@ -91,60 +91,58 @@ fn signin_card(invalid_credentials: Option<EmailAddress>) -> Markup {
     }
 }
 
+#[derive(Debug, Deserialize, Validate)]
+struct SignInForm {
+    #[garde(dive)]
+    email: EmailAddress,
+    #[garde(skip)]
+    password: Password,
+    #[garde(skip)]
+    #[serde(deserialize_with = "deserialize_checkbox", default)]
+    remember: bool,
+}
+
+fn deserialize_checkbox<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    Ok(&String::deserialize(deserializer)? == "on") // default checkbox value is "on"
+}
+
+#[instrument]
+async fn sign_in(
+    ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
+    cookie_jar: CookieJar,
+    Garde(Form(SignInForm {
+        email,
+        password,
+        remember,
+    })): Garde<Form<SignInForm>>,
+) -> AppResult<impl IntoResponse> {
+    info!(%email, ?remember, %socket_address, "sign in requested");
+
+    let user = match User::by_email(&email).await? {
+        Some(user) => user,
+        None => {
+            warn!(%email, "user not found");
+            return Ok(signin_card(Some(email)).into_response());
+        }
+    };
+
+    let user_id = user.id;
+
+    // consumes user because needs to move to CPU-bound thread pool
+    if !user.verify_password(password).await? {
+        warn!(%user_id, "invalid password");
+        return Ok(signin_card(Some(email)).into_response());
+    }
+
+    let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id, remember)?;
+
+    info!(%user_id, "sign in successful");
+    AppResult::Ok((cookie_jar, [("hx-redirect", crate::pages::chat::PATH)]).into_response())
+}
+
 pub(crate) fn api() -> Router {
-    Router::new().route(
-        "/signin",
-        post({
-            #[derive(Debug, Deserialize, Validate)]
-            struct SignInForm {
-                #[garde(dive)]
-                email: EmailAddress,
-                #[garde(skip)]
-                password: Password,
-                #[garde(skip)]
-                #[serde(deserialize_with = "deserialize_checkbox", default)]
-                remember: bool,
-            }
-
-            fn deserialize_checkbox<'de, D>(deserializer: D) -> Result<bool, D::Error>
-            where
-                D: Deserializer<'de>,
-            {
-                Ok(&String::deserialize(deserializer)? == "on") // default checkbox value is "on"
-            }
-
-            async |ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
-                   cookie_jar: CookieJar,
-                   Garde(Form(SignInForm {
-                       email,
-                       password,
-                       remember,
-                   })): Garde<Form<SignInForm>>| {
-                info!(%email, ?remember, %socket_address, "sign in requested");
-
-                let user = match User::by_email(&email).await? {
-                    Some(user) => user,
-                    None => {
-                        warn!(%email, "user not found");
-                        return Ok(signin_card(Some(email)).into_response());
-                    }
-                };
-
-                let user_id = user.id;
-
-                // consumes user because needs to move to CPU-bound thread pool
-                if !user.verify_password(password).await? {
-                    warn!(%user_id, "invalid password");
-                    return Ok(signin_card(Some(email)).into_response());
-                }
-
-                let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id, remember)?;
-
-                info!(%user_id, "sign in successful");
-                AppResult::Ok(
-                    (cookie_jar, [("hx-redirect", crate::pages::chat::PATH)]).into_response(),
-                )
-            }
-        }),
-    )
+    Router::new().route("/signin", post(sign_in))
 }

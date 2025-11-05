@@ -25,6 +25,7 @@ pub(crate) const PATH: &str = "/signup";
 
 const VERIFICATION_LINK_EXPIRATION: Duration = Duration::hours(24);
 
+#[instrument]
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Sign Up",
@@ -313,161 +314,163 @@ struct Link {
     created_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Deserialize)]
+struct ValidateEmailQuery {
+    email: EmailAddress,
+}
+
+#[instrument]
+async fn validate_email(Query(ValidateEmailQuery { email }): Query<ValidateEmailQuery>) -> Markup {
+    match email.validate() {
+        Ok(()) if mailer::is_sendable(&email).await => html! {},
+        Ok(()) => {
+            // check if email is already in use
+            match User::by_email(&email).await {
+                Ok(Some(_)) => html! {
+                    p.form-hint { "Email already in use" }
+                },
+                Ok(None) => html! {
+                    p.form-hint { "Email is available" }
+                },
+                Err(_) => html! {
+                    p.form-hint { "Failed to check email" }
+                },
+            }
+        }
+        Err(_validation_report) => html! {
+            // user is still typing the email; don't show any hints/errors
+        },
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SignUpForm {
+    name: Name,
+    email: EmailAddress,
+    password: Password,
+    confirm_password: Password,
+}
+
+impl Validate for SignUpForm {
+    type Context = ();
+
+    fn validate_into(
+        &self,
+        ctx: &Self::Context,
+        mut parent: &mut dyn FnMut() -> garde::Path,
+        report: &mut garde::Report,
+    ) {
+        self.name
+            .validate_into(ctx, &mut nested_path!(parent, "name"), report);
+        self.email
+            .validate_into(ctx, &mut nested_path!(parent, "email"), report);
+
+        if self.password != self.confirm_password {
+            report.append(
+                nested_path!(parent, "confirm_password")(),
+                garde::Error::new("Passwords do not match"),
+            );
+        }
+
+        self.password.validate_into(
+            &crate::user::PasswordValidationContext {
+                email: self.email.clone(),
+                name: self.name.clone(),
+            },
+            &mut nested_path!(parent, "password"),
+            report,
+        );
+    }
+}
+
+#[instrument]
+async fn sign_up(
+    ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
+    Garde(Form(SignUpForm {
+        name,
+        email,
+        password,
+        confirm_password: _,
+    })): Garde<Form<SignUpForm>>,
+) -> AppResult<Markup> {
+    // Check if email is already registered
+    if User::by_email(&email).await?.is_some() {
+        warn!(%email, "email already registered");
+        return Ok(signup_card(true));
+    }
+
+    let user = User::new(name.clone(), email.clone(), password.clone()).await?;
+    let user_id = user.id;
+
+    mailer::send_email(
+        &email,
+        "Verify Your Email",
+        crate::auth::verification_email(
+            &name,
+            &format!(
+                "{}/api/signup/verify?token={}",
+                crate::PROJECT_URL,
+                GlassVault::new(Link {
+                    user,
+                    created_at: Utc::now(),
+                })?
+            ),
+        ),
+        lettre::message::header::ContentType::TEXT_HTML,
+    )
+    .await?;
+
+    info!(%user_id, "sign up completed");
+    AppResult::Ok(verify_card())
+}
+
+#[derive(Debug, Deserialize)]
+struct VerifyEmailQuery {
+    token: String,
+}
+
+#[instrument]
+async fn verify(
+    Query(VerifyEmailQuery { token }): Query<VerifyEmailQuery>,
+) -> AppResult<impl IntoResponse> {
+    let Link { user, created_at } = match GlassVault::<Link>::from_str(&token) {
+        Ok(container) => container.into_inner(),
+        Err(error) => {
+            error!(?error, "invalid email verification token");
+            return Ok(verification_page(VerificationStatus::Expired));
+        }
+    };
+    let user_id = user.id;
+    let user_email = user.email.clone();
+
+    if Utc::now() - created_at > VERIFICATION_LINK_EXPIRATION {
+        warn!(%user_id, %user_email, "email verification link expired");
+        return Ok(verification_page(VerificationStatus::Expired));
+    }
+    match user.save().await {
+        Ok(()) => AppResult::Ok(verification_page(VerificationStatus::Success)),
+        Err(error) => {
+            use native_db::db_type::Error as NativeDbError;
+            if let Some(NativeDbError::DuplicateKey {
+                key_name: _key_name,
+            }) = error.downcast_ref::<NativeDbError>()
+            {
+                warn!(%user_id, %user_email, "user tried to verify again");
+                Ok(verification_page(VerificationStatus::AlreadyVerified))
+            } else {
+                error!(?error, %user_id, %user_email, "failed to save user");
+                Ok(verification_page(VerificationStatus::Error))
+            }
+        }
+    }
+}
+
 pub(crate) fn api() -> Router {
-    Router::new()
-        .route(
-            "/signup/validate",
-            get({
-                #[derive(Debug, Deserialize)]
-                struct ValidateEmailQuery {
-                    email: EmailAddress,
-                }
-                async |Query(ValidateEmailQuery { email }): Query<ValidateEmailQuery>| {
-                    trace!(%email, "email to check");
-                    match email.validate() {
-                        Ok(()) if mailer::is_sendable(&email).await => html! {},
-                        Ok(()) => {
-                            // check if email is already in use
-                            match User::by_email(&email).await {
-                                Ok(Some(_)) => html! {
-                                    p.form-hint { "Email already in use" }
-                                },
-                                Ok(None) => html! {
-                                    p.form-hint { "Email is available" }
-                                },
-                                Err(_) => html! {
-                                    p.form-hint { "Failed to check email" }
-                                },
-                            }
-                        }
-                        Err(_validation_report) => html! {}, // user is still typing the email
-                    }
-                }
-            }),
-        )
-        .route(
-            "/signup",
-            post({
-                #[derive(Debug, Deserialize)]
-                struct SignUpForm {
-                    name: Name,
-                    email: EmailAddress,
-                    password: Password,
-                    confirm_password: Password,
-                }
-
-                impl Validate for SignUpForm {
-                    type Context = ();
-
-                    fn validate_into(
-                        &self,
-                        ctx: &Self::Context,
-                        mut parent: &mut dyn FnMut() -> garde::Path,
-                        report: &mut garde::Report,
-                    ) {
-                        self.name
-                            .validate_into(ctx, &mut nested_path!(parent, "name"), report);
-                        self.email
-                            .validate_into(ctx, &mut nested_path!(parent, "email"), report);
-
-                        if self.password != self.confirm_password {
-                            report.append(
-                                nested_path!(parent, "confirm_password")(),
-                                garde::Error::new("Passwords do not match"),
-                            );
-                        }
-
-                        self.password.validate_into(
-                            &crate::user::PasswordValidationContext {
-                                email: self.email.clone(),
-                                name: self.name.clone(),
-                            },
-                            &mut nested_path!(parent, "password"),
-                            report,
-                        );
-                    }
-                }
-
-                async |ConnectInfo(socket_address): ConnectInfo<SocketAddr>,
-                       Garde(Form(SignUpForm {
-                           name,
-                           email,
-                           password,
-                           confirm_password: _,
-                       })): Garde<Form<SignUpForm>>| {
-                    info!(%name, %email, %socket_address, "sign up requested");
-
-                    // Check if email is already registered
-                    if User::by_email(&email).await?.is_some() {
-                        warn!(%email, "email already registered");
-                        return Ok(signup_card(true));
-                    }
-
-                    let user = User::new(name.clone(), email.clone(), password.clone()).await?;
-                    let user_id = user.id;
-
-                    mailer::send_email(
-                        &email,
-                        "Verify Your Email",
-                        crate::auth::verification_email(
-                            &name,
-                            &format!(
-                                "{}/api/signup/verify?token={}",
-                                crate::PROJECT_URL,
-                                GlassVault::new(Link {
-                                    user,
-                                    created_at: Utc::now(),
-                                })?
-                            ),
-                        ),
-                        lettre::message::header::ContentType::TEXT_HTML,
-                    )
-                    .await?;
-
-                    info!(%user_id, %email, "sign up completed");
-                    AppResult::Ok(verify_card())
-                }
-            }),
-        )
-        .route(
-            "/signup/verify",
-            get({
-                #[derive(Debug, Deserialize)]
-                struct VerifyEmailQuery {
-                    token: String,
-                }
-                async |Query(VerifyEmailQuery { token }): Query<VerifyEmailQuery>| {
-                    let Link { user, created_at } = match GlassVault::<Link>::from_str(&token) {
-                        Ok(container) => container.into_inner(),
-                        Err(error) => {
-                            error!(?error, "invalid email verification token");
-                            return Ok(verification_page(VerificationStatus::Expired));
-                        }
-                    };
-                    let user_id = user.id;
-                    let user_email = user.email.clone();
-
-                    if Utc::now() - created_at > VERIFICATION_LINK_EXPIRATION {
-                        warn!(%user_id, %user_email, "email verification link expired");
-                        return Ok(verification_page(VerificationStatus::Expired));
-                    }
-                    match user.save().await {
-                        Ok(()) => AppResult::Ok(verification_page(VerificationStatus::Success)),
-                        Err(error) => {
-                            use native_db::db_type::Error as NativeDbError;
-                            if let Some(NativeDbError::DuplicateKey {
-                                key_name: _key_name,
-                            }) = error.downcast_ref::<NativeDbError>()
-                            {
-                                warn!(%user_id, %user_email, "user tried to verify again");
-                                Ok(verification_page(VerificationStatus::AlreadyVerified))
-                            } else {
-                                error!(?error, %user_id, %user_email, "failed to save user");
-                                Ok(verification_page(VerificationStatus::Error))
-                            }
-                        }
-                    }
-                }
-            }),
-        )
+    Router::new().nest(
+        PATH,
+        Router::new()
+            .route("/", post(sign_up))
+            .route("/validate", get(validate_email))
+            .route("/verify", get(verify)),
+    )
 }

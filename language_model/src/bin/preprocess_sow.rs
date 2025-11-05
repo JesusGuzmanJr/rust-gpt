@@ -2,10 +2,10 @@ use {
     anyhow::{Context, Result},
     clap::Parser,
     itertools::Itertools,
+    language_model::{tokenization::normalize_text, utils::get_parquet_column},
     parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder,
     rayon::iter::{IntoParallelRefIterator, ParallelBridge, ParallelIterator},
     regex::Regex,
-    language_model::{tokenization::normalize_text, utils::get_parquet_column},
     std::{
         fs::File,
         io::{BufWriter, Write},
