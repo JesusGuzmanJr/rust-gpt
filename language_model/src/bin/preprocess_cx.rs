@@ -79,7 +79,7 @@ fn main() -> Result<()> {
                 match String::from_utf8_lossy(&captures[1]).parse::<usize>() {
                     Ok(number) => Some(number),
                     Err(error) => {
-                        error!(?path, %error, "invalid file index");
+                        error!(?path, ?error, "invalid file index");
                         None
                     }
                 }
@@ -168,7 +168,7 @@ fn main() -> Result<()> {
                             }
                         }
                         Err(error) => {
-                            error!(%error, i);
+                            error!(?error, i);
                             should_stop.store(true, Ordering::Relaxed);
                             break;
                         }
@@ -202,7 +202,7 @@ fn main() -> Result<()> {
                 .build()?
                 .filter_map(|batch| {
                     if let Err(error) = &batch {
-                        error!(%error);
+                        error!(?error);
                     }
                     batch.ok()
                 })
@@ -235,7 +235,7 @@ fn main() -> Result<()> {
                 })
                 .for_each(|result| {
                     if let Err(error) = result {
-                        error!(%error);
+                        error!(?error);
                     }
                 });
 
@@ -257,7 +257,7 @@ fn main() -> Result<()> {
         })
         .for_each(|result| {
             if let Err(error) = result {
-                error!(%error);
+                error!(?error);
             }
         });
 

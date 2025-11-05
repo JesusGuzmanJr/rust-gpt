@@ -1,0 +1,27 @@
+{
+    "version": "0.2",
+    "ignorePaths": [
+        "Cargo.lock",
+        ".vscode"
+    ],
+    "dictionaryDefinitions": [],
+    "dictionaries": [
+        "en_US",
+        "softwareTerms",
+        "html",
+        "css",
+        "rust",
+        "bash"
+    ],
+    "words": [
+        "afterbegin",
+        "beforeend",
+        "chrono",
+        "htmx",
+        "keyup",
+        "lettre",
+        "swipeable"
+    ],
+    "ignoreWords": [],
+    "import": []
+}

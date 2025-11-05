@@ -155,7 +155,7 @@ async fn main() -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(error) = redirect_http_to_https().await {
-                error!(%error, "failed to redirect HTTP to HTTPS");
+                error!(?error, "failed to redirect HTTP to HTTPS");
             }
         });
 
@@ -201,7 +201,7 @@ async fn redirect_http_to_https() -> Result<()> {
         match make_https(&host, uri) {
             Ok(uri) => Ok(Redirect::permanent(&uri.to_string())),
             Err(error) => {
-                tracing::warn!(%error, "failed to convert URI to HTTPS");
+                tracing::warn!(?error, "failed to convert URI to HTTPS");
                 Err(axum::http::StatusCode::BAD_REQUEST)
             }
         }

@@ -117,7 +117,7 @@ impl Message {
                 .start_with(thread_id)?
                 .filter_map(|result| {
                     if let Err(error) = &result {
-                        warn!(%thread_id, %error, "failed to get messages");
+                        warn!(%thread_id, ?error, "failed to get messages");
                     }
                     result.ok()
                 })

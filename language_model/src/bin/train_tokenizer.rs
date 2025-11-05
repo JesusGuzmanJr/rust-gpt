@@ -181,7 +181,7 @@ fn main() -> Result<()> {
         })
         .filter_map(|result| {
             if let Err(error) = &result {
-                error!(%error);
+                error!(?error);
             }
             result.ok().flatten()
         }).reduce(AHashMap::default, |mut acc, map| {

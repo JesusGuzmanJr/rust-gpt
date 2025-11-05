@@ -72,6 +72,7 @@ impl Thread {
 
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
+            debug!(?self, "saving thread");
             let rw = db().rw_transaction()?;
 
             // assert that the user exists
@@ -90,24 +91,28 @@ impl Thread {
 
     pub(crate) async fn get_all(user_id: UserId) -> Result<Vec<Self>> {
         spawn_blocking(move || {
-            Ok(db()
+            debug!(%user_id, "getting all threads");
+            let threads = db()
                 .r_transaction()?
                 .scan()
                 .secondary(ThreadKey::user_id)?
                 .start_with(user_id)?
                 .filter_map(|result| {
                     if let Err(error) = &result {
-                        warn!(%user_id, %error, "failed to get thread");
+                        warn!(%user_id, ?error, "failed to get thread");
                     }
                     result.ok()
                 })
-                .collect())
+                .collect::<Vec<_>>();
+            debug!(%user_id, len = threads.len(), "got all threads");
+            Ok(threads)
         })
         .await?
     }
 
     pub(crate) async fn update_title(thread_id: ThreadId, new_title: ThreadTitle) -> Result<()> {
         spawn_blocking(move || {
+            debug!(%thread_id, %new_title, "updating thread title");
             let rw = db().rw_transaction()?;
 
             let mut thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
@@ -126,6 +131,7 @@ impl Thread {
 
     pub(crate) async fn delete(thread_id: ThreadId) -> Result<()> {
         spawn_blocking(move || {
+            debug!(%thread_id, "deleting thread");
             let rw = db().rw_transaction()?;
 
             let thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
@@ -135,14 +141,14 @@ impl Thread {
                 .start_with(thread_id)?
                 .filter_map(|result| {
                     if let Err(error) = &result {
-                        warn!(%thread_id, %error, "failed to get messages");
+                        warn!(%thread_id, ?error, "failed to get messages");
                     }
                     result.ok()
                 })
                 .map(|message| rw.remove(message))
                 .for_each(|result| {
                     if let Err(error) = result {
-                        warn!(%thread_id, %error, "failed to delete message");
+                        warn!(%thread_id, ?error, "failed to delete message");
                     }
                 });
 

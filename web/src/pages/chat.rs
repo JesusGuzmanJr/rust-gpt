@@ -309,184 +309,174 @@ pub(crate) async fn page(
     ).into_response())
 }
 
+#[derive(Debug, Deserialize)]
+struct ModelQuery {
+    // must match the "name" attribute
+    model: ModelSelection,
+}
+
+#[instrument]
+async fn get_models(Query(ModelQuery { model }): Query<ModelQuery>) -> impl IntoResponse {
+    render_model_details(model).into_response()
+}
+
+#[derive(Debug, Validate, Deserialize)]
+struct SendForm {
+    #[garde(dive)]
+    content: UserMessageContent,
+    #[garde(skip)]
+    thread_id: GlassVault<ThreadId>,
+}
+
+#[instrument]
+async fn send_message(
+    internationalization: Internationalization,
+    Garde(Form(SendForm { content, thread_id })): Garde<Form<SendForm>>,
+) -> AppResult<impl IntoResponse> {
+    let message = Message::new(thread_id.into_inner(), Payload::UserMessage { content });
+    message.clone().save().await?;
+
+    AppResult::Ok(
+        html! {
+            (render_message(&message, &internationalization)?)
+            div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
+                (match &message.payload {
+                    Payload::UserMessage { content } => content.to_string(),
+                    Payload::SystemMessage { content, .. } => content.to_string(),
+                }.trim().chars().take(10).collect::<String>())
+            }
+        }
+        .into_response(),
+    )
+}
+
+#[derive(Debug, Deserialize, Validate)]
+struct TitleForm {
+    #[garde(dive)]
+    title: ThreadTitle,
+    #[garde(skip)]
+    thread_id: GlassVault<ThreadId>,
+}
+
+#[instrument]
+async fn update_title(
+    Garde(Form(TitleForm { title, thread_id })): Garde<Form<TitleForm>>,
+) -> AppResult<String> {
+    let thread_id = thread_id.into_inner();
+    Thread::update_title(thread_id, title.clone()).await?;
+    debug!(%thread_id, %title, "thread title updated");
+    AppResult::Ok(title.to_string())
+}
+
+#[instrument]
+async fn sign_out(cookie_jar: CookieJar) -> impl IntoResponse {
+    (
+        crate::auth::remove_auth_cookie(cookie_jar),
+        Redirect::to(crate::pages::signin::PATH),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct FeedbackForm {
+    message_id: GlassVault<MessageId>,
+    feedback: Feedback,
+}
+
+#[instrument]
+async fn update_feedback(
+    Form(FeedbackForm {
+        message_id,
+        feedback,
+    }): Form<FeedbackForm>,
+) -> AppResult<impl IntoResponse> {
+    let message_id = message_id.into_inner();
+    debug!(%message_id, ?feedback, "updating message feedback");
+    Message::update_feedback(message_id, feedback).await?;
+    AppResult::Ok(render_feedback_form(message_id, Some(feedback)).into_response())
+}
+
+#[instrument]
+async fn new_thread(
+    internationalization: Internationalization,
+    cookie_jar: CookieJar,
+) -> AppResult<impl IntoResponse> {
+    let user = require_auth_user(&cookie_jar).await?;
+    let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
+    thread.clone().save().await?;
+
+    let content = SystemMessageContent::greeting();
+    let message = Message::new(
+        thread.id,
+        Payload::SystemMessage {
+            content: content.clone(),
+            feedback: None,
+        },
+    );
+    message.save().await?;
+
+    let mut thread = ThreadItem::from_thread(thread, content.as_str());
+    thread.is_active = true;
+
+    AppResult::Ok(
+        html! {
+            (render_thread_item(&thread, &internationalization)?)
+            input id="current-thread-id"
+            type="hidden"
+            name="thread_id"
+            hx-swap-oob="true"
+            value=(GlassVault::new(thread.id)?);
+        }
+        .into_response(),
+    )
+}
+
+#[derive(Debug, Deserialize)]
+struct SelectForm {
+    thread_id: GlassVault<ThreadId>,
+}
+
+#[instrument]
+async fn select_thread(
+    _internationalization: Internationalization,
+    Form(SelectForm { thread_id }): Form<SelectForm>,
+) -> AppResult<String> {
+    let thread_id = thread_id.into_inner();
+    let _messages = Message::get_all_messages(thread_id).await?;
+
+    AppResult::Ok("Hello, world!".to_string())
+    // AppResult::Ok(html! {
+    //     (render_thread_item(&thread, &internationalization)?)
+    //     input id="current-thread-id"
+    //     type="hidden" name="thread_id"
+    //      hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
+    // }.into_response())
+}
+
+#[derive(Debug, Deserialize)]
+struct DeleteForm {
+    thread_id: GlassVault<ThreadId>,
+}
+
+#[instrument]
+async fn delete_thread(Form(DeleteForm { thread_id }): Form<DeleteForm>) -> AppResult<StatusCode> {
+    let thread_id = thread_id.into_inner();
+    Thread::delete(thread_id).await?;
+    debug!(%thread_id, "thread deleted");
+    AppResult::Ok(StatusCode::OK)
+}
+
 pub(crate) fn api() -> Router {
     Router::new().nest(
         PATH,
         Router::new()
-            .route(
-                "/models",
-                get({
-                    #[derive(Debug, Deserialize)]
-                    struct ModelQuery {
-                        // must match the "name" attribute
-                        model: ModelSelection,
-                    }
-
-                    async |Query(ModelQuery { model }): Query<ModelQuery>| {
-                        render_model_details(model).into_response()
-                    }
-                }),
-            )
-            .route(
-                "/send",
-                post({
-                    #[derive(Debug, Validate, Deserialize)]
-                    struct SendForm {
-                        #[garde(dive)]
-                        content: UserMessageContent,
-                        #[garde(skip)]
-                        thread_id: GlassVault<ThreadId>,
-                    }
-
-                    async |internationalization: Internationalization,
-                           Garde(Form(SendForm { content, thread_id })): Garde<
-                        Form<SendForm>,
-                    >| {
-                        let message =
-                            Message::new(thread_id.into_inner(), Payload::UserMessage { content });
-                        message.clone().save().await?;
-
-                        AppResult::Ok(
-                            html! {
-                                (render_message(&message, &internationalization)?)
-                                div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
-                                    (match &message.payload {
-                                        Payload::UserMessage { content } => content.to_string(),
-                                        Payload::SystemMessage { content, .. } => content.to_string(),
-                                    }.trim().chars().take(10).collect::<String>())
-                                }
-                            }
-                            .into_response(),
-                        )
-                    }
-                }),
-            )
-            .route(
-                "/title",
-                post({
-                    #[derive(Debug, Deserialize, Validate)]
-                    struct TitleForm {
-                        #[garde(dive)]
-                        title: ThreadTitle,
-                        #[garde(skip)]
-                        thread_id: GlassVault<ThreadId>,
-                    }
-
-                    async |Garde(Form(TitleForm {
-                               title,
-                               thread_id,
-                           })): Garde<Form<TitleForm>>| {
-                        let thread_id = thread_id.into_inner();
-                        Thread::update_title(thread_id, title.clone()).await?;
-                        debug!(%thread_id, %title, "thread title updated");
-                        AppResult::Ok(title.to_string())
-
-                    }
-                }),
-            )
-            .route(
-                "/sign-out",
-                get(
-                    async |cookie_jar: CookieJar| {
-                        (
-                            crate::auth::remove_auth_cookie(cookie_jar),
-                            Redirect::to(crate::pages::signin::PATH),
-                        )
-                    }
-                ),
-            )
-            .route(
-                "/feedback",
-                post({
-                    #[derive(Debug, Deserialize)]
-                    struct FeedbackForm {
-                        message_id: GlassVault<MessageId>,
-                        feedback: Feedback,
-                    }
-                    async |Form(FeedbackForm {
-                               message_id,
-                               feedback,
-                           }): Form<FeedbackForm>| {
-                        let message_id = message_id.into_inner();
-                        debug!(%message_id, ?feedback, "updating message feedback");
-                        Message::update_feedback(message_id, feedback).await?;
-                        AppResult::Ok(
-                            render_feedback_form(message_id, Some(feedback)).into_response(),
-                        )
-                    }
-                }),
-            ).route(
-                "/new",
-                post(async |
-                    internationalization: Internationalization,
-                    cookie_jar: CookieJar| {
-                        let user = require_auth_user(&cookie_jar).await?;
-                        let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
-                        thread.clone().save().await?;
-
-                        let content = SystemMessageContent::greeting();
-                        let message = Message::new(
-                            thread.id,
-                            Payload::SystemMessage {
-                                content: content.clone(),
-                                feedback: None,
-                            },
-                        );
-                        message.save().await?;
-
-                        let mut thread = ThreadItem::from_thread(thread, content.as_str());
-                        thread.is_active = true;
-
-                        AppResult::Ok(
-                            html! {
-                                (render_thread_item(&thread, &internationalization)?)
-                                input id="current-thread-id"
-                                type="hidden"
-                                name="thread_id"
-                                hx-swap-oob="true"
-                                value=(GlassVault::new(thread.id)?);
-                            }
-                            .into_response(),
-                        )
-                    }
-                )
-            ).route(
-                "/select",
-                get({
-                    #[derive(Debug, Deserialize)]
-                    struct SelectForm {
-                        thread_id: GlassVault<ThreadId>,
-                    }
-                    async |internationalization: Internationalization,
-                           Form(SelectForm { thread_id }): Form<SelectForm>| {
-                            let thread_id = thread_id.into_inner();
-                        let messages = Message::get_all_messages(thread_id).await?;
-
-                        AppResult::Ok("Hello, world!".to_string())
-                        // AppResult::Ok(html! {
-                        //     (render_thread_item(&thread, &internationalization)?)
-                        //     input id="current-thread-id"
-                        //     type="hidden" name="thread_id"
-                        //      hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
-                        // }.into_response())
-                    }
-                })
-            ).route(
-                "/delete",
-                post({
-                    #[derive(Debug, Deserialize)]
-                    struct DeleteForm {
-                        thread_id: GlassVault<ThreadId>,
-                    }
-
-                    async |Form(DeleteForm { thread_id }): Form<DeleteForm>| {
-                        let thread_id = thread_id.into_inner();
-                        Thread::delete(thread_id).await?;
-                        debug!(%thread_id, "thread deleted");
-                        AppResult::Ok(StatusCode::OK)
-                    }
-                }),
-            ),
+            .route("/models", get(get_models))
+            .route("/send", post(send_message))
+            .route("/title", post(update_title))
+            .route("/sign-out", get(sign_out))
+            .route("/feedback", post(update_feedback))
+            .route("/new", post(new_thread))
+            .route("/select", get(select_thread))
+            .route("/delete", post(delete_thread)),
     )
 }
 
