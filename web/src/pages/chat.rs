@@ -41,6 +41,19 @@ struct ThreadItem {
     is_active: bool,
 }
 
+impl ThreadItem {
+    fn from_thread(thread: Thread, preview: &str) -> ThreadItem {
+        let preview = preview.chars().take(100).collect::<String>();
+        ThreadItem {
+            id: thread.id,
+            title: thread.title,
+            created_at: thread.created_at,
+            preview: preview.chars().take(32).collect::<String>(),
+            is_active: false,
+        }
+    }
+}
+
 pub(crate) async fn page(
     internationalization: Internationalization,
     cookie_jar: CookieJar,
@@ -49,38 +62,36 @@ pub(crate) async fn page(
     let user = require_auth_user(&cookie_jar).await?;
 
     let mut threads = {
-        let mut threads = Thread::get_all(user.id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect::<Vec<ThreadItem>>();
+        let mut threads = Thread::get_all(user.id).await?;
 
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
 
         if threads.is_empty() {
             let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
             thread.clone().save().await?;
-            threads.push(thread.into());
+            threads.push(thread);
         }
 
-        for thread in &mut threads {
+        let mut thread_items = Vec::with_capacity(threads.len());
+        for thread in threads {
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| Reverse(m.created_at));
             let preview = messages
                 .first()
                 .map(|m| match &m.payload {
-                    Payload::UserMessage { content } => content.to_string(),
-                    Payload::SystemMessage { content, .. } => content.to_string(),
+                    Payload::UserMessage { content } => content.as_str(),
+                    Payload::SystemMessage { content, .. } => content.as_str(),
                 })
                 .unwrap_or_default();
-            thread.preview = preview;
+
+            thread_items.push(ThreadItem::from_thread(thread, preview));
         }
 
-        if let Some(thread) = threads.first_mut() {
+        if let Some(thread) = thread_items.first_mut() {
             thread.is_active = true;
         }
 
-        threads
+        thread_items
     };
 
     // the messages for the first thread
@@ -124,7 +135,12 @@ pub(crate) async fn page(
 
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
-                    input id="current-thread-id" type="hidden" name="thread_id" value=(if let Some(thread) = threads.first() { GlassVault::new(thread.id)?.to_string() } else { "".to_string() });
+                    input
+                        id="current-thread-id"
+                        type="hidden"
+                        name="thread_id"
+                        value=(if let Some(thread) = threads.first() { GlassVault::new(thread.id)?.to_string() } else { "".to_string() });
+
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn
                             hx-post="/api/chat/new"
@@ -382,18 +398,15 @@ pub(crate) fn api() -> Router {
             .route(
                 "/feedback",
                 post({
-                    #[derive(Debug, Deserialize, Validate)]
+                    #[derive(Debug, Deserialize)]
                     struct FeedbackForm {
-                        #[garde(skip)]
                         message_id: GlassVault<MessageId>,
-                        #[garde(skip)]
                         feedback: Feedback,
                     }
-
-                    async |Garde(Form(FeedbackForm {
+                    async |Form(FeedbackForm {
                                message_id,
                                feedback,
-                           })): Garde<Form<FeedbackForm>>| {
+                           }): Form<FeedbackForm>| {
                         let message_id = message_id.into_inner();
                         debug!(%message_id, ?feedback, "updating message feedback");
                         Message::update_feedback(message_id, feedback).await?;
@@ -421,17 +434,43 @@ pub(crate) fn api() -> Router {
                         );
                         message.save().await?;
 
-
-                        let mut thread: ThreadItem = thread.into();
+                        let mut thread = ThreadItem::from_thread(thread, content.as_str());
                         thread.is_active = true;
-                        thread.preview = content.to_string();
 
-                        AppResult::Ok(html! {
-                            (render_thread_item(&thread, &internationalization)?)
-                            input id="current-thread-id" type="hidden" name="thread_id"  hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
-                        }.into_response())
+                        AppResult::Ok(
+                            html! {
+                                (render_thread_item(&thread, &internationalization)?)
+                                input id="current-thread-id"
+                                type="hidden"
+                                name="thread_id"
+                                hx-swap-oob="true"
+                                value=(GlassVault::new(thread.id)?);
+                            }
+                            .into_response(),
+                        )
                     }
                 )
+            ).route(
+                "/select",
+                get({
+                    #[derive(Debug, Deserialize)]
+                    struct SelectForm {
+                        thread_id: GlassVault<ThreadId>,
+                    }
+                    async |internationalization: Internationalization,
+                           Form(SelectForm { thread_id }): Form<SelectForm>| {
+                            let thread_id = thread_id.into_inner();
+                        let messages = Message::get_all_messages(thread_id).await?;
+
+                        AppResult::Ok("Hello, world!".to_string())
+                        // AppResult::Ok(html! {
+                        //     (render_thread_item(&thread, &internationalization)?)
+                        //     input id="current-thread-id"
+                        //     type="hidden" name="thread_id"
+                        //      hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
+                        // }.into_response())
+                    }
+                })
             ).route(
                 "/delete",
                 post({
@@ -575,16 +614,4 @@ fn render_thread_item(
             }
         }
     })
-}
-
-impl From<Thread> for ThreadItem {
-    fn from(thread: Thread) -> ThreadItem {
-        ThreadItem {
-            id: thread.id,
-            title: thread.title,
-            created_at: thread.created_at,
-            preview: String::new(), // does't allocate
-            is_active: false,
-        }
-    }
 }
