@@ -38,7 +38,11 @@ pub(crate) async fn page(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
 ) -> AppResult<impl IntoResponse> {
-    let mut threads = get_threads(user.id).await?;
+    let mut threads = get_or_create_thread_items(user.id).await?;
+
+    if let Some(thread) = threads.first_mut() {
+        thread.is_active = true;
+    }
 
     // the messages for the first thread
     let messages = {
@@ -273,8 +277,10 @@ impl ThreadItem {
     }
 }
 
+/// Get all threads for a user and return them as a vector of `ThreadItem`s.
+/// None of them are active. If there are no threads, a new thread is created.
 #[instrument]
-async fn get_threads(user_id: UserId) -> AppResult<Vec<ThreadItem>> {
+async fn get_or_create_thread_items(user_id: UserId) -> AppResult<Vec<ThreadItem>> {
     let mut threads = Thread::get_all(user_id).await?;
 
     threads.sort_unstable_by_key(|t| Reverse(t.created_at));
@@ -300,10 +306,6 @@ async fn get_threads(user_id: UserId) -> AppResult<Vec<ThreadItem>> {
         thread_items.push(ThreadItem::from_thread(thread, preview));
     }
 
-    if let Some(thread) = thread_items.first_mut() {
-        thread.is_active = true;
-    }
-
     Ok(thread_items)
 }
 
@@ -326,7 +328,7 @@ struct SendForm {
     thread_id: GlassVault<ThreadId>,
 }
 
-#[instrument]
+#[instrument(skip(internationalization))]
 async fn send_message(
     internationalization: Internationalization,
     Garde(Form(SendForm { content, thread_id })): Garde<Form<SendForm>>,
@@ -391,7 +393,7 @@ async fn update_feedback(
     Ok(render_feedback_form(message_id, Some(feedback)).into_response())
 }
 
-#[instrument]
+#[instrument(skip(internationalization))]
 async fn new_thread(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
@@ -441,19 +443,23 @@ struct SelectForm {
     thread_id: GlassVault<ThreadId>,
 }
 
-#[instrument]
+#[instrument(skip(internationalization))]
 async fn select_thread(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
     Form(SelectForm { thread_id }): Form<SelectForm>,
 ) -> AppResult<impl IntoResponse> {
     let thread_id = thread_id.into_inner();
-    let mut threads = get_threads(user.id).await?;
+    let mut threads = get_or_create_thread_items(user.id).await?;
 
     if let Some(thread) = threads.iter_mut().find(|thread| thread.id == thread_id) {
         thread.is_active = true;
     } else {
         return Ok((StatusCode::NOT_FOUND, "Thread not found").into_response());
+    }
+
+    if let Some(thread) = threads.iter_mut().find(|t| t.id == thread_id) {
+        thread.is_active = true;
     }
 
     Ok(html! {

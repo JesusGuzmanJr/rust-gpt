@@ -1,7 +1,7 @@
 use {
     crate::{
         PROJECT_NAME, PROJECT_URL,
-        error::{AppError, AppResult},
+        error::AppError,
         hash::GlassVault,
         user::{Name, User, UserId},
     },
