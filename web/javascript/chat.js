@@ -257,159 +257,84 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Swipe-to-delete functionality for chat items
+// Delete confirmation functionality
 document.addEventListener('DOMContentLoaded', () => {
-    let swipedThreadId = null;
-    let swipeOffset = 0;
-    let isDragging = false;
-    let startX = 0;
-    let currentDragThreadId = null;
-    let didSwipe = false; // Track if user actually swiped
-    const SWIPE_THRESHOLD = 70;
-    const SNAP_THRESHOLD = 35;
-    const MOVEMENT_THRESHOLD = 5; // Minimum movement to consider it a swipe
+    let threadToDelete = null;
 
-    const initSwipeHandlers = () => {
-        const chatItems = document.querySelectorAll('.chat-item');
+    const initDeleteHandlers = () => {
+        const modal = document.getElementById('delete-confirmation-modal');
+        const modalBackdrop = document.getElementById('modal-backdrop');
+        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
 
-        chatItems.forEach(chatItem => {
-            const wrapper = chatItem.closest('.chat-item-swipe-wrapper');
-            if (!wrapper) return;
-
-            const threadId = wrapper.dataset.threadId;
-
-            // Touch events
-            chatItem.addEventListener('touchstart', (e) => handleStart(e.touches[0].clientX, threadId, wrapper, chatItem));
-            chatItem.addEventListener('touchmove', (e) => {
-                if (isDragging && currentDragThreadId === threadId) {
-                    handleMove(e.touches[0].clientX, wrapper, chatItem);
-                }
-            });
-            chatItem.addEventListener('touchend', () => handleEnd(wrapper, chatItem));
-
-            // Mouse events
-            chatItem.addEventListener('mousedown', (e) => {
+        // Handle delete button clicks
+        document.addEventListener('click', (e) => {
+            const deleteBtn = e.target.closest('.chat-item__delete-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
                 e.preventDefault();
-                handleStart(e.clientX, threadId, wrapper, chatItem);
-            });
 
-            document.addEventListener('mousemove', (e) => {
-                if (isDragging && currentDragThreadId === threadId) {
-                    handleMove(e.clientX, wrapper, chatItem);
+                // Store thread ID for deletion
+                threadToDelete = deleteBtn.dataset.threadId;
+
+                // Show confirmation modal
+                if (modal && modalBackdrop) {
+                    modal.classList.add('is-visible');
+                    modalBackdrop.classList.add('is-visible');
+                }
+            }
+        });
+
+        // Confirm delete
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', () => {
+                if (threadToDelete) {
+                    // Trigger the HTMX delete request
+                    const deleteBtn = document.querySelector(`.chat-item__delete-btn[data-thread-id="${threadToDelete}"]`);
+                    if (deleteBtn) {
+                        const hiddenForm = deleteBtn.querySelector('button');
+                        if (hiddenForm) {
+                            hiddenForm.click();
+                        }
+                    }
+                    closeModal();
                 }
             });
+        }
 
-            document.addEventListener('mouseup', () => {
-                if (currentDragThreadId === threadId) {
-                    handleEnd(wrapper, chatItem);
-                }
-            });
+        // Cancel delete
+        if (cancelDeleteBtn) {
+            cancelDeleteBtn.addEventListener('click', closeModal);
+        }
+
+        // Close modal on backdrop click
+        if (modalBackdrop) {
+            modalBackdrop.addEventListener('click', closeModal);
+        }
+
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && modal && modal.classList.contains('is-visible')) {
+                closeModal();
+            }
         });
     };
 
-    const handleStart = (clientX, threadId, wrapper, chatItem) => {
-        startX = clientX;
-        currentDragThreadId = threadId;
-        isDragging = true;
-        didSwipe = false; // Reset swipe flag
+    const closeModal = () => {
+        const modal = document.getElementById('delete-confirmation-modal');
+        const modalBackdrop = document.getElementById('modal-backdrop');
 
-        // If this item is already swiped, adjust the start position
-        if (swipedThreadId === threadId) {
-            startX = clientX + SWIPE_THRESHOLD;
-        }
+        if (modal) modal.classList.remove('is-visible');
+        if (modalBackdrop) modalBackdrop.classList.remove('is-visible');
 
-        // Remove transition for smooth dragging
-        chatItem.style.transition = 'none';
+        threadToDelete = null;
     };
-
-    const handleMove = (clientX, wrapper, chatItem) => {
-        if (!isDragging) return;
-
-        const diff = startX - clientX;
-
-        // Mark as swipe if movement exceeds threshold
-        if (Math.abs(diff) > MOVEMENT_THRESHOLD) {
-            didSwipe = true;
-        }
-
-        // Constrain the swipe between 0 and SWIPE_THRESHOLD
-        if (diff >= 0 && diff <= SWIPE_THRESHOLD) {
-            swipeOffset = diff;
-            chatItem.style.transform = `translateX(-${diff}px)`;
-            swipedThreadId = currentDragThreadId;
-        }
-    };
-
-    const handleEnd = (wrapper, chatItem) => {
-        if (!isDragging) return;
-
-        isDragging = false;
-
-        // Re-enable transition for smooth snapping
-        chatItem.style.transition = 'transform 0.3s ease';
-
-        // Snap to open or closed position
-        if (swipeOffset > SNAP_THRESHOLD) {
-            // Snap to open
-            swipeOffset = SWIPE_THRESHOLD;
-            chatItem.style.transform = `translateX(-${SWIPE_THRESHOLD}px)`;
-        } else {
-            // Snap to closed
-            swipeOffset = 0;
-            chatItem.style.transform = 'translateX(0)';
-            swipedThreadId = null;
-        }
-
-        // Mark the element if a swipe occurred, clear after a short delay
-        if (didSwipe) {
-            const content = chatItem.querySelector('.chat-item__content');
-            if (content) {
-                content.dataset.justSwiped = 'true';
-                setTimeout(() => {
-                    delete content.dataset.justSwiped;
-                }, 100);
-            }
-        }
-
-        currentDragThreadId = null;
-    };
-
-    // Handle delete button click
-    document.addEventListener('click', (e) => {
-        const clickedDelete = e.target.closest('.chat-item-delete-btn__button');
-
-        if (clickedDelete) {
-            // Let HTMX handle the deletion animation - don't reset position
-            swipedThreadId = null;
-            swipeOffset = 0;
-            return;
-        }
-
-        // Close swiped item when clicking outside
-        if (!swipedThreadId) return;
-
-        const clickedItem = e.target.closest('.chat-item-swipe-wrapper');
-
-        // Close if clicking outside the swiped item
-        if (!clickedItem || clickedItem.dataset.threadId !== swipedThreadId) {
-            const swipedWrapper = document.querySelector(`.chat-item-swipe-wrapper[data-thread-id="${swipedThreadId}"]`);
-            if (swipedWrapper) {
-                const swipedChatItem = swipedWrapper.querySelector('.chat-item');
-                if (swipedChatItem) {
-                    swipedChatItem.style.transition = 'transform 0.3s ease';
-                    swipedChatItem.style.transform = 'translateX(0)';
-                }
-            }
-            swipedThreadId = null;
-            swipeOffset = 0;
-        }
-    });
 
     // Initialize on page load
-    initSwipeHandlers();
+    initDeleteHandlers();
 
     // Re-initialize after HTMX swaps (for dynamically added items)
     document.body.addEventListener('htmx:afterSwap', () => {
-        initSwipeHandlers();
+        initDeleteHandlers();
     });
 });

@@ -705,89 +705,140 @@
   color: var(--text-secondary);
 }
 
-// Swipe-to-delete functionality
-.chat-item-swipe-wrapper {
-  position: relative;
-  overflow: clip;
-  margin-bottom: 0.25rem;
-  transition: max-height 0.25s ease 0.25s, margin-bottom 0.25s ease 0.25s, opacity 0.15s ease 0.35s;
-  max-height: 200px;
-}
-
-// Deletion animation
-.chat-item-swipe-wrapper.htmx-swapping {
-  max-height: 0;
-  margin-bottom: 0;
-  opacity: 0;
-
-  .chat-item {
-    transform: translateX(-120%) !important;
-    transition: transform 0.3s ease-in-out !important;
-  }
-
-  .chat-item-delete-btn {
-    opacity: 0;
-    transition: opacity 0.2s ease-out;
-  }
-}
-
-.chat-item-delete-btn {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 60px;
-  border-radius: 0.5rem;
-  z-index: 1;
-}
-
-.chat-item-delete-btn__button {
+// Chat item delete button (always visible inline)
+.chat-item__delete-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
-  background: var(--delete-btn-bg);
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  background: transparent;
   border: none;
-  border-radius: 0.5rem;
-  color: white;
+  border-radius: 50%;
+  color: var(--text-tertiary);
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  flex-shrink: 0;
+  margin-left: auto;
 
-  @media (prefers-color-scheme: light) {
-    &:hover {
-      background-color: #b91c1c;
-    }
-
-    &:active {
-      background-color: #991b1b;
-    }
+  &:active {
+    transform: scale(0.9);
   }
 
-  @media (prefers-color-scheme: dark) {
-    &:hover {
-      background-color: #991b1b;
-    }
+  // Hidden HTMX trigger button
+  button {
+    display: none;
+  }
 
-    &:active {
-      background-color: #7f1d1d;
-    }
+  // Use smaller icon
+  .icon {
+    width: 14px;
+    height: 14px;
   }
 }
 
-.chat-item-swipe-wrapper .chat-item {
-  position: relative;
-  z-index: 2;
-  background: var(--bg-sidebar);
-  transition: transform 0.3s ease;
-  user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
-  cursor: grab;
+// Deletion animation
+.chat-item.htmx-swapping {
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  max-height: 0;
   margin-bottom: 0;
+  overflow: hidden;
+}
 
-  &:active {
-    cursor: grabbing;
+// Delete confirmation modal
+.modal-backdrop {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+
+  &.is-visible {
+    display: block;
+    opacity: 1;
+  }
+}
+
+.delete-confirmation-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-lg);
+  z-index: 101;
+  width: 90%;
+  max-width: 400px;
+  padding: 1.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+
+  &.is-visible {
+    display: block;
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.modal__title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 0.75rem 0;
+}
+
+.modal__message {
+  font-size: 0.9375rem;
+  color: var(--text-secondary);
+  margin: 0 0 1.5rem 0;
+  line-height: 1.5;
+}
+
+.modal__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.modal__button {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  border-radius: 0.5rem;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &--cancel {
+    background: var(--overlay-light);
+    color: var(--text-primary);
+    border: 1px solid var(--border-primary);
+
+    &:hover {
+      background: var(--overlay-medium);
+    }
+  }
+
+  &--confirm {
+    background: #dc2626; // red-600
+    color: white;
+
+    &:hover {
+      background: #b91c1c; // red-700
+    }
+
+    &:active {
+      background: #991b1b; // red-800
+    }
   }
 }

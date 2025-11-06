@@ -117,6 +117,21 @@ pub(crate) async fn page(
                     }
                 }
 
+                // Delete confirmation modal
+                div.modal-backdrop id="modal-backdrop" {}
+                div.delete-confirmation-modal id="delete-confirmation-modal" {
+                    h2.modal__title { "Delete Chat?" }
+                    p.modal__message { "This will permanently delete this chat and all its messages." }
+                    div.modal__actions {
+                        button.modal__button.modal__button--cancel id="cancel-delete-btn" {
+                            "Cancel"
+                        }
+                        button.modal__button.modal__button--confirm id="confirm-delete-btn" {
+                            "Delete"
+                        }
+                    }
+                }
+
                 // Main content
                 div.chat-main {
                     // Header
@@ -586,33 +601,32 @@ fn render_thread_item(
     user_id: UserId,
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
+    let thread_id_vault = GlassVault::new(thread.id)?;
     Ok(html! {
-        div.chat-item-swipe-wrapper data-thread-id=(GlassVault::new(thread.id)?) {
-            // Delete button (hidden behind)
-            div.chat-item-delete-btn {
-                button.chat-item-delete-btn__button
-                    hx-post="/api/chat/delete"
-                    hx-vals=(format!(r#"{{"thread_id": "{}"}}"#, GlassVault::new(thread.id)?))
-                    hx-target="closest .chat-item-swipe-wrapper"
-                    hx-swap="outerHTML swap:300ms" {
-                    (svg::x(20, 20))
-                }
-            }
-            // Chat item (swipeable)
-            div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
-                div.chat-item__content
-                    hx-get="/api/chat/select"
-                    hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, GlassVault::new(thread.id)?, user_id))
-                    hx-target="div.chat-sidebar__list"
-                    hx-swap="outerHTML"
-                    hx-trigger="click[!this.dataset.justSwiped]" {
-                    div.chat-item__header {
-                        (svg::chat_bubble(16, 16))
-                        span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
-                        span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
+        div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
+            div.chat-item__content
+                hx-get="/api/chat/select"
+                hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, thread_id_vault, user_id))
+                hx-target="div.chat-sidebar__list"
+                hx-swap="outerHTML" {
+                div.chat-item__header {
+                    (svg::chat_bubble(16, 16))
+                    span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
+                    span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
+                    // Delete button (always visible inline)
+                    div.chat-item__delete-btn data-thread-id=(thread_id_vault.to_string()) {
+                        // Hidden HTMX button that will be triggered by JavaScript
+                        button
+                            hx-post="/api/chat/delete"
+                            hx-vals=(format!(r#"{{"thread_id": "{}"}}"#, thread_id_vault))
+                            hx-target="closest .chat-item"
+                            hx-swap="outerHTML swap:300ms" {
+                        }
+                        // Visible icon (smaller size for inline display)
+                        (svg::x(14, 14))
                     }
-                    p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
                 }
+                p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
             }
         }
     })
