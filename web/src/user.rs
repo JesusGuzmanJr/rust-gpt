@@ -69,10 +69,10 @@ pub(crate) type User = v1::User;
 pub(crate) type UserKey = v1::UserKey;
 
 pub(crate) mod v1 {
-    use super::*;
+    use {super::*, std::fmt};
 
     /// A user of the application.
-    #[derive(Debug, Serialize, Deserialize)]
+    #[derive(Serialize, Deserialize)]
     #[native_model(id = 1, version = 1, with = native_model::bincode_2::Bincode)]
     #[native_db]
     pub(crate) struct User {
@@ -85,6 +85,20 @@ pub(crate) mod v1 {
         pub(super) salt: [u8; SALT_LEN],
         pub(crate) created_at: DateTime<Utc>,
         pub(crate) updated_at: DateTime<Utc>,
+    }
+
+    impl fmt::Debug for User {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.debug_struct("User")
+                .field("id", &self.id)
+                .field("name", &self.name)
+                .field("email", &self.email)
+                .field("hash", &"[REDACTED]")
+                .field("salt", &"[REDACTED]")
+                .field("created_at", &self.created_at)
+                .field("updated_at", &self.updated_at)
+                .finish()
+        }
     }
 }
 

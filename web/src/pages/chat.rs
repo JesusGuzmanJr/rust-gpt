@@ -328,7 +328,7 @@ struct SendForm {
     thread_id: GlassVault<ThreadId>,
 }
 
-#[instrument(skip(internationalization))]
+#[instrument]
 async fn send_message(
     internationalization: Internationalization,
     Garde(Form(SendForm { content, thread_id })): Garde<Form<SendForm>>,
@@ -393,7 +393,7 @@ async fn update_feedback(
     Ok(render_feedback_form(message_id, Some(feedback)).into_response())
 }
 
-#[instrument(skip(internationalization))]
+#[instrument]
 async fn new_thread(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
@@ -443,7 +443,7 @@ struct SelectForm {
     thread_id: GlassVault<ThreadId>,
 }
 
-#[instrument(skip(internationalization))]
+#[instrument]
 async fn select_thread(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
