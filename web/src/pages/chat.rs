@@ -615,14 +615,7 @@ fn render_thread_item(
                     span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
                     // Delete button (always visible inline)
                     div.chat-item__delete-btn data-thread-id=(thread_id_vault.to_string()) {
-                        // Hidden HTMX button that will be triggered by JavaScript
-                        button
-                            hx-post="/api/chat/delete"
-                            hx-vals=(format!(r#"{{"thread_id": "{}"}}"#, thread_id_vault))
-                            hx-target="closest .chat-item"
-                            hx-swap="outerHTML swap:300ms" {
-                        }
-                        // Visible icon (smaller size for inline display)
+                        // htmx.ajax call happens in chat.js
                         (svg::x(14, 14))
                     }
                 }
