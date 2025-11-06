@@ -264,8 +264,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let isDragging = false;
     let startX = 0;
     let currentDragThreadId = null;
+    let didSwipe = false; // Track if user actually swiped
     const SWIPE_THRESHOLD = 70;
     const SNAP_THRESHOLD = 35;
+    const MOVEMENT_THRESHOLD = 5; // Minimum movement to consider it a swipe
 
     const initSwipeHandlers = () => {
         const chatItems = document.querySelectorAll('.chat-item');
@@ -309,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startX = clientX;
         currentDragThreadId = threadId;
         isDragging = true;
+        didSwipe = false; // Reset swipe flag
 
         // If this item is already swiped, adjust the start position
         if (swipedThreadId === threadId) {
@@ -323,6 +326,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isDragging) return;
 
         const diff = startX - clientX;
+
+        // Mark as swipe if movement exceeds threshold
+        if (Math.abs(diff) > MOVEMENT_THRESHOLD) {
+            didSwipe = true;
+        }
 
         // Constrain the swipe between 0 and SWIPE_THRESHOLD
         if (diff >= 0 && diff <= SWIPE_THRESHOLD) {
@@ -350,6 +358,17 @@ document.addEventListener('DOMContentLoaded', () => {
             swipeOffset = 0;
             chatItem.style.transform = 'translateX(0)';
             swipedThreadId = null;
+        }
+
+        // Mark the element if a swipe occurred, clear after a short delay
+        if (didSwipe) {
+            const content = chatItem.querySelector('.chat-item__content');
+            if (content) {
+                content.dataset.justSwiped = 'true';
+                setTimeout(() => {
+                    delete content.dataset.justSwiped;
+                }, 100);
+            }
         }
 
         currentDragThreadId = null;

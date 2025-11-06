@@ -421,7 +421,7 @@ async fn sign_up(
     .await?;
 
     info!(%user_id, "sign up completed");
-    AppResult::Ok(verify_card())
+    Ok(verify_card())
 }
 
 #[derive(Debug, Deserialize)]
@@ -448,7 +448,7 @@ async fn verify(
         return Ok(verification_page(VerificationStatus::Expired));
     }
     match user.save().await {
-        Ok(()) => AppResult::Ok(verification_page(VerificationStatus::Success)),
+        Ok(()) => Ok(verification_page(VerificationStatus::Success)),
         Err(error) => {
             use native_db::db_type::Error as NativeDbError;
             if let Some(NativeDbError::DuplicateKey {

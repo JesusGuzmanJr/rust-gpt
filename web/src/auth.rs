@@ -6,6 +6,7 @@ use {
         user::{Name, User, UserId},
     },
     anyhow::Result,
+    axum::{extract::FromRequestParts, http::request::Parts},
     axum_extra::extract::{CookieJar, cookie::Cookie},
     chrono::{DateTime, Duration, Utc},
     maud::{PreEscaped, html},
@@ -70,12 +71,24 @@ fn extract_session(cookie_jar: &CookieJar) -> Result<Option<Session>> {
     Ok(Some(session))
 }
 
-pub(crate) async fn require_auth_user(cookie_jar: &CookieJar) -> AppResult<User> {
-    let session = extract_session(cookie_jar)?.ok_or(AppError::Unauthorized)?;
-    let user = User::by_id(session.user_id)
-        .await?
-        .ok_or(AppError::Unauthorized)?;
-    Ok(user)
+/// Extractor to get the authenticated user from the request parts.
+pub(crate) struct AuthUser(pub(crate) User);
+
+impl<S> FromRequestParts<S> for AuthUser
+where
+    S: Send + Sync,
+{
+    type Rejection = AppError;
+
+    async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        let cookie_jar = CookieJar::from_headers(&parts.headers);
+        let session = extract_session(&cookie_jar)?.ok_or(AppError::Unauthorized)?;
+        let user = User::by_id(session.user_id)
+            .await?
+            .ok_or(AppError::Unauthorized)?;
+
+        Ok(AuthUser(user))
+    }
 }
 
 pub(crate) fn verification_email(name: &Name, link: &str) -> String {

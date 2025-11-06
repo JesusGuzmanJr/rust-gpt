@@ -90,8 +90,10 @@ impl Message {
         }
     }
 
+    #[instrument]
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
+            debug!("saving message");
             let rw = db().rw_transaction()?;
 
             // assert that the thread exists
@@ -108,7 +110,9 @@ impl Message {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn get_all_messages(thread_id: ThreadId) -> Result<Vec<Self>> {
+        debug!("getting all messages");
         spawn_blocking(move || {
             Ok(db()
                 .r_transaction()?
@@ -126,8 +130,10 @@ impl Message {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn update_feedback(message_id: MessageId, feedback: Feedback) -> Result<()> {
         spawn_blocking(move || {
+            debug!("updating message feedback");
             let rw = db().rw_transaction()?;
 
             let mut message: Message =

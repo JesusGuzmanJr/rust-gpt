@@ -16,11 +16,16 @@
     "words": [
         "afterbegin",
         "beforeend",
+        "bytesize",
         "chrono",
         "htmx",
         "keyup",
         "lettre",
-        "swipeable"
+        "nosniff",
+        "rustls",
+        "Rustls",
+        "swipeable",
+        "thiserror"
     ],
     "ignoreWords": [],
     "import": []

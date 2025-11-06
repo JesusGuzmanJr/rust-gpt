@@ -70,9 +70,10 @@ impl Thread {
         }
     }
 
+    #[instrument]
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
-            debug!(?self, "saving thread");
+            debug!("saving thread");
             let rw = db().rw_transaction()?;
 
             // assert that the user exists
@@ -89,9 +90,19 @@ impl Thread {
         .await?
     }
 
+    #[instrument]
+    pub(crate) async fn get_by_id(thread_id: ThreadId) -> Result<Option<Self>> {
+        spawn_blocking(move || {
+            debug!("getting thread by id");
+            Ok(db().r_transaction()?.get().primary::<Thread>(thread_id)?)
+        })
+        .await?
+    }
+
+    #[instrument]
     pub(crate) async fn get_all(user_id: UserId) -> Result<Vec<Self>> {
         spawn_blocking(move || {
-            debug!(%user_id, "getting all threads");
+            debug!("getting all threads");
             let threads = db()
                 .r_transaction()?
                 .scan()
@@ -110,9 +121,10 @@ impl Thread {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn update_title(thread_id: ThreadId, new_title: ThreadTitle) -> Result<()> {
         spawn_blocking(move || {
-            debug!(%thread_id, %new_title, "updating thread title");
+            debug!("updating thread title");
             let rw = db().rw_transaction()?;
 
             let mut thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
@@ -129,9 +141,10 @@ impl Thread {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn delete(thread_id: ThreadId) -> Result<()> {
         spawn_blocking(move || {
-            debug!(%thread_id, "deleting thread");
+            debug!("deleting thread");
             let rw = db().rw_transaction()?;
 
             let messages: Vec<Message> = rw

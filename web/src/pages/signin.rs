@@ -17,6 +17,7 @@ use {
 
 pub(crate) const PATH: &str = "/signin";
 
+#[instrument]
 pub(crate) async fn page() -> impl IntoResponse {
     super::page(
         "Sign In",
@@ -140,7 +141,7 @@ async fn sign_in(
     let cookie_jar = auth::create_auth_cookie(cookie_jar, user_id, remember)?;
 
     info!(%user_id, "sign in successful");
-    AppResult::Ok((cookie_jar, [("hx-redirect", crate::pages::chat::PATH)]).into_response())
+    Ok((cookie_jar, [("hx-redirect", crate::pages::chat::PATH)]).into_response())
 }
 
 pub(crate) fn api() -> Router {

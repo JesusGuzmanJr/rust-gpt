@@ -9,6 +9,7 @@ use {
     native_model::{Model, native_model},
     serde::{Deserialize, Serialize},
     tokio::task::spawn_blocking,
+    tracing::{instrument, *},
 };
 
 const SALT_LEN: usize = argon2::RECOMMENDED_SALT_LEN;
@@ -117,6 +118,7 @@ impl User {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn save(self) -> Result<()> {
         spawn_blocking(move || {
             let rw = db()
@@ -132,9 +134,11 @@ impl User {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn by_email(email: &EmailAddress) -> Result<Option<Self>> {
         let email = email.to_key();
         spawn_blocking(move || {
+            debug!("getting user by email");
             db().r_transaction()?
                 .get()
                 .secondary(UserKey::email, email)
@@ -143,8 +147,13 @@ impl User {
         .await?
     }
 
+    #[instrument]
     pub(crate) async fn by_id(id: UserId) -> Result<Option<Self>> {
-        spawn_blocking(move || db().r_transaction()?.get().primary(id).map_err(Into::into)).await?
+        spawn_blocking(move || {
+            debug!("getting user by id");
+            db().r_transaction()?.get().primary(id).map_err(Into::into)
+        })
+        .await?
     }
 
     pub(crate) async fn verify_password(self, password: Password) -> Result<bool> {

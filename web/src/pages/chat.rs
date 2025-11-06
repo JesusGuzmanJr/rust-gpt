@@ -1,7 +1,7 @@
 use {
     crate::{
-        auth::require_auth_user,
-        error::{AppResult, ResponseResult},
+        auth::AuthUser,
+        error::AppResult,
         hash::GlassVault,
         internationalization::Internationalization,
         message::{
@@ -9,6 +9,7 @@ use {
         },
         svg,
         thread::{Thread, ThreadId, ThreadTitle},
+        user::UserId,
     },
     axum::{
         Form, Router,
@@ -32,67 +33,12 @@ use {
 
 pub(crate) const PATH: &str = "/chat";
 
-#[derive(Debug)]
-struct ThreadItem {
-    id: ThreadId,
-    title: ThreadTitle,
-    created_at: DateTime<Utc>,
-    preview: String,
-    is_active: bool,
-}
-
-impl ThreadItem {
-    fn from_thread(thread: Thread, preview: &str) -> ThreadItem {
-        let preview = preview.chars().take(100).collect::<String>();
-        ThreadItem {
-            id: thread.id,
-            title: thread.title,
-            created_at: thread.created_at,
-            preview: preview.chars().take(32).collect::<String>(),
-            is_active: false,
-        }
-    }
-}
-
+#[instrument(skip_all)]
 pub(crate) async fn page(
     internationalization: Internationalization,
-    cookie_jar: CookieJar,
-) -> ResponseResult {
-    tracing::info!("chat page requested");
-    let user = require_auth_user(&cookie_jar).await?;
-
-    let mut threads = {
-        let mut threads = Thread::get_all(user.id).await?;
-
-        threads.sort_unstable_by_key(|t| Reverse(t.created_at));
-
-        if threads.is_empty() {
-            let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
-            thread.clone().save().await?;
-            threads.push(thread);
-        }
-
-        let mut thread_items = Vec::with_capacity(threads.len());
-        for thread in threads {
-            let mut messages = Message::get_all_messages(thread.id).await?;
-            messages.sort_unstable_by_key(|m| Reverse(m.created_at));
-            let preview = messages
-                .first()
-                .map(|m| match &m.payload {
-                    Payload::UserMessage { content } => content.as_str(),
-                    Payload::SystemMessage { content, .. } => content.as_str(),
-                })
-                .unwrap_or_default();
-
-            thread_items.push(ThreadItem::from_thread(thread, preview));
-        }
-
-        if let Some(thread) = thread_items.first_mut() {
-            thread.is_active = true;
-        }
-
-        thread_items
-    };
+    AuthUser(user): AuthUser,
+) -> AppResult<impl IntoResponse> {
+    let mut threads = get_threads(user.id).await?;
 
     // the messages for the first thread
     let messages = {
@@ -157,11 +103,7 @@ pub(crate) async fn page(
                         }
                     }
 
-                    div.chat-sidebar__list {
-                        @for thread in &threads {
-                            (render_thread_item(thread, &internationalization)?)
-                        }
-                    }
+                    (render_threads(&threads, user.id, &internationalization)?)
 
                     div.chat-sidebar__footer {
                         a.chat-sidebar__link href="/about" {
@@ -309,6 +251,62 @@ pub(crate) async fn page(
     ).into_response())
 }
 
+#[derive(Debug)]
+struct ThreadItem {
+    id: ThreadId,
+    title: ThreadTitle,
+    created_at: DateTime<Utc>,
+    preview: String,
+    is_active: bool,
+}
+
+impl ThreadItem {
+    fn from_thread(thread: Thread, preview: &str) -> ThreadItem {
+        let preview = preview.chars().take(100).collect::<String>();
+        ThreadItem {
+            id: thread.id,
+            title: thread.title,
+            created_at: thread.created_at,
+            preview: preview.chars().take(32).collect::<String>(),
+            is_active: false,
+        }
+    }
+}
+
+#[instrument]
+async fn get_threads(user_id: UserId) -> AppResult<Vec<ThreadItem>> {
+    let mut threads = Thread::get_all(user_id).await?;
+
+    threads.sort_unstable_by_key(|t| Reverse(t.created_at));
+
+    if threads.is_empty() {
+        let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
+        thread.clone().save().await?;
+        threads.push(thread);
+    }
+
+    let mut thread_items = Vec::with_capacity(threads.len());
+    for thread in threads {
+        let mut messages = Message::get_all_messages(thread.id).await?;
+        messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+        let preview = messages
+            .first()
+            .map(|m| match &m.payload {
+                Payload::UserMessage { content } => content.as_str(),
+                Payload::SystemMessage { content, .. } => content.as_str(),
+            })
+            .unwrap_or_default();
+
+        thread_items.push(ThreadItem::from_thread(thread, preview));
+    }
+
+    if let Some(thread) = thread_items.first_mut() {
+        thread.is_active = true;
+    }
+
+    Ok(thread_items)
+}
+
 #[derive(Debug, Deserialize)]
 struct ModelQuery {
     // must match the "name" attribute
@@ -336,18 +334,16 @@ async fn send_message(
     let message = Message::new(thread_id.into_inner(), Payload::UserMessage { content });
     message.clone().save().await?;
 
-    AppResult::Ok(
-        html! {
-            (render_message(&message, &internationalization)?)
-            div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
-                (match &message.payload {
-                    Payload::UserMessage { content } => content.to_string(),
-                    Payload::SystemMessage { content, .. } => content.to_string(),
-                }.trim().chars().take(10).collect::<String>())
-            }
+    Ok(html! {
+        (render_message(&message, &internationalization)?)
+        div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
+            (match &message.payload {
+                Payload::UserMessage { content } => content.to_string(),
+                Payload::SystemMessage { content, .. } => content.to_string(),
+            }.trim().chars().take(10).collect::<String>())
         }
-        .into_response(),
-    )
+    }
+    .into_response())
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -365,7 +361,7 @@ async fn update_title(
     let thread_id = thread_id.into_inner();
     Thread::update_title(thread_id, title.clone()).await?;
     debug!(%thread_id, %title, "thread title updated");
-    AppResult::Ok(title.to_string())
+    Ok(title.to_string())
 }
 
 #[instrument]
@@ -392,15 +388,14 @@ async fn update_feedback(
     let message_id = message_id.into_inner();
     debug!(%message_id, ?feedback, "updating message feedback");
     Message::update_feedback(message_id, feedback).await?;
-    AppResult::Ok(render_feedback_form(message_id, Some(feedback)).into_response())
+    Ok(render_feedback_form(message_id, Some(feedback)).into_response())
 }
 
 #[instrument]
 async fn new_thread(
     internationalization: Internationalization,
-    cookie_jar: CookieJar,
-) -> AppResult<impl IntoResponse> {
-    let user = require_auth_user(&cookie_jar).await?;
+    AuthUser(user): AuthUser,
+) -> AppResult<Markup> {
     let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
     thread.clone().save().await?;
 
@@ -417,17 +412,28 @@ async fn new_thread(
     let mut thread = ThreadItem::from_thread(thread, content.as_str());
     thread.is_active = true;
 
-    AppResult::Ok(
-        html! {
-            (render_thread_item(&thread, &internationalization)?)
-            input id="current-thread-id"
-            type="hidden"
-            name="thread_id"
-            hx-swap-oob="true"
-            value=(GlassVault::new(thread.id)?);
+    Ok(html! {
+        (render_thread_item(&thread, user.id, &internationalization)?)
+        input id="current-thread-id"
+        type="hidden"
+        name="thread_id"
+        hx-swap-oob="true"
+        value=(GlassVault::new(thread.id)?);
+    })
+}
+
+fn render_threads(
+    threads: &[ThreadItem],
+    user_id: UserId,
+    internationalization: &Internationalization,
+) -> AppResult<Markup> {
+    Ok(html! {
+         div.chat-sidebar__list {
+            @for thread in threads {
+                (render_thread_item(thread, user_id, internationalization)?)
+            }
         }
-        .into_response(),
-    )
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -437,19 +443,28 @@ struct SelectForm {
 
 #[instrument]
 async fn select_thread(
-    _internationalization: Internationalization,
+    internationalization: Internationalization,
+    AuthUser(user): AuthUser,
     Form(SelectForm { thread_id }): Form<SelectForm>,
-) -> AppResult<String> {
+) -> AppResult<impl IntoResponse> {
     let thread_id = thread_id.into_inner();
-    let _messages = Message::get_all_messages(thread_id).await?;
+    let mut threads = get_threads(user.id).await?;
 
-    AppResult::Ok("Hello, world!".to_string())
-    // AppResult::Ok(html! {
-    //     (render_thread_item(&thread, &internationalization)?)
-    //     input id="current-thread-id"
-    //     type="hidden" name="thread_id"
-    //      hx-swap-oob="true" value=(GlassVault::new(thread.id)?);
-    // }.into_response())
+    if let Some(thread) = threads.iter_mut().find(|thread| thread.id == thread_id) {
+        thread.is_active = true;
+    } else {
+        return Ok((StatusCode::NOT_FOUND, "Thread not found").into_response());
+    }
+
+    Ok(html! {
+        (render_threads(&threads, user.id, &internationalization)?)
+        input id="current-thread-id"
+           type="hidden"
+            name="thread_id"
+            hx-swap-oob="true"
+            value=(GlassVault::new(thread_id)?);
+    }
+    .into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -462,22 +477,7 @@ async fn delete_thread(Form(DeleteForm { thread_id }): Form<DeleteForm>) -> AppR
     let thread_id = thread_id.into_inner();
     Thread::delete(thread_id).await?;
     debug!(%thread_id, "thread deleted");
-    AppResult::Ok(StatusCode::OK)
-}
-
-pub(crate) fn api() -> Router {
-    Router::new().nest(
-        PATH,
-        Router::new()
-            .route("/models", get(get_models))
-            .route("/send", post(send_message))
-            .route("/title", post(update_title))
-            .route("/sign-out", get(sign_out))
-            .route("/feedback", post(update_feedback))
-            .route("/new", post(new_thread))
-            .route("/select", get(select_thread))
-            .route("/delete", post(delete_thread)),
-    )
+    Ok(StatusCode::OK)
 }
 
 #[derive(Debug, Display, Default, EnumIter, Deserialize)]
@@ -577,6 +577,7 @@ fn render_feedback_form(message_id: MessageId, feedback: Option<Feedback>) -> Ap
 
 fn render_thread_item(
     thread: &ThreadItem,
+    user_id: UserId,
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
     Ok(html! {
@@ -593,7 +594,12 @@ fn render_thread_item(
             }
             // Chat item (swipeable)
             div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
-                div.chat-item__content {
+                div.chat-item__content
+                    hx-get="/api/chat/select"
+                    hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, GlassVault::new(thread.id)?, user_id))
+                    hx-target="div.chat-sidebar__list"
+                    hx-swap="outerHTML"
+                    hx-trigger="click[!this.dataset.justSwiped]" {
                     div.chat-item__header {
                         (svg::chat_bubble(16, 16))
                         span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
@@ -604,4 +610,19 @@ fn render_thread_item(
             }
         }
     })
+}
+
+pub(crate) fn api() -> Router {
+    Router::new().nest(
+        PATH,
+        Router::new()
+            .route("/models", get(get_models))
+            .route("/send", post(send_message))
+            .route("/title", post(update_title))
+            .route("/sign-out", get(sign_out))
+            .route("/feedback", post(update_feedback))
+            .route("/new", post(new_thread))
+            .route("/select", get(select_thread))
+            .route("/delete", post(delete_thread)),
+    )
 }

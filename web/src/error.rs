@@ -9,7 +9,6 @@ use {
 };
 
 pub(crate) type AppResult<T> = Result<T, AppError>;
-pub(crate) type ResponseResult = Result<Response, AppError>;
 
 #[derive(Debug, Error)]
 pub(crate) enum AppError {
