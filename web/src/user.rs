@@ -93,8 +93,6 @@ pub(crate) mod v1 {
                 .field("id", &self.id)
                 .field("name", &self.name)
                 .field("email", &self.email)
-                .field("hash", &"[REDACTED]")
-                .field("salt", &"[REDACTED]")
                 .field("created_at", &self.created_at)
                 .field("updated_at", &self.updated_at)
                 .finish()

@@ -25,7 +25,9 @@
         "rustls",
         "Rustls",
         "swipeable",
-        "thiserror"
+        "thiserror",
+        "zeroize",
+        "Zeroize"
     ],
     "ignoreWords": [],
     "import": []

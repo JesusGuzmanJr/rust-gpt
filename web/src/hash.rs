@@ -37,8 +37,16 @@ pub(crate) fn init(hash_key: HashKey) -> Result<()> {
 /// A Blake3 backed hashed data container.
 ///
 /// Serializes to URL safe base64 encoded string.
-#[derive(Debug)]
 pub(crate) struct GlassVault<T>(Container<T>);
+
+impl<T> fmt::Debug for GlassVault<T>
+where
+    T: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("GlassVault({:?})", self.0.data))
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Container<T> {
