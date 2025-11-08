@@ -50,8 +50,8 @@ pub(crate) async fn page(
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| m.created_at);
 
-            let content = SystemMessageContent::greeting();
             if messages.is_empty() {
+                let content = SystemMessageContent::greeting();
                 let message = Message::new(
                     thread.id,
                     Payload::SystemMessage {
@@ -85,11 +85,7 @@ pub(crate) async fn page(
 
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
-                    input
-                        id="current-thread-id"
-                        type="hidden"
-                        name="thread_id"
-                        value=(if let Some(thread) = threads.first() { GlassVault::new(thread.id)?.to_string() } else { "".to_string() });
+                    (render_current_thread_id_input(threads.first().map(|t| t.id), false)?)
 
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn
@@ -97,7 +93,7 @@ pub(crate) async fn page(
                             hx-target=".chat-sidebar__list"
                             hx-swap="afterbegin"
                             hx-on::before-request="\
-                                document.querySelector('#chat-item-preview')?.removeAttribute('id'); \
+                                document.querySelector('#chat-item-selected')?.removeAttribute('id'); \
                                 document.querySelector('.chat-item.chat-item--active')?.classList.remove('chat-item--active');" {
                             (svg::plus(16, 16))
                             span { (ThreadTitle::new_chat_title()) }
@@ -270,6 +266,20 @@ pub(crate) async fn page(
     ).into_response())
 }
 
+fn render_current_thread_id_input(
+    current_thread_id: Option<ThreadId>,
+    out_of_band: bool,
+) -> AppResult<Markup> {
+    Ok(html! {
+        input
+            id="current-thread-id"
+            type="hidden"
+            name="thread_id"
+            hx-swap-oob=[(if out_of_band { Some("true") } else { None })]
+            value=(if let Some(id) = current_thread_id{ GlassVault::new(id)?.to_string() } else { "".to_string() });
+    })
+}
+
 #[derive(Debug)]
 struct ThreadItem {
     id: ThreadId,
@@ -353,7 +363,7 @@ async fn send_message(
 
     Ok(html! {
         (render_message(&message, &internationalization)?)
-        div.chat-item__preview id="chat-item-selected" hx-swap-oob="true" {
+        div hx-swap-oob="innerHTML:#chat-item-selected" {
             (match &message.payload {
                 Payload::UserMessage { content } => content.to_string(),
                 Payload::SystemMessage { content, .. } => content.to_string(),
@@ -431,11 +441,7 @@ async fn new_thread(
 
     Ok(html! {
         (render_thread_item(&thread, user.id, &internationalization)?)
-        input id="current-thread-id"
-        type="hidden"
-        name="thread_id"
-        hx-swap-oob="true"
-        value=(GlassVault::new(thread.id)?);
+        (render_current_thread_id_input(Some(thread.id), true)?)
     })
 }
 
@@ -482,18 +488,18 @@ async fn select_thread(
 
     Ok(html! {
         (render_threads(&threads, user.id, &internationalization)?)
-        input id="current-thread-id"
-            type="hidden"
-            name="thread_id"
-            hx-swap-oob="true"
-            value=(GlassVault::new(thread_id)?);
-        div.chat-messages__inner
-            hx-swap-oob="innerHTML:.chat-messages__inner" {
+        (render_current_thread_id_input(Some(thread_id), true)?)
+        div hx-swap-oob="innerHTML:.chat-messages__inner" {
             @for message in messages {
                 (render_message(&message, &internationalization)?)
             }
         }
-
+        div hx-swap-oob="innerHTML:#chat-title-display" {
+            (threads
+                .first()
+                .map(|thread| thread.title.as_str())
+                .unwrap_or_default()
+            ) }
     }
     .into_response())
 }
@@ -501,14 +507,85 @@ async fn select_thread(
 #[derive(Debug, Deserialize)]
 struct DeleteForm {
     thread_id: GlassVault<ThreadId>,
+    current_thread_id: GlassVault<ThreadId>,
 }
 
 #[instrument]
-async fn delete_thread(Form(DeleteForm { thread_id }): Form<DeleteForm>) -> AppResult<StatusCode> {
+async fn delete_thread(
+    internationalization: Internationalization,
+    AuthUser(user): AuthUser,
+    Form(DeleteForm {
+        thread_id,
+        current_thread_id,
+    }): Form<DeleteForm>,
+) -> AppResult<impl IntoResponse> {
     let thread_id = thread_id.into_inner();
+    let current_thread_id = current_thread_id.into_inner();
+
     Thread::delete(thread_id).await?;
     debug!(%thread_id, "thread deleted");
-    Ok(StatusCode::OK)
+
+    // If the deleted thread was the currently selected thread, select the next
+    // oldest thread
+    if thread_id == current_thread_id {
+        let mut threads = get_or_create_thread_items(user.id).await?;
+
+        // Mark the first thread (newest) as active
+        if let Some(thread) = threads.first_mut() {
+            thread.is_active = true;
+        }
+
+        // Get messages for the newly selected thread
+        let messages = {
+            if let Some(thread) = threads.first() {
+                let mut messages = Message::get_all_messages(thread.id).await?;
+                messages.sort_unstable_by_key(|m| m.created_at);
+
+                let content = SystemMessageContent::greeting();
+                if messages.is_empty() {
+                    let message = Message::new(
+                        thread.id,
+                        Payload::SystemMessage {
+                            content: content.clone(),
+                            feedback: None,
+                        },
+                    );
+                    message.clone().save().await?;
+                    messages.push(message);
+                }
+                messages
+            } else {
+                Vec::new()
+            }
+        };
+
+        // Return updated UI with new thread list, messages, and current thread ID
+        Ok(html! {
+            (render_threads(&threads, user.id, &internationalization)?)
+            (render_current_thread_id_input(threads.first().map(|t| t.id), true)?)
+            div hx-swap-oob="innerHTML:.chat-messages__inner" {
+                @for message in messages {
+                    (render_message(&message, &internationalization)?)
+                }
+            }
+            div id="chat-title-display"
+                hx-swap-oob="innerHTML:#chat-title-display" {
+                (threads.first().map(|t| t.title.as_str()).unwrap_or_default())
+            }
+        }
+        .into_response())
+    } else {
+        // If the deleted thread was not the current one, just return the updated thread
+        // list
+        let mut threads = get_or_create_thread_items(user.id).await?;
+
+        // Find and mark the current thread as active
+        if let Some(thread) = threads.iter_mut().find(|t| t.id == current_thread_id) {
+            thread.is_active = true;
+        }
+
+        Ok(render_threads(&threads, user.id, &internationalization)?.into_response())
+    }
 }
 
 #[derive(Debug, Display, Default, EnumIter, Deserialize)]

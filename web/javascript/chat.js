@@ -291,14 +291,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (threadToDelete) {
                     // Find the chat item to delete
                     const deleteBtn = document.querySelector(`.chat-item__delete-btn[data-thread-id="${threadToDelete}"]`);
-                    if (deleteBtn) {
+                    const currentThreadIdInput = document.getElementById('current-thread-id');
+                    if (deleteBtn && currentThreadIdInput) {
                         const chatItem = deleteBtn.closest('.chat-item');
                         if (chatItem) {
                             // Use HTMX API to make the delete request
                             htmx.ajax('POST', '/api/chat/delete', {
-                                values: { thread_id: threadToDelete },
-                                target: chatItem,
-                                swap: 'outerHTML swap:300ms'
+                                values: {
+                                    thread_id: threadToDelete,
+                                    current_thread_id: currentThreadIdInput.value
+                                },
+                                target: '.chat-sidebar__list',
+                                swap: 'outerHTML'
                             });
                         }
                     }
