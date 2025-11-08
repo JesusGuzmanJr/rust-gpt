@@ -17,9 +17,9 @@ pub(crate) async fn page() -> impl IntoResponse {
                             "Created by Jesus Guzman, Jr."
                         }
                         p {
-                            a.legal-link href="https://github.com/JesusGuzmanJr" { "GitHub" }
+                            a.legal-link href="https://github.com/JesusGuzmanJr" target="_blank" { "GitHub" }
                             " | "
-                            a.legal-link href="https://www.linkedin.com/in/jesusguzmanjr/" { "LinkedIn" }
+                            a.legal-link href="https://www.linkedin.com/in/jesusguzmanjr/" target="_blank" { "LinkedIn" }
                         }
                     }
 

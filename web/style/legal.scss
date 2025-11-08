@@ -333,6 +333,26 @@
   &:active {
     transform: translateY(1px);
   }
+
+  // External link indicator
+  &[target="_blank"] {
+    padding-right: 1.25rem;
+
+    &::before {
+      content: '↗';
+      position: absolute;
+      right: 0.25rem;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 0.875em;
+      opacity: 0.6;
+      transition: opacity 0.2s ease;
+    }
+
+    &:hover::before {
+      opacity: 1;
+    }
+  }
 }
 
 // Responsive Design
