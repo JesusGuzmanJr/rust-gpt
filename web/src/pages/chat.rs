@@ -110,11 +110,21 @@ pub(crate) async fn page(
                 div.delete-confirmation-modal id="delete-confirmation-modal" {
                     h2.modal__title { "Delete Chat?" }
                     p.modal__message { "This will permanently delete this chat and all its messages." }
+
+                    // value set by onclick handler when the delete button is pressed
+                    // (the one that opens the delete confirmation modal)
+                    input type="hidden" id="thread-to-delete" name="thread_id_to_delete";
+
                     div.modal__actions {
                         button.modal__button.modal__button--cancel id="cancel-delete-btn" {
                             "Cancel"
                         }
-                        button.modal__button.modal__button--confirm id="confirm-delete-btn" {
+                        button.modal__button.modal__button--confirm
+                            id="confirm-delete-btn"
+                            hx-post="/api/chat/delete"
+                            hx-include="#thread-to-delete, #current-thread-id"
+                            hx-target=".chat-sidebar__list"
+                            hx-swap="outerHTML" {
                             "Delete"
                         }
                     }
@@ -266,7 +276,7 @@ fn render_current_thread_id_input(
         input
             id="current-thread-id"
             type="hidden"
-            name="thread_id"
+            name="current_thread_id"
             hx-swap-oob=[(if out_of_band { Some("true") } else { None })]
             value=(if let Some(id) = current_thread_id{ GlassVault::new(id)?.to_string() } else { "".to_string() });
     })
@@ -355,15 +365,21 @@ struct SendForm {
     #[garde(dive)]
     content: UserMessageContent,
     #[garde(skip)]
-    thread_id: GlassVault<ThreadId>,
+    current_thread_id: GlassVault<ThreadId>,
 }
 
 #[instrument]
 async fn send_message(
     internationalization: Internationalization,
-    Garde(Form(SendForm { content, thread_id })): Garde<Form<SendForm>>,
+    Garde(Form(SendForm {
+        content,
+        current_thread_id,
+    })): Garde<Form<SendForm>>,
 ) -> AppResult<impl IntoResponse> {
-    let message = Message::new(thread_id.into_inner(), Payload::UserMessage { content });
+    let message = Message::new(
+        current_thread_id.into_inner(),
+        Payload::UserMessage { content },
+    );
     message.clone().save().await?;
 
     Ok(html! {
@@ -383,16 +399,19 @@ struct TitleForm {
     #[garde(dive)]
     title: ThreadTitle,
     #[garde(skip)]
-    thread_id: GlassVault<ThreadId>,
+    current_thread_id: GlassVault<ThreadId>,
 }
 
 #[instrument]
 async fn update_title(
-    Garde(Form(TitleForm { title, thread_id })): Garde<Form<TitleForm>>,
+    Garde(Form(TitleForm {
+        title,
+        current_thread_id,
+    })): Garde<Form<TitleForm>>,
 ) -> AppResult<String> {
-    let thread_id = thread_id.into_inner();
-    Thread::update_title(thread_id, title.clone()).await?;
-    debug!(%thread_id, %title, "thread title updated");
+    let current_thread_id = current_thread_id.into_inner();
+    Thread::update_title(current_thread_id, title.clone()).await?;
+    debug!(%current_thread_id, %title, "thread title updated");
     Ok(title.to_string())
 }
 
@@ -507,7 +526,7 @@ async fn select_thread(
 
 #[derive(Debug, Deserialize)]
 struct DeleteForm {
-    thread_id: GlassVault<ThreadId>,
+    thread_id_to_delete: GlassVault<ThreadId>,
     current_thread_id: GlassVault<ThreadId>,
 }
 
@@ -516,17 +535,17 @@ async fn delete_thread(
     internationalization: Internationalization,
     AuthUser(user): AuthUser,
     Form(DeleteForm {
-        thread_id,
+        thread_id_to_delete,
         current_thread_id,
     }): Form<DeleteForm>,
 ) -> AppResult<impl IntoResponse> {
-    let thread_id = thread_id.into_inner();
+    let thread_id_to_delete = thread_id_to_delete.into_inner();
     let current_thread_id = current_thread_id.into_inner();
 
-    Thread::delete(thread_id).await?;
-    debug!(%thread_id, "thread deleted");
+    Thread::delete(thread_id_to_delete).await?;
+    debug!(%thread_id_to_delete, "thread deleted");
 
-    if thread_id == current_thread_id {
+    if thread_id_to_delete == current_thread_id {
         let mut threads = get_or_create_thread_items(user.id).await?;
 
         // Mark the first thread (newest) as active
@@ -694,8 +713,13 @@ fn render_thread_item(
                     span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
                     span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
                     // Delete button (always visible inline)
-                    div.chat-item__delete-btn data-thread-id=(thread_id_vault.to_string()) {
-                        // htmx.ajax call happens in chat.js
+                    button.chat-item__delete-btn
+                        type="button"
+                        data-thread-id=(thread_id_vault.to_string())
+                        onclick="\
+                            document.getElementById('thread-to-delete').value = this.dataset.threadId; \
+                            document.getElementById('modal-backdrop').classList.add('is-visible'); \
+                            document.getElementById('delete-confirmation-modal').classList.add('is-visible');" {
                         (svg::x(14, 14))
                     }
                 }

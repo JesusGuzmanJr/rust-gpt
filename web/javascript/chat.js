@@ -257,101 +257,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Delete confirmation functionality
+// Delete confirmation modal - close functionality
 document.addEventListener('DOMContentLoaded', () => {
-    let threadToDelete = null;
-
-    const initDeleteHandlers = () => {
-        const modal = document.getElementById('delete-confirmation-modal');
-        const modalBackdrop = document.getElementById('modal-backdrop');
-        const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
-        const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
-
-        // Handle delete button clicks
-        document.addEventListener('click', (e) => {
-            const deleteBtn = e.target.closest('.chat-item__delete-btn');
-            if (deleteBtn) {
-                e.stopPropagation();
-                e.preventDefault();
-
-                // Store thread ID for deletion
-                threadToDelete = deleteBtn.dataset.threadId;
-
-                // Show confirmation modal
-                if (modal && modalBackdrop) {
-                    modal.classList.add('is-visible');
-                    modalBackdrop.classList.add('is-visible');
-                }
-            }
-        });
-
-        // Confirm delete
-        if (confirmDeleteBtn) {
-            confirmDeleteBtn.addEventListener('click', () => {
-                if (threadToDelete) {
-                    // Find the chat item to delete
-                    const deleteBtn = document.querySelector(`.chat-item__delete-btn[data-thread-id="${threadToDelete}"]`);
-                    const currentThreadIdInput = document.getElementById('current-thread-id');
-                    if (deleteBtn && currentThreadIdInput) {
-                        const chatItem = deleteBtn.closest('.chat-item');
-                        if (chatItem) {
-                            // Use HTMX API to make the delete request
-                            htmx.ajax('POST', '/api/chat/delete', {
-                                values: {
-                                    thread_id: threadToDelete,
-                                    current_thread_id: currentThreadIdInput.value
-                                },
-                                target: '.chat-sidebar__list',
-                                swap: 'outerHTML'
-                            });
-                        }
-                    }
-                    closeModal();
-                }
-            });
-        }
-
-        // Cancel delete
-        if (cancelDeleteBtn) {
-            cancelDeleteBtn.addEventListener('click', closeModal);
-        }
-
-        // Close modal on backdrop click
-        if (modalBackdrop) {
-            modalBackdrop.addEventListener('click', closeModal);
-        }
-
-        // Handle keyboard shortcuts for modal
-        document.addEventListener('keydown', (e) => {
-            if (modal && modal.classList.contains('is-visible')) {
-                if (e.key === 'Escape') {
-                    closeModal();
-                } else if (e.key === 'Enter') {
-                    // Trigger delete on Enter key
-                    e.preventDefault();
-                    if (confirmDeleteBtn) {
-                        confirmDeleteBtn.click();
-                    }
-                }
-            }
-        });
-    };
+    const modal = document.getElementById('delete-confirmation-modal');
+    const modalBackdrop = document.getElementById('modal-backdrop');
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    const cancelDeleteBtn = document.getElementById('cancel-delete-btn');
 
     const closeModal = () => {
-        const modal = document.getElementById('delete-confirmation-modal');
-        const modalBackdrop = document.getElementById('modal-backdrop');
-
         if (modal) modal.classList.remove('is-visible');
         if (modalBackdrop) modalBackdrop.classList.remove('is-visible');
-
-        threadToDelete = null;
     };
 
-    // Initialize on page load
-    initDeleteHandlers();
+    // Cancel delete
+    if (cancelDeleteBtn) {
+        cancelDeleteBtn.addEventListener('click', closeModal);
+    }
 
-    // Re-initialize after HTMX swaps (for dynamically added items)
-    document.body.addEventListener('htmx:afterSwap', () => {
-        initDeleteHandlers();
+    // Close modal on backdrop click
+    if (modalBackdrop) {
+        modalBackdrop.addEventListener('click', closeModal);
+    }
+
+    // Close modal after successful delete
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('htmx:afterRequest', (event) => {
+            if (event.detail.successful) {
+                closeModal();
+            }
+        });
+    }
+
+    // Handle keyboard shortcuts for modal
+    document.addEventListener('keydown', (e) => {
+        if (modal && modal.classList.contains('is-visible')) {
+            if (e.key === 'Escape') {
+                closeModal();
+            } else if (e.key === 'Enter') {
+                // Trigger delete on Enter key
+                e.preventDefault();
+                if (confirmDeleteBtn) {
+                    confirmDeleteBtn.click();
+                }
+            }
+        }
     });
 });

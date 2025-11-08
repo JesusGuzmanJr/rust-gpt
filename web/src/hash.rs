@@ -37,6 +37,9 @@ pub(crate) fn init(hash_key: HashKey) -> Result<()> {
 /// A Blake3 backed hashed data container.
 ///
 /// Serializes to URL safe base64 encoded string.
+///
+/// Its glass because it's not encrypted, but hashed with a secret key to
+/// produce a MAC.
 pub(crate) struct GlassVault<T>(Container<T>);
 
 impl<T> fmt::Debug for GlassVault<T>
