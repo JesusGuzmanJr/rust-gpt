@@ -21,12 +21,26 @@ document.addEventListener('DOMContentLoaded', () => {
         closeBtn.addEventListener('click', closeSidebar);
         backdrop.addEventListener('click', closeSidebar);
 
+        // Close sidebar when selecting a chat item on mobile
+        document.addEventListener('click', (event) => {
+            const chatItem = event.target.closest('.chat-item__content');
+            if (chatItem && sidebar.classList.contains('is-open')) {
+                closeSidebar();
+            }
+        });
+
         // Close sidebar when clicking outside on mobile
         document.addEventListener('click', (event) => {
             const isClickInsideSidebar = sidebar.contains(event.target);
             const isClickOnMenuBtn = menuBtn.contains(event.target);
+            const modal = document.getElementById('delete-confirmation-modal');
+            const modalBackdrop = document.getElementById('modal-backdrop');
+            const isModalOpen = modal && modal.classList.contains('is-visible');
+            const isClickOnModal = modal && modal.contains(event.target);
+            const isClickOnModalBackdrop = modalBackdrop && modalBackdrop.contains(event.target);
 
-            if (!isClickInsideSidebar && !isClickOnMenuBtn && sidebar.classList.contains('is-open')) {
+            // Don't close sidebar if modal is open or click is on modal elements
+            if (!isClickInsideSidebar && !isClickOnMenuBtn && sidebar.classList.contains('is-open') && !isModalOpen && !isClickOnModal && !isClickOnModalBackdrop) {
                 closeSidebar();
             }
         });
