@@ -71,7 +71,16 @@ impl Thread {
     }
 
     #[instrument]
-    pub(crate) async fn save(self) -> Result<()> {
+    pub(crate) async fn by_id(thread_id: ThreadId) -> Result<Option<Self>> {
+        spawn_blocking(move || {
+            debug!("getting thread by id");
+            Ok(db().r_transaction()?.get().primary::<Thread>(thread_id)?)
+        })
+        .await?
+    }
+
+    #[instrument]
+    pub(crate) async fn save(mut self) -> Result<()> {
         spawn_blocking(move || {
             debug!("saving thread");
             let rw = db().rw_transaction()?;
@@ -81,20 +90,12 @@ impl Thread {
                 anyhow::bail!("user not found");
             }
 
-            rw.insert(self)?;
+            self.updated_at = Utc::now();
+            rw.upsert(self)?;
             rw.commit()
                 .context("failed to commit transaction that saves thread")?;
 
             Ok(())
-        })
-        .await?
-    }
-
-    #[instrument]
-    pub(crate) async fn get_by_id(thread_id: ThreadId) -> Result<Option<Self>> {
-        spawn_blocking(move || {
-            debug!("getting thread by id");
-            Ok(db().r_transaction()?.get().primary::<Thread>(thread_id)?)
         })
         .await?
     }
@@ -117,26 +118,6 @@ impl Thread {
                 .collect::<Vec<_>>();
             debug!(%user_id, len = threads.len(), "got all threads");
             Ok(threads)
-        })
-        .await?
-    }
-
-    #[instrument]
-    pub(crate) async fn update_title(thread_id: ThreadId, new_title: ThreadTitle) -> Result<()> {
-        spawn_blocking(move || {
-            debug!("updating thread title");
-            let rw = db().rw_transaction()?;
-
-            let mut thread: Thread = rw.get().primary(thread_id)?.context("thread not found")?;
-
-            thread.title = new_title;
-            thread.updated_at = Utc::now();
-
-            rw.auto_update(thread)?;
-            rw.commit()
-                .context("failed to commit transaction that updates thread name")?;
-
-            Ok(())
         })
         .await?
     }

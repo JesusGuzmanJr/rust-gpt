@@ -317,3 +317,97 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Message editing functionality
+document.addEventListener('DOMContentLoaded', () => {
+    // Use event delegation since messages are added dynamically
+    document.addEventListener('click', (event) => {
+        // Handle edit button clicks
+        const editBtn = event.target.closest('.message__edit-btn');
+        if (editBtn) {
+            const messageWrapper = editBtn.closest('.message__wrapper');
+            if (!messageWrapper) return;
+
+            const message = messageWrapper.closest('.message--user');
+            if (!message) return;
+
+            const messageId = message.id;
+            const displayBubble = message.querySelector(`#${messageId}-display`);
+            const editBubble = message.querySelector(`#${messageId}-edit`);
+            const editInput = message.querySelector(`#${messageId}-input`);
+            const metaDisplay = message.querySelector(`#${messageId}-meta-display`);
+            const metaEdit = message.querySelector(`#${messageId}-meta-edit`);
+
+            if (displayBubble && editBubble && editInput && metaDisplay && metaEdit) {
+                // Enter edit mode
+                displayBubble.style.display = 'none';
+                editBubble.style.display = 'block';
+                metaDisplay.style.display = 'none';
+                metaEdit.style.display = 'flex';
+                editInput.focus();
+
+                // Auto-expand textarea to fit content
+                editInput.style.height = 'auto';
+                editInput.style.height = editInput.scrollHeight + 'px';
+            }
+        }
+
+        // Handle cancel button clicks
+        const cancelBtn = event.target.closest('.message__edit-cancel');
+        if (cancelBtn) {
+            const message = cancelBtn.closest('.message--user');
+            if (!message) return;
+
+            const messageId = message.id;
+            const displayBubble = message.querySelector(`#${messageId}-display`);
+            const editBubble = message.querySelector(`#${messageId}-edit`);
+            const editInput = message.querySelector(`#${messageId}-input`);
+            const metaDisplay = message.querySelector(`#${messageId}-meta-display`);
+            const metaEdit = message.querySelector(`#${messageId}-meta-edit`);
+
+            if (displayBubble && editBubble && editInput && metaDisplay && metaEdit) {
+                // Exit edit mode without saving
+                const originalText = displayBubble.querySelector('p')?.textContent || '';
+                editInput.value = originalText;
+                displayBubble.style.display = 'block';
+                editBubble.style.display = 'none';
+                metaDisplay.style.display = 'flex';
+                metaEdit.style.display = 'none';
+            }
+        }
+    });
+
+    // Handle keyboard shortcuts in edit mode
+    document.addEventListener('keydown', (event) => {
+        const editInput = event.target;
+        if (editInput.classList.contains('message__edit-input')) {
+            if (event.key === 'Escape') {
+                event.preventDefault();
+                const message = editInput.closest('.message--user');
+                if (message) {
+                    const messageId = message.id;
+                    const cancelBtn = message.querySelector(`#${messageId}-meta-edit .message__edit-cancel`);
+                    if (cancelBtn) cancelBtn.click();
+                }
+            } else if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                // Ctrl+Enter or Cmd+Enter to save
+                event.preventDefault();
+                const message = editInput.closest('.message--user');
+                if (message) {
+                    const messageId = message.id;
+                    const confirmBtn = message.querySelector(`#${messageId}-meta-edit .message__edit-confirm`);
+                    if (confirmBtn) confirmBtn.click();
+                }
+            }
+        }
+    });
+
+    // Auto-expand textarea as user types
+    document.addEventListener('input', (event) => {
+        const editInput = event.target;
+        if (editInput.classList.contains('message__edit-input')) {
+            editInput.style.height = 'auto';
+            editInput.style.height = editInput.scrollHeight + 'px';
+        }
+    });
+});

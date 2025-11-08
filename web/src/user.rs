@@ -131,13 +131,14 @@ impl User {
     }
 
     #[instrument]
-    pub(crate) async fn save(self) -> Result<()> {
+    pub(crate) async fn save(mut self) -> Result<()> {
         spawn_blocking(move || {
             let rw = db()
                 .rw_transaction()
                 .context("failed to create rw transaction")?;
 
-            rw.insert(self)?;
+            self.updated_at = Utc::now();
+            rw.upsert(self)?;
             rw.commit()
                 .context("failed to commit transaction that saves user")?;
 

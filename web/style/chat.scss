@@ -572,6 +572,80 @@
   }
 }
 
+// Message edit mode
+.message__bubble--edit {
+  padding: 0.75rem 1rem;
+  min-width: 400px;
+  max-width: 100%;
+
+  @media (max-width: 768px) {
+    min-width: 280px;
+  }
+}
+
+.message__edit-input {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-inverse);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.5rem;
+  transition: border-color 0.2s ease, background 0.2s ease;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.6);
+  }
+
+  &:focus {
+    border-color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
+
+.message__edit-confirm,
+.message__edit-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+  }
+}
+
+.message__edit-confirm {
+  color: #16a34a; // green-600
+
+  &:hover {
+    background: rgba(22, 163, 74, 0.1);
+  }
+}
+
+.message__edit-cancel {
+  color: var(--text-tertiary);
+
+  &:hover {
+    background: var(--overlay-light);
+    color: var(--text-primary);
+  }
+}
+
 // Input Area
 .chat-input {
   border-top: 1px solid var(--border-primary);

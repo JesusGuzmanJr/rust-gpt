@@ -11,6 +11,7 @@ use {
         thread::{Thread, ThreadId, ThreadTitle},
         user::UserId,
     },
+    anyhow::Context,
     axum::{
         Form, Router,
         extract::Query,
@@ -411,7 +412,11 @@ async fn update_title(
     })): Garde<Form<TitleForm>>,
 ) -> AppResult<String> {
     let current_thread_id = current_thread_id.into_inner();
-    Thread::update_title(current_thread_id, title.clone()).await?;
+    let mut thread = Thread::by_id(current_thread_id)
+        .await?
+        .context("thread not found")?;
+    thread.title = title.clone();
+    thread.save().await?;
     debug!(%current_thread_id, %title, "thread title updated");
     Ok(title.to_string())
 }
@@ -441,6 +446,31 @@ async fn update_feedback(
     debug!(%message_id, ?feedback, "updating message feedback");
     Message::update_feedback(message_id, feedback).await?;
     Ok(render_feedback_form(message_id, Some(feedback)).into_response())
+}
+
+#[derive(Debug, Deserialize, Validate)]
+struct UpdateMessageForm {
+    #[garde(dive)]
+    content: UserMessageContent,
+    #[garde(skip)]
+    message_id: GlassVault<MessageId>,
+}
+
+#[instrument]
+async fn update_message(
+    internationalization: Internationalization,
+    Garde(Form(UpdateMessageForm {
+        content,
+        message_id,
+    })): Garde<Form<UpdateMessageForm>>,
+) -> AppResult<impl IntoResponse> {
+    let message_id = message_id.into_inner();
+    debug!(%message_id, "updating message content");
+    let mut message = Message::by_id(message_id).await?;
+    message.payload = Payload::UserMessage { content };
+    let response = render_message(&message, &internationalization)?.into_response();
+    message.save().await?;
+    Ok(response)
 }
 
 #[instrument]
@@ -631,20 +661,60 @@ fn render_message(
 ) -> AppResult<Markup> {
     Ok(match &message.payload {
         Payload::UserMessage { content } => {
+            let message_id_str = format!("message-{}", message.id);
+            let message_display_id = format!("{}-display", message_id_str);
+            let message_edit_id = format!("{}-edit", message_id_str);
+            let message_input_id = format!("{}-input", message_id_str);
+            let message_meta_display_id = format!("{}-meta-display", message_id_str);
+            let message_meta_edit_id = format!("{}-meta-edit", message_id_str);
+
             // Note the user message needs to be escaped; htmx escapes by default.
             html! {
-                div.message.message--user {
+                div.message.message--user id=(message_id_str) {
+                    input type="hidden" name="message_id" value=(GlassVault::new(message.id)?);
                     div.message__wrapper {
-                        div.message__bubble.message__bubble--user {
+                        // Display mode
+                        div.message__bubble.message__bubble--user id=(message_display_id) {
                             p { (content) }
                         }
-                        div.message__meta.message__meta--user {
+
+                        // Edit mode (initially hidden)
+                        div.message__bubble.message__bubble--user.message__bubble--edit id=(message_edit_id) style="display: none;" {
+                            textarea.message__edit-input
+                                id=(message_input_id)
+                                name="content"
+                                rows="1"
+                                maxlength="1024" {
+                                (content)
+                            }
+                        }
+
+                        // Meta - Display mode (with edit button)
+                        div.message__meta.message__meta--user id=(message_meta_display_id) {
                             span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-btn {
                                 (svg::edit(16, 16))
                             }
                         }
+
+                        // Meta - Edit mode (with confirm/cancel buttons, initially hidden)
+                        div.message__meta.message__meta--user id=(message_meta_edit_id) style="display: none;" {
+                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
+                            button.message__edit-confirm
+                                type="button"
+                                hx-post="/api/chat/update"
+                                hx-include=(format!("#{}, #{}", message_input_id, format!("message-{}-hidden-id", message.id)))
+                                hx-target=(format!("#{}", message_id_str))
+                                hx-swap="outerHTML" {
+                                (svg::check(16, 16))
+                            }
+                            button.message__edit-cancel
+                                type="button" {
+                                (svg::x(16, 16))
+                            }
+                        }
                     }
+                    input type="hidden" id=(format!("message-{}-hidden-id", message.id)) name="message_id" value=(GlassVault::new(message.id)?);
                 }
             }
         }
@@ -740,6 +810,7 @@ pub(crate) fn api() -> Router {
             .route("/title", post(update_title))
             .route("/sign-out", get(sign_out))
             .route("/feedback", post(update_feedback))
+            .route("/update", post(update_message))
             .route("/new", post(new_thread))
             .route("/select", get(select_thread))
             .route("/delete", post(delete_thread)),

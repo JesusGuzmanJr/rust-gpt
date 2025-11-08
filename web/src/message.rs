@@ -110,7 +110,7 @@ impl Message {
                 anyhow::bail!("thread not found");
             }
 
-            rw.insert(self)?;
+            rw.upsert(self)?;
             rw.commit()
                 .context("failed to commit transaction that saves message")?;
 
@@ -135,6 +135,18 @@ impl Message {
                     result.ok()
                 })
                 .collect())
+        })
+        .await?
+    }
+
+    #[instrument]
+    pub(crate) async fn by_id(message_id: MessageId) -> Result<Self> {
+        debug!("getting message");
+        spawn_blocking(move || {
+            db().r_transaction()?
+                .get()
+                .primary(message_id)?
+                .context("message not found")
         })
         .await?
     }
