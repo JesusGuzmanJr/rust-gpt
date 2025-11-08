@@ -248,7 +248,8 @@ pub(crate) async fn page(
                                 id="message-input"
                                 placeholder="Type your message..."
                                 rows="1"
-                                name="content" {}
+                                name="content"
+                                autofocus {}
 
                             button.button.button--primary.chat-input__send-btn
                                 id="send-btn"
@@ -519,6 +520,7 @@ async fn select_thread(
             }
         }
         div hx-swap-oob="innerHTML:#chat-title-display" { (title) }
+        script { "document.getElementById('message-input')?.focus();" }
     }
     .into_response())
 }
