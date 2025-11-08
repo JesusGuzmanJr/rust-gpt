@@ -317,10 +317,18 @@ document.addEventListener('DOMContentLoaded', () => {
             modalBackdrop.addEventListener('click', closeModal);
         }
 
-        // Close modal on Escape key
+        // Handle keyboard shortcuts for modal
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && modal && modal.classList.contains('is-visible')) {
-                closeModal();
+            if (modal && modal.classList.contains('is-visible')) {
+                if (e.key === 'Escape') {
+                    closeModal();
+                } else if (e.key === 'Enter') {
+                    // Trigger delete on Enter key
+                    e.preventDefault();
+                    if (confirmDeleteBtn) {
+                        confirmDeleteBtn.click();
+                    }
+                }
             }
         });
     };
