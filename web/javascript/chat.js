@@ -320,6 +320,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Message editing functionality
 document.addEventListener('DOMContentLoaded', () => {
+    let isEditingMessage = false;
+
+    const enableChatInput = () => {
+        const chatInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-btn');
+
+        if (chatInput) chatInput.disabled = false;
+        if (sendButton && chatInput) {
+            // Only enable if there's content
+            sendButton.disabled = chatInput.value.trim().length === 0;
+        }
+        isEditingMessage = false;
+    };
+
+    const disableChatInput = () => {
+        const chatInput = document.getElementById('message-input');
+        const sendButton = document.getElementById('send-btn');
+
+        if (chatInput) chatInput.disabled = true;
+        if (sendButton) sendButton.disabled = true;
+        isEditingMessage = true;
+    };
+
     // Use event delegation since messages are added dynamically
     document.addEventListener('click', (event) => {
         // Handle edit button clicks
@@ -345,6 +368,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 metaDisplay.style.display = 'none';
                 metaEdit.style.display = 'flex';
                 editInput.focus();
+
+                // Disable bottom input field
+                disableChatInput();
 
                 // Auto-expand textarea to fit content
                 editInput.style.height = 'auto';
@@ -373,7 +399,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 editBubble.style.display = 'none';
                 metaDisplay.style.display = 'flex';
                 metaEdit.style.display = 'none';
+
+                // Re-enable bottom input field
+                enableChatInput();
             }
+        }
+
+        // Handle confirm button clicks - set flag before HTMX request
+        const confirmBtn = event.target.closest('.message__edit-confirm');
+        if (confirmBtn) {
+            // The re-enabling will happen in htmx:afterSwap
         }
     });
 
@@ -408,6 +443,18 @@ document.addEventListener('DOMContentLoaded', () => {
         if (editInput.classList.contains('message__edit-input')) {
             editInput.style.height = 'auto';
             editInput.style.height = editInput.scrollHeight + 'px';
+        }
+    });
+
+    // Re-enable input after successful edit (after the DOM swap completes)
+    document.addEventListener('htmx:afterSwap', (event) => {
+        // If we were editing and any swap happened in a message, re-enable
+        // (This fires when confirm button successfully updates the message)
+        if (isEditingMessage) {
+            const swappedElement = event.detail.target;
+            if (swappedElement && swappedElement.classList.contains('message--user')) {
+                enableChatInput();
+            }
         }
     });
 });
