@@ -57,6 +57,15 @@ pub(crate) enum Payload {
     },
 }
 
+impl Payload {
+    pub(crate) fn as_str(&self) -> &str {
+        match self {
+            Payload::UserMessage { content } => content.as_str(),
+            Payload::SystemMessage { content, .. } => content.as_str(),
+        }
+    }
+}
+
 pub(crate) mod v1 {
     use super::*;
 

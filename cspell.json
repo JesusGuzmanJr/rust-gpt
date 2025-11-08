@@ -21,13 +21,16 @@
         "htmx",
         "keyup",
         "lettre",
+        "mailchecker",
         "nosniff",
+        "rsass",
         "rustls",
         "Rustls",
         "swipeable",
         "thiserror",
         "zeroize",
-        "Zeroize"
+        "Zeroize",
+        "zxcvbn"
     ],
     "ignoreWords": [],
     "import": []

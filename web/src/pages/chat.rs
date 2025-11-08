@@ -24,6 +24,7 @@ use {
     garde::Validate,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
+    nonempty::NonEmpty,
     serde::Deserialize,
     std::cmp::Reverse,
     strum::{Display, EnumIter, IntoEnumIterator},
@@ -40,41 +41,32 @@ pub(crate) async fn page(
 ) -> AppResult<impl IntoResponse> {
     let mut threads = get_or_create_thread_items(user.id).await?;
 
-    if let Some(thread) = threads.first_mut() {
-        thread.is_active = true;
-    }
+    threads.first_mut().is_active = true;
 
     // the messages for the first thread
     let messages = {
-        if let Some(thread) = threads.first_mut() {
-            let mut messages = Message::get_all_messages(thread.id).await?;
-            messages.sort_unstable_by_key(|m| m.created_at);
+        let thread = threads.first_mut();
+        let mut messages = Message::get_all_messages(thread.id).await?;
+        messages.sort_unstable_by_key(|m| m.created_at);
 
-            if messages.is_empty() {
-                let content = SystemMessageContent::greeting();
-                let message = Message::new(
-                    thread.id,
-                    Payload::SystemMessage {
-                        content: content.clone(),
-                        feedback: None,
-                    },
-                );
-                message.clone().save().await?;
-                messages.push(message);
-                thread.preview = content.to_string();
-            }
-
-            messages
-        } else {
-            // does not allocate
-            Vec::new()
+        if messages.is_empty() {
+            let content = SystemMessageContent::greeting();
+            let message = Message::new(
+                thread.id,
+                Payload::SystemMessage {
+                    content: content.clone(),
+                    feedback: None,
+                },
+            );
+            message.clone().save().await?;
+            messages.push(message);
+            thread.preview = content.to_string();
         }
+
+        messages
     };
 
-    let current_thread_title = threads
-        .first()
-        .map(|thread| thread.title.as_str())
-        .unwrap_or_default();
+    let current_thread_title = threads.first().title.as_str();
 
     Ok(super::page(
         "Chat",
@@ -85,7 +77,7 @@ pub(crate) async fn page(
 
                 // Sidebar
                 aside.chat-sidebar id="chat-sidebar" {
-                    (render_current_thread_id_input(threads.first().map(|t| t.id), false)?)
+                    (render_current_thread_id_input(Some(threads.first().id), false)?)
 
                     div.chat-sidebar__header {
                         button.button.button--primary.chat-sidebar__new-btn
@@ -103,7 +95,7 @@ pub(crate) async fn page(
                         }
                     }
 
-                    (render_threads(&threads, user.id, &internationalization)?)
+                    (render_threads(threads.iter(), user.id, &internationalization)?)
 
                     div.chat-sidebar__footer {
                         a.chat-sidebar__link href="/about" {
@@ -197,7 +189,7 @@ pub(crate) async fn page(
 
                     // Messages area
                     main.chat-messages {
-                        div.chat-messages__inner {
+                        div.chat-messages__inner id="chat-messages" {
                             @for message in messages {
                                 (render_message(&message, &internationalization)?)
                             }
@@ -252,7 +244,7 @@ pub(crate) async fn page(
                                 id="send-btn"
                                 disabled
                                 hx-post="/api/chat/send"
-                                hx-target=".chat-messages__inner"
+                                hx-target="#chat-messages"
                                 hx-include="#message-input, #current-thread-id"
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
@@ -305,33 +297,46 @@ impl ThreadItem {
 /// Get all threads for a user and return them as a vector of `ThreadItem`s.
 /// None of them are active. If there are no threads, a new thread is created.
 #[instrument]
-async fn get_or_create_thread_items(user_id: UserId) -> AppResult<Vec<ThreadItem>> {
-    let mut threads = Thread::get_all(user_id).await?;
+async fn get_or_create_thread_items(user_id: UserId) -> AppResult<NonEmpty<ThreadItem>> {
+    let mut threads =
+        futures::future::try_join_all(Thread::get_all(user_id).await?.into_iter().map(
+            |thread| async {
+                let mut messages = Message::get_all_messages(thread.id).await?;
+                messages.sort_unstable_by_key(|m| Reverse(m.created_at));
+
+                AppResult::Ok(ThreadItem::from_thread(
+                    thread,
+                    // if there are no messages, then the preview is the empty string
+                    messages
+                        .first()
+                        .map(|m| m.payload.as_str())
+                        .unwrap_or_default(),
+                ))
+            },
+        ))
+        .await?;
 
     threads.sort_unstable_by_key(|t| Reverse(t.created_at));
 
-    if threads.is_empty() {
-        let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
-        thread.clone().save().await?;
-        threads.push(thread);
-    }
+    let threads = match NonEmpty::from_vec(threads) {
+        Some(threads) => threads,
+        None => {
+            let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
+            thread.clone().save().await?;
+            let content = SystemMessageContent::greeting();
+            let message = Message::new(
+                thread.id,
+                Payload::SystemMessage {
+                    content: content.clone(),
+                    feedback: None,
+                },
+            );
+            message.save().await?;
+            NonEmpty::new(ThreadItem::from_thread(thread, content.as_str()))
+        }
+    };
 
-    let mut thread_items = Vec::with_capacity(threads.len());
-    for thread in threads {
-        let mut messages = Message::get_all_messages(thread.id).await?;
-        messages.sort_unstable_by_key(|m| Reverse(m.created_at));
-        let preview = messages
-            .first()
-            .map(|m| match &m.payload {
-                Payload::UserMessage { content } => content.as_str(),
-                Payload::SystemMessage { content, .. } => content.as_str(),
-            })
-            .unwrap_or_default();
-
-        thread_items.push(ThreadItem::from_thread(thread, preview));
-    }
-
-    Ok(thread_items)
+    Ok(threads)
 }
 
 #[derive(Debug, Deserialize)]
@@ -445,8 +450,8 @@ async fn new_thread(
     })
 }
 
-fn render_threads(
-    threads: &[ThreadItem],
+fn render_threads<'a>(
+    threads: impl Iterator<Item = &'a ThreadItem>,
     user_id: UserId,
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
@@ -486,20 +491,16 @@ async fn select_thread(
     let mut messages = Message::get_all_messages(thread_id).await?;
     messages.sort_unstable_by_key(|m| m.created_at);
 
+    let title = threads.first().title.as_str();
     Ok(html! {
-        (render_threads(&threads, user.id, &internationalization)?)
+        (render_threads(threads.iter(), user.id, &internationalization)?)
         (render_current_thread_id_input(Some(thread_id), true)?)
-        div hx-swap-oob="innerHTML:.chat-messages__inner" {
+        div hx-swap-oob="innerHTML:#chat-messages" {
             @for message in messages {
                 (render_message(&message, &internationalization)?)
             }
         }
-        div hx-swap-oob="innerHTML:#chat-title-display" {
-            (threads
-                .first()
-                .map(|thread| thread.title.as_str())
-                .unwrap_or_default()
-            ) }
+        div hx-swap-oob="innerHTML:#chat-title-display" { (title) }
     }
     .into_response())
 }
@@ -525,52 +526,44 @@ async fn delete_thread(
     Thread::delete(thread_id).await?;
     debug!(%thread_id, "thread deleted");
 
-    // If the deleted thread was the currently selected thread, select the next
-    // oldest thread
     if thread_id == current_thread_id {
         let mut threads = get_or_create_thread_items(user.id).await?;
 
         // Mark the first thread (newest) as active
-        if let Some(thread) = threads.first_mut() {
-            thread.is_active = true;
-        }
+        threads.first_mut().is_active = true;
 
         // Get messages for the newly selected thread
         let messages = {
-            if let Some(thread) = threads.first() {
-                let mut messages = Message::get_all_messages(thread.id).await?;
-                messages.sort_unstable_by_key(|m| m.created_at);
+            let thread = threads.first();
+            let mut messages = Message::get_all_messages(thread.id).await?;
+            messages.sort_unstable_by_key(|m| m.created_at);
 
-                let content = SystemMessageContent::greeting();
-                if messages.is_empty() {
-                    let message = Message::new(
-                        thread.id,
-                        Payload::SystemMessage {
-                            content: content.clone(),
-                            feedback: None,
-                        },
-                    );
-                    message.clone().save().await?;
-                    messages.push(message);
-                }
-                messages
-            } else {
-                Vec::new()
+            let content = SystemMessageContent::greeting();
+            if messages.is_empty() {
+                let message = Message::new(
+                    thread.id,
+                    Payload::SystemMessage {
+                        content: content.clone(),
+                        feedback: None,
+                    },
+                );
+                message.clone().save().await?;
+                messages.push(message);
             }
+            messages
         };
 
         // Return updated UI with new thread list, messages, and current thread ID
         Ok(html! {
-            (render_threads(&threads, user.id, &internationalization)?)
-            (render_current_thread_id_input(threads.first().map(|t| t.id), true)?)
-            div hx-swap-oob="innerHTML:.chat-messages__inner" {
+            (render_threads(threads.iter(), user.id, &internationalization)?)
+            (render_current_thread_id_input(Some(threads.first().id), true)?)
+            div hx-swap-oob="innerHTML:#chat-messages" {
                 @for message in messages {
                     (render_message(&message, &internationalization)?)
                 }
             }
-            div id="chat-title-display"
-                hx-swap-oob="innerHTML:#chat-title-display" {
-                (threads.first().map(|t| t.title.as_str()).unwrap_or_default())
+            div hx-swap-oob="innerHTML:#chat-title-display" {
+                (threads.first().title.as_str())
             }
         }
         .into_response())
@@ -584,7 +577,7 @@ async fn delete_thread(
             thread.is_active = true;
         }
 
-        Ok(render_threads(&threads, user.id, &internationalization)?.into_response())
+        Ok(render_threads(threads.iter(), user.id, &internationalization)?.into_response())
     }
 }
 

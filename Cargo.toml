@@ -15,7 +15,6 @@ let_underscore_drop = "warn"
 missing_debug_implementations = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
 rust_2024_compatibility = { level = "warn", priority = -1 }
-single_use_lifetimes = "warn"
 unreachable_pub = "warn"
 unused_extern_crates = "deny"
 unused_import_braces = "warn"
@@ -27,13 +26,13 @@ unused_qualifications = "warn"
 # switch to a released version when https://github.com/vincent-herlemont/native_db/issues/357 is fixed
 native_db = { git = "https://github.com/vincent-herlemont/native_db.git", branch = "main" }
 
-
 anyhow = "1.0.100"
 bytesize = "2.1.0"
 chrono = "0.4.42"
 const_format = "0.2.34"
 derive_more = { version = "2.0.1", features = ["display", "from", "from_str"] }
 futures = "0.3.21"
+nonempty = "0.12.0"
 ron = "0.11.0"
 serde = { version = "1.0.219", features = ["derive"] }
 strum = { version = "0.27.2", features = ["derive"] }
