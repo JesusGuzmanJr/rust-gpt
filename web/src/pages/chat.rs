@@ -353,7 +353,7 @@ async fn send_message(
 
     Ok(html! {
         (render_message(&message, &internationalization)?)
-        div.chat-item__preview id="chat-item-preview" hx-swap-oob="true" {
+        div.chat-item__preview id="chat-item-selected" hx-swap-oob="true" {
             (match &message.payload {
                 Payload::UserMessage { content } => content.to_string(),
                 Payload::SystemMessage { content, .. } => content.to_string(),
@@ -477,13 +477,23 @@ async fn select_thread(
         thread.is_active = true;
     }
 
+    let mut messages = Message::get_all_messages(thread_id).await?;
+    messages.sort_unstable_by_key(|m| m.created_at);
+
     Ok(html! {
         (render_threads(&threads, user.id, &internationalization)?)
         input id="current-thread-id"
-           type="hidden"
+            type="hidden"
             name="thread_id"
             hx-swap-oob="true"
             value=(GlassVault::new(thread_id)?);
+        div.chat-messages__inner
+            hx-swap-oob="innerHTML:.chat-messages__inner" {
+            @for message in messages {
+                (render_message(&message, &internationalization)?)
+            }
+        }
+
     }
     .into_response())
 }
@@ -619,7 +629,7 @@ fn render_thread_item(
                         (svg::x(14, 14))
                     }
                 }
-                p.chat-item__preview id=(if thread.is_active { "chat-item-preview" } else { "" }) { (thread.preview) }
+                p.chat-item__preview id=(if thread.is_active { "chat-item-selected" } else { "" }) { (thread.preview) }
             }
         }
     })
