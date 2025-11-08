@@ -497,20 +497,19 @@ async fn select_thread(
     let thread_id = thread_id.into_inner();
     let mut threads = get_or_create_thread_items(user.id).await?;
 
-    if let Some(thread) = threads.iter_mut().find(|thread| thread.id == thread_id) {
-        thread.is_active = true;
-    } else {
-        return Ok((StatusCode::NOT_FOUND, "Thread not found").into_response());
-    }
-
-    if let Some(thread) = threads.iter_mut().find(|t| t.id == thread_id) {
-        thread.is_active = true;
-    }
+    let title = match threads.iter_mut().find(|thread| thread.id == thread_id) {
+        Some(thread) => {
+            thread.is_active = true;
+            thread.title.clone()
+        }
+        None => {
+            return Ok((StatusCode::NOT_FOUND, "Thread not found").into_response());
+        }
+    };
 
     let mut messages = Message::get_all_messages(thread_id).await?;
     messages.sort_unstable_by_key(|m| m.created_at);
 
-    let title = threads.first().title.as_str();
     Ok(html! {
         (render_threads(threads.iter(), user.id, &internationalization)?)
         (render_current_thread_id_input(Some(thread_id), true)?)
@@ -707,7 +706,8 @@ fn render_thread_item(
                 hx-get="/api/chat/select"
                 hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, thread_id_vault, user_id))
                 hx-target="div.chat-sidebar__list"
-                hx-swap="outerHTML" {
+                hx-swap="outerHTML"
+                hx-on::before-request="document.getElementById('chat-title-edit').style.display = 'none';" {
                 div.chat-item__header {
                     (svg::chat_bubble(16, 16))
                     span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
