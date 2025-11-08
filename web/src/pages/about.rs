@@ -9,15 +9,27 @@ pub(crate) async fn page() -> impl IntoResponse {
             div.legal-container {
                 div.legal-card {
                     div.legal-header {
-                        h1.legal-title { "About " (PROJECT_NAME) }
+                        h1.legal-title { (PROJECT_NAME) }
+                    }
+
+                    div.legal-subtitle {
+                        p {
+                            "Created by Jesus Guzman, Jr."
+                        }
+                        p {
+                            a.legal-link href="https://github.com/JesusGuzmanJr" { "GitHub" }
+                            " | "
+                            a.legal-link href="https://www.linkedin.com/in/jesusguzmanjr/" { "LinkedIn" }
+                        }
                     }
 
                     div.legal-content {
                         section.legal-section {
                             h2 { "Why make this?" }
                             p {
-                                "This project's mission is to push boundaries: How much can a developer "
-                                "design, train, and operate a chat-based GPT model entirely from scratch? "
+                                "This project's mission is to push personal boundaries: How much can I "
+                                "design, train, and operate a chat-capable GPT model from scratch? "
+                                "Just how rudimentary would it even be? "
                                 "The focus is on exploring the limits of what can be accomplished, "
                                 "using Rust as the core tech. "
                                 "(With a sprinkle of CUDA 😃)"
@@ -36,9 +48,11 @@ pub(crate) async fn page() -> impl IntoResponse {
                         section.legal-section {
                             h2 { "Beware what?" }
                             p {
-                                "As an experimental project, features are all alpha, may change "
-                                "without notice, or occasionally not work at all during planned "
-                                "and unplanned downtime. "
+                                "As a pet project, features are all alpha, "
+                                span.strikethrough { "may" }
+                                " "
+                                i { "will" }
+                                " change without notice, or occasionally not work at all. "
                                 "Oh, and there are abuse controls in place too."
                             }
                         }

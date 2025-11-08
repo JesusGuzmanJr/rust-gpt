@@ -17,8 +17,8 @@
     right: 0;
     height: 300px;
     background: linear-gradient(135deg,
-      rgba(99, 102, 241, 0.05) 0%,
-      rgba(139, 92, 246, 0.05) 100%);
+        rgba(99, 102, 241, 0.05) 0%,
+        rgba(139, 92, 246, 0.05) 100%);
     z-index: 0;
     pointer-events: none;
   }
@@ -44,11 +44,9 @@
   padding: 3rem 2.5rem 2.5rem;
   text-align: center;
   border-bottom: 1px solid var(--border-primary);
-  background: linear-gradient(
-    to bottom,
-    var(--bg-primary),
-    var(--bg-secondary)
-  );
+  background: linear-gradient(to bottom,
+      var(--bg-primary),
+      var(--bg-secondary));
   position: relative;
 
   // Decorative gradient bar
@@ -59,21 +57,22 @@
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(
-      90deg,
-      var(--accent-primary) 0%,
-      var(--accent-secondary) 50%,
-      var(--accent-primary) 100%
-    );
+    background: linear-gradient(90deg,
+        var(--accent-primary) 0%,
+        var(--accent-secondary) 50%,
+        var(--accent-primary) 100%);
     background-size: 200% 100%;
     animation: gradient-shift 3s ease infinite;
   }
 }
 
 @keyframes gradient-shift {
-  0%, 100% {
+
+  0%,
+  100% {
     background-position: 0% 50%;
   }
+
   50% {
     background-position: 100% 50%;
   }
@@ -91,6 +90,16 @@
   background-clip: text;
   position: relative;
   display: inline-block;
+}
+
+.legal-subtitle {
+  text-align: center;
+  margin: 1rem 0 2rem;
+  color: var(--text-secondary);
+
+  p {
+    margin: 0.5rem 0;
+  }
 }
 
 .legal-date {
@@ -134,11 +143,9 @@
       left: 0;
       width: 100%;
       height: 3px;
-      background: linear-gradient(
-        90deg,
-        var(--accent-primary) 0%,
-        var(--accent-secondary) 100%
-      );
+      background: linear-gradient(90deg,
+          var(--accent-primary) 0%,
+          var(--accent-secondary) 100%);
       border-radius: 2px;
     }
   }
@@ -156,11 +163,9 @@
       content: '';
       width: 4px;
       height: 1.125rem;
-      background: linear-gradient(
-        to bottom,
-        var(--accent-primary),
-        var(--accent-secondary)
-      );
+      background: linear-gradient(to bottom,
+          var(--accent-primary),
+          var(--accent-secondary));
       border-radius: 2px;
     }
   }
@@ -223,11 +228,9 @@
       top: 0.5rem;
       width: 8px;
       height: 8px;
-      background: linear-gradient(
-        135deg,
-        var(--accent-primary),
-        var(--accent-secondary)
-      );
+      background: linear-gradient(135deg,
+          var(--accent-primary),
+          var(--accent-secondary));
       border-radius: 50%;
       box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
     }
@@ -240,11 +243,9 @@
 
 .legal-important {
   padding: 1.5rem;
-  background: linear-gradient(
-    135deg,
-    rgba(99, 102, 241, 0.08) 0%,
-    rgba(139, 92, 246, 0.08) 100%
-  );
+  background: linear-gradient(135deg,
+      rgba(99, 102, 241, 0.08) 0%,
+      rgba(139, 92, 246, 0.08) 100%);
   border: 1px solid rgba(99, 102, 241, 0.2);
   border-left: 4px solid var(--accent-primary);
   border-radius: 0.75rem;
@@ -279,11 +280,9 @@
   padding: 2rem 2.5rem;
   text-align: center;
   border-top: 1px solid var(--border-primary);
-  background: linear-gradient(
-    to top,
-    var(--bg-primary),
-    var(--bg-secondary)
-  );
+  background: linear-gradient(to top,
+      var(--bg-primary),
+      var(--bg-secondary));
 
   p {
     margin: 0;
@@ -314,11 +313,9 @@
     left: 0.5rem;
     right: 0.5rem;
     height: 2px;
-    background: linear-gradient(
-      90deg,
-      var(--accent-primary),
-      var(--accent-secondary)
-    );
+    background: linear-gradient(90deg,
+        var(--accent-primary),
+        var(--accent-secondary));
     transform: scaleX(0);
     transform-origin: left;
     transition: transform 0.2s ease;
@@ -327,7 +324,6 @@
 
   &:hover {
     color: var(--accent-hover);
-    background: var(--overlay-light);
 
     &::after {
       transform: scaleX(1);
@@ -527,6 +523,7 @@
     opacity: 0;
     transform: translateY(2rem) scale(0.98);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -549,6 +546,7 @@
     opacity: 0;
     transform: translateY(0.5rem);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -558,6 +556,12 @@
 // Smooth scrolling for long documents
 .legal-content {
   scroll-behavior: smooth;
+}
+
+// Strikethrough text
+.strikethrough {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
 
 // Print styles
@@ -596,6 +600,7 @@
 
 // Accessibility - Reduced motion
 @media (prefers-reduced-motion: reduce) {
+
   .legal-card,
   .legal-section {
     animation: none;
