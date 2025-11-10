@@ -100,8 +100,8 @@ fn build_smtp_transport(config: MailerConfig) -> Result<SmtpTransport> {
         .build())
 }
 
-/// Check if an email address is sendable by asking the SMTP server.
-pub(crate) async fn is_sendable(email: &EmailAddress) -> bool {
+/// Check if the MX records for an email address are valid.
+pub(crate) async fn are_mx_records_valid(email: &EmailAddress) -> bool {
     // no need to cache these
     if !mailchecker::is_valid(email.as_str()) {
         tracing::warn!(%email, "email is not valid");
@@ -158,6 +158,10 @@ pub(crate) async fn send_email(
     body: String,
     content_type: ContentType,
 ) -> Result<(), anyhow::Error> {
+    if !are_mx_records_valid(email).await {
+        bail!("MX records are not valid");
+    }
+
     let response = smtp_transport()
         .send(
             Message::builder()

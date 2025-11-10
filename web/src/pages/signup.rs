@@ -322,7 +322,16 @@ struct ValidateEmailQuery {
 #[instrument]
 async fn validate_email(Query(ValidateEmailQuery { email }): Query<ValidateEmailQuery>) -> Markup {
     match email.validate() {
-        Ok(()) if mailer::is_sendable(&email).await => html! {},
+        Err(_validation_report) => html! {
+            // email is invalid likely because the user is still typing the email
+        },
+        Ok(()) if !mailer::are_mx_records_valid(&email).await => {
+            // at this point, the email is fully typed out but is not sendable
+            warn!(%email, "email is not sendable");
+            html! {
+                p.form-hint { "Try a different email address." }
+            }
+        }
         Ok(()) => {
             // check if email is already in use
             match User::by_email(&email).await {
@@ -332,14 +341,14 @@ async fn validate_email(Query(ValidateEmailQuery { email }): Query<ValidateEmail
                 Ok(None) => html! {
                     p.form-hint { "Email is available" }
                 },
-                Err(_) => html! {
-                    p.form-hint { "Failed to check email" }
-                },
+                Err(error) => {
+                    error!(?error, %email, "failed to check email");
+                    html! {
+                        // don't show any error
+                    }
+                }
             }
         }
-        Err(_validation_report) => html! {
-            // user is still typing the email; don't show any hints/errors
-        },
     }
 }
 

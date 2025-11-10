@@ -48,20 +48,24 @@ pub(crate) enum Feedback {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) enum Payload {
-    UserMessage {
+    User {
         content: UserMessageContent,
     },
-    SystemMessage {
+    System {
         content: SystemMessageContent,
         feedback: Option<Feedback>,
+    },
+    PartialSystem {
+        content: SystemMessageContent,
     },
 }
 
 impl Payload {
     pub(crate) fn as_str(&self) -> &str {
         match self {
-            Payload::UserMessage { content } => content.as_str(),
-            Payload::SystemMessage { content, .. } => content.as_str(),
+            Payload::User { content } => content.as_str(),
+            Payload::System { content, .. } => content.as_str(),
+            Payload::PartialSystem { content } => content.as_str(),
         }
     }
 }
@@ -161,8 +165,8 @@ impl Message {
                 rw.get().primary(message_id)?.context("message not found")?;
 
             // Only system messages can have feedback
-            if let Payload::SystemMessage { content, .. } = message.payload {
-                message.payload = Payload::SystemMessage {
+            if let Payload::System { content, .. } = message.payload {
+                message.payload = Payload::System {
                     content,
                     feedback: Some(feedback),
                 };

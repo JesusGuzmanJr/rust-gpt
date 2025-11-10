@@ -23,7 +23,7 @@ use {
 /// // Result: "Sun, Oct 19, 2025, 10:30 AM" (for a day that's not today)
 /// // Result: "3:30 PM" (for a day that is today)
 /// ```
-pub(crate) fn today_implied_human_datetime(
+pub(crate) fn today_implied_readable_datetime(
     datetime: &DateTime<Utc>,
     Internationalization { locale, timezone }: &Internationalization,
 ) -> String {

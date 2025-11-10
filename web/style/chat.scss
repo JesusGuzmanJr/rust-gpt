@@ -541,9 +541,33 @@
 }
 
 
-.message__time {
+.message_subdued {
   font-size: 0.75rem;
   color: var(--text-tertiary);
+}
+
+.shimmer-text {
+  background: linear-gradient(90deg,
+      #4b5563 0%,
+      #9ca3af 25%,
+      #d1d5db 50%,
+      #9ca3af 75%,
+      #4b5563 100%);
+  background-size: 200% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-flow 3s linear infinite;
+}
+
+@keyframes shimmer-flow {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .message__feedback-btn,
@@ -741,6 +765,25 @@
 // Message animation
 .message {
   animation: bubble-fade-in 0.3s ease-out;
+}
+
+.spinner-beachball {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-primary);
+  border-top-color: var(--accent-primary);
+  border-right-color: var(--accent-secondary);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+  margin-left: 0.25rem;
+
+  // Center the spinner when it's the only child in a message bubble
+  .message__bubble>&:only-child {
+    display: block;
+    margin: 0 auto;
+  }
 }
 
 // Scrollbar styling

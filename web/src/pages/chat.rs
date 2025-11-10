@@ -16,20 +16,25 @@ use {
         Form, Router,
         extract::Query,
         http::StatusCode,
-        response::{IntoResponse, Redirect},
+        response::{
+            IntoResponse, Redirect,
+            sse::{Event, KeepAlive, Sse},
+        },
         routing::{get, post},
     },
     axum_extra::extract::CookieJar,
     axum_valid::Garde,
     chrono::{DateTime, Utc},
+    futures::stream::Stream,
     garde::Validate,
     language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
     maud::{Markup, html},
     nonempty::NonEmpty,
     serde::Deserialize,
-    std::cmp::Reverse,
+    std::{cmp::Reverse, convert::Infallible, time::Duration},
     strum::{Display, EnumIter, IntoEnumIterator},
     thousands::Separable,
+    tokio_stream::StreamExt,
     tracing::*,
 };
 
@@ -54,7 +59,7 @@ pub(crate) async fn page(
             let content = SystemMessageContent::greeting();
             let message = Message::new(
                 thread.id,
-                Payload::SystemMessage {
+                Payload::System {
                     content: content.clone(),
                     feedback: None,
                 },
@@ -112,7 +117,7 @@ pub(crate) async fn page(
                     h2.modal__title { "Delete Chat?" }
                     p.modal__message { "This will permanently delete this chat and all its messages." }
 
-                    // value set by onclick handler when the delete button is pressed
+                    // value set by onclick handler when the inline delete button is pressed in the sidebar
                     // (the one that opens the delete confirmation modal)
                     input type="hidden" id="thread-to-delete" name="thread_id_to_delete";
 
@@ -204,6 +209,14 @@ pub(crate) async fn page(
                             @for message in messages {
                                 (render_message(&message, &internationalization)?)
                             }
+                            // Thinking spinner (hidden by default)
+                            div.message.message--system style="display: none;" {
+                                div.message__wrapper {
+                                    div.message__bubble.message__bubble--system {
+                                        span.spinner-beachball {}
+                                    }
+                                }
+                            }
                         }
                     }
 
@@ -265,6 +278,10 @@ pub(crate) async fn page(
                     }
                 }
             }
+            div hx-ext="sse" sse-connect="/api/chat/chatroom" sse-swap="Foo" {
+                "Contents of this box will be updated in real time "
+                "with every SSE message received from the chatroom."
+            }
             (super::scripts::chat_script())
         },
     ).into_response())
@@ -280,7 +297,7 @@ fn render_current_thread_id_input(
             type="hidden"
             name="current_thread_id"
             hx-swap-oob=[(if out_of_band { Some("true") } else { None })]
-            value=(if let Some(id) = current_thread_id{ GlassVault::new(id)?.to_string() } else { "".to_string() });
+            value=(if let Some(id) = current_thread_id { GlassVault::new(id)?.to_string() } else { "".to_string() });
     })
 }
 
@@ -338,7 +355,7 @@ async fn get_or_create_thread_items(user_id: UserId) -> AppResult<NonEmpty<Threa
             let content = SystemMessageContent::greeting();
             let message = Message::new(
                 thread.id,
-                Payload::SystemMessage {
+                Payload::System {
                     content: content.clone(),
                     feedback: None,
                 },
@@ -378,19 +395,17 @@ async fn send_message(
         current_thread_id,
     })): Garde<Form<SendForm>>,
 ) -> AppResult<impl IntoResponse> {
-    let message = Message::new(
-        current_thread_id.into_inner(),
-        Payload::UserMessage { content },
-    );
+    let message = Message::new(current_thread_id.into_inner(), Payload::User { content });
     message.clone().save().await?;
 
     Ok(html! {
         (render_message(&message, &internationalization)?)
         div hx-swap-oob="innerHTML:#chat-item-selected" {
-            (match &message.payload {
-                Payload::UserMessage { content } => content.to_string(),
-                Payload::SystemMessage { content, .. } => content.to_string(),
-            }.trim().chars().take(10).collect::<String>())
+            (message.payload.as_str().trim().chars().take(10).collect::<String>())
+        }
+        div hx-ext="sse" sse-connect="/api/chat/chatroom" sse-swap="Foo" {
+            "Contents of this box will be updated in real time "
+            "with every SSE message received from the chatroom."
         }
     }
     .into_response())
@@ -467,7 +482,7 @@ async fn update_message(
     let message_id = message_id.into_inner();
     debug!(%message_id, "updating message content");
     let mut message = Message::by_id(message_id).await?;
-    message.payload = Payload::UserMessage { content };
+    message.payload = Payload::User { content };
     let response = render_message(&message, &internationalization)?.into_response();
     message.save().await?;
     Ok(response)
@@ -484,7 +499,7 @@ async fn new_thread(
     let content = SystemMessageContent::greeting();
     let message = Message::new(
         thread.id,
-        Payload::SystemMessage {
+        Payload::System {
             content: content.clone(),
             feedback: None,
         },
@@ -573,18 +588,44 @@ async fn delete_thread(
     let thread_id_to_delete = thread_id_to_delete.into_inner();
     let current_thread_id = current_thread_id.into_inner();
 
+    // Modelled after Apple Mail
+    let next_selected_thread_id = {
+        let mut threads = Thread::get_all(user.id).await?;
+        threads.sort_unstable_by_key(|t| Reverse(t.created_at));
+
+        let index = threads
+            .iter()
+            .position(|t| t.id == thread_id_to_delete)
+            .context("thread not found")?;
+
+        // get the later thread if possible, otherwise get the previous thread if
+        // possible
+        threads
+            .get(index.saturating_add(1))
+            .map(|t| t.id)
+            .or_else(|| match index.saturating_add(1) {
+                0 => None,
+                next_index => threads.get(next_index).map(|t| t.id),
+            })
+    };
+
     Thread::delete(thread_id_to_delete).await?;
     debug!(%thread_id_to_delete, "thread deleted");
 
     if thread_id_to_delete == current_thread_id {
         let mut threads = get_or_create_thread_items(user.id).await?;
 
-        // Mark the first thread (newest) as active
-        threads.first_mut().is_active = true;
+        let next_selected_thread_id = next_selected_thread_id.unwrap_or(threads.first().id);
+
+        let thread = threads
+            .iter_mut()
+            .find(|t| t.id == next_selected_thread_id)
+            .context("next selected thread not found")?;
+
+        thread.is_active = true;
 
         // Get messages for the newly selected thread
         let messages = {
-            let thread = threads.first();
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| m.created_at);
 
@@ -592,7 +633,7 @@ async fn delete_thread(
             if messages.is_empty() {
                 let message = Message::new(
                     thread.id,
-                    Payload::SystemMessage {
+                    Payload::System {
                         content: content.clone(),
                         feedback: None,
                     },
@@ -618,11 +659,11 @@ async fn delete_thread(
         }
         .into_response())
     } else {
-        // If the deleted thread was not the current one, just return the updated thread
+        // if the deleted thread was not the current one, just return the updated thread
         // list
         let mut threads = get_or_create_thread_items(user.id).await?;
 
-        // Find and mark the current thread as active
+        // need to find and mark the current thread as active again
         if let Some(thread) = threads.iter_mut().find(|t| t.id == current_thread_id) {
             thread.is_active = true;
         }
@@ -660,7 +701,7 @@ fn render_message(
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
     Ok(match &message.payload {
-        Payload::UserMessage { content } => {
+        Payload::User { content } => {
             let message_id_str = format!("message-{}", message.id);
             let message_display_id = format!("{}-display", message_id_str);
             let message_edit_id = format!("{}-edit", message_id_str);
@@ -691,7 +732,7 @@ fn render_message(
 
                         // Meta - Display mode (with edit button)
                         div.message__meta.message__meta--user id=(message_meta_display_id) {
-                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
+                            span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-btn {
                                 (svg::edit(16, 16))
                             }
@@ -699,7 +740,7 @@ fn render_message(
 
                         // Meta - Edit mode (with confirm/cancel buttons, initially hidden)
                         div.message__meta.message__meta--user id=(message_meta_edit_id) style="display: none;" {
-                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
+                            span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-confirm
                                 type="button"
                                 hx-post="/api/chat/update"
@@ -716,9 +757,16 @@ fn render_message(
                     }
                     input type="hidden" id=(format!("message-{}-hidden-id", message.id)) name="message_id" value=(GlassVault::new(message.id)?);
                 }
+                div.message.message--system {
+                                div.message__wrapper {
+                                    div.message__bubble.message__bubble--system {
+                                        div.spinner-beachball {}
+                                    }
+                                }
+                            }
             }
         }
-        Payload::SystemMessage { content, feedback } => {
+        Payload::System { content, feedback } => {
             html! {
                 div.message.message--system {
                     div.message__wrapper {
@@ -726,8 +774,25 @@ fn render_message(
                             p { (content) }
                         }
                         div.message__meta {
-                            span.message__time { (crate::datetime::today_implied_human_datetime(&message.created_at, &internationalization)) }
+                            span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             (render_feedback_form(message.id, *feedback)?)
+                        }
+                    }
+                }
+            }
+        }
+        Payload::PartialSystem { content } => {
+            html! {
+                div.message.message--system {
+                    div.message__wrapper {
+                        div.message__bubble.message__bubble--system {
+                            p {
+                                (content)
+                                span.spinner-beachball {}
+                            }
+                        }
+                        div.message__meta {
+                            span.message_subdued.shimmer-text id="system-state" { ("Waiting for GPU to become available...") }
                         }
                     }
                 }
@@ -771,23 +836,22 @@ fn render_thread_item(
     user_id: UserId,
     internationalization: &Internationalization,
 ) -> AppResult<Markup> {
-    let thread_id_vault = GlassVault::new(thread.id)?;
+    let thread_id = GlassVault::new(thread.id)?;
     Ok(html! {
         div class=(if thread.is_active { "chat-item chat-item--active" } else { "chat-item" }) {
             div.chat-item__content
                 hx-get="/api/chat/select"
-                hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, thread_id_vault, user_id))
+                hx-vals=(format!(r#"{{"thread_id": "{}", "user_id": "{}"}}"#, thread_id, user_id))
                 hx-target="div.chat-sidebar__list"
                 hx-swap="outerHTML"
                 hx-on::before-request="document.getElementById('chat-title-edit').style.display = 'none';" {
                 div.chat-item__header {
                     (svg::chat_bubble(16, 16))
                     span.chat-item__title id=(if thread.is_active { "chat-item-title" } else { "" }) { (thread.title) }
-                    span.chat-item__time { (crate::datetime::today_implied_human_datetime(&thread.created_at, &internationalization)) }
-                    // Delete button (always visible inline)
+                    span.chat-item__time { (crate::datetime::today_implied_readable_datetime(&thread.created_at, &internationalization)) }
                     button.chat-item__delete-btn
                         type="button"
-                        data-thread-id=(thread_id_vault.to_string())
+                        data-thread-id=(thread_id)
                         onclick="\
                             document.getElementById('thread-to-delete').value = this.dataset.threadId; \
                             document.getElementById('modal-backdrop').classList.add('is-visible'); \
@@ -799,6 +863,24 @@ fn render_thread_item(
             }
         }
     })
+}
+
+async fn sse_handler() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let (tx, rx) = tokio::sync::mpsc::channel(10);
+    let mut stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+
+    tokio::spawn(async move {
+        tx.send(
+            Event::default()
+                .event("Foo")
+                .comment("comment from Foo!")
+                .data("hi from Foo!"),
+        )
+        .await
+        .unwrap();
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 pub(crate) fn api() -> Router {
@@ -813,6 +895,7 @@ pub(crate) fn api() -> Router {
             .route("/update", post(update_message))
             .route("/new", post(new_thread))
             .route("/select", get(select_thread))
-            .route("/delete", post(delete_thread)),
+            .route("/delete", post(delete_thread))
+            .route("/chatroom", get(sse_handler)),
     )
 }

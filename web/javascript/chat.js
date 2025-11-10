@@ -369,6 +369,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 metaEdit.style.display = 'flex';
                 editInput.focus();
 
+                // Move cursor to end of text
+                const length = editInput.value.length;
+                editInput.setSelectionRange(length, length);
+
                 // Disable bottom input field
                 disableChatInput();
 
