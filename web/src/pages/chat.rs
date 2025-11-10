@@ -323,8 +323,13 @@ impl ThreadItem {
     }
 }
 
-/// Get all threads for a user and return them as a vector of `ThreadItem`s.
-/// None of them are active. If there are no threads, a new thread is created.
+/// Get all threads for a user and return them as a vector of `ThreadItem`s
+/// sorted by reverse creation date.
+///
+/// None of them are active.
+///
+/// If there are no
+/// threads, a new thread is created.
 #[instrument]
 async fn get_or_create_thread_items(user_id: UserId) -> AppResult<NonEmpty<ThreadItem>> {
     let mut threads =
@@ -588,25 +593,14 @@ async fn delete_thread(
     let thread_id_to_delete = thread_id_to_delete.into_inner();
     let current_thread_id = current_thread_id.into_inner();
 
-    // Modelled after Apple Mail
-    let next_selected_thread_id = {
+    // index of the  thread to delete
+    let index = {
         let mut threads = Thread::get_all(user.id).await?;
         threads.sort_unstable_by_key(|t| Reverse(t.created_at));
-
-        let index = threads
+        threads
             .iter()
             .position(|t| t.id == thread_id_to_delete)
-            .context("thread not found")?;
-
-        // get the later thread if possible, otherwise get the previous thread if
-        // possible
-        threads
-            .get(index.saturating_add(1))
-            .map(|t| t.id)
-            .or_else(|| match index.saturating_add(1) {
-                0 => None,
-                next_index => threads.get(next_index).map(|t| t.id),
-            })
+            .context("thread not found")?
     };
 
     Thread::delete(thread_id_to_delete).await?;
@@ -615,12 +609,17 @@ async fn delete_thread(
     if thread_id_to_delete == current_thread_id {
         let mut threads = get_or_create_thread_items(user.id).await?;
 
-        let next_selected_thread_id = next_selected_thread_id.unwrap_or(threads.first().id);
-
+        let next_index = index.saturating_add(1);
+        let prev_index = index.saturating_sub(1);
         let thread = threads
-            .iter_mut()
-            .find(|t| t.id == next_selected_thread_id)
-            .context("next selected thread not found")?;
+            .get_mut(
+                threads
+                    .get(next_index)
+                    .map(|_| next_index)
+                    .or_else(|| threads.get(prev_index).map(|_| prev_index))
+                    .unwrap_or_default(),
+            )
+            .context("thread not found")?;
 
         thread.is_active = true;
 
