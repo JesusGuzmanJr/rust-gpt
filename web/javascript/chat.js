@@ -103,7 +103,8 @@ document.addEventListener('DOMContentLoaded', () => {
         titleInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                saveTitle();
+                // Click the confirm button to trigger HTMX request
+                confirmButton.click();
             } else if (event.key === 'Escape') {
                 event.preventDefault();
                 cancelEdit();
