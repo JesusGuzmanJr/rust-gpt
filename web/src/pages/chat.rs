@@ -40,6 +40,7 @@ use {
 
 pub(crate) const PATH: &str = "/chat";
 
+/// The Unicode End of Transmission (EOT) character U+0004.
 const END_OF_TRANSMISSION: &str = "\u{4}";
 
 #[instrument(skip_all)]
@@ -781,8 +782,8 @@ fn render_message(
         }
         Payload::PartialSystem { content } => {
             html! {
-                div.message.message--system hx-ext="sse" sse-connect=(format!("/api/chat/response?message_id={}", GlassVault::new(message.id)?)) {
-                    div.message__wrapper {
+                div.message.message--system hx-ext="sse" sse-close=(END_OF_TRANSMISSION) sse-connect=(format!("/api/chat/response?message_id={}", GlassVault::new(message.id)?)) {
+                    div.message__wrapper id="partial-system-message" {
                         div.message__bubble.message__bubble--system sse-swap="Content" {
                             @if content.is_empty() {
                                 span.spinner-beachball {}
@@ -866,17 +867,16 @@ fn render_thread_item(
     })
 }
 
-const has_send: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 #[derive(Debug, Deserialize)]
 struct StreamQuery {
     message_id: GlassVault<MessageId>,
 }
 
 async fn stream_response(
+    internationalization: Internationalization,
     Query(StreamQuery { message_id }): Query<StreamQuery>,
-) -> impl IntoResponse {
-    let message_id = message_id.into_inner();
+) -> AppResult<impl IntoResponse> {
+    let mut message = Message::by_id(message_id.into_inner()).await?;
     let (tx, rx) = tokio::sync::mpsc::channel(10);
     let mut stream =
         tokio_stream::wrappers::ReceiverStream::new(rx).map(Result::<_, Infallible>::Ok);
@@ -884,7 +884,7 @@ async fn stream_response(
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let mut message = String::from("The ");
+        let mut content = String::from("The ");
 
         let tx_clone = tx.clone();
 
@@ -903,11 +903,11 @@ async fn stream_response(
             }
         });
 
-        loop {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        for _ in 0..5 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let html = html! {
                 p {
-                    (message)
+                    (content)
                     // span.spinner-beachball {}
                 }
             };
@@ -915,15 +915,53 @@ async fn stream_response(
                 .await
                 .unwrap();
 
-            message += " word";
+            content += " word";
         }
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        message.payload = Payload::System {
+            content: SystemMessageContent::new(content.clone()),
+            feedback: None,
+        };
+        message.clone().save().await.unwrap();
+
+        tx.send(
+            Event::default().event("Content").data(
+                html! {
+                    div.message__wrapper hx-swap-oob="outerHTML:#partial-system-message" {
+                        div.message__bubble.message__bubble--system {
+                            (content)
+                        }
+                        div.message__meta {
+                            span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
+                            (render_feedback_form(message.id, None).unwrap())
+                        }
+                    }
+                }
+                .into_string(),
+            ),
+        )
+        .await
+        .unwrap();
+
+        // Note Safari will report an error when the client closes the EventSource. 🤷🏽‍♂️
+        // Note for the client to process the event, we always need to send a data
+        // payload.
+        tx.send(
+            Event::default()
+                .event(END_OF_TRANSMISSION)
+                .data(END_OF_TRANSMISSION),
+        )
+        .await
+        .unwrap();
     });
 
     // TODO: it should be 1 SSE connetion per user client!
 
-    Sse::new(stream)
+    Ok(Sse::new(stream)
         .keep_alive(KeepAlive::default())
-        .into_response()
+        .into_response())
 }
 
 pub(crate) fn api() -> Router {
