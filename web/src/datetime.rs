@@ -1,7 +1,10 @@
 use {
     crate::internationalization::Internationalization,
     chrono::{DateTime, Datelike, Timelike, Utc},
-    icu::datetime::input::{Date, Time},
+    icu::{
+        datetime::input::{Date, Time},
+        time::Nanosecond,
+    },
 };
 
 /// Formats a UTC datetime in a human-readable format according to the user's
@@ -37,7 +40,7 @@ pub(crate) fn today_implied_readable_datetime(
     )
     .expect("failed to create Time");
 
-    if datetime.date_naive() == Utc::now().date_naive() {
+    if time <= Time::try_new(23, 59, 59, 999_999_999).expect("failed to create time") {
         icu::datetime::DateTimeFormatter::try_new(
             locale.into(),
             icu::datetime::fieldsets::T::medium()
@@ -56,7 +59,7 @@ pub(crate) fn today_implied_readable_datetime(
 
         icu::datetime::DateTimeFormatter::try_new(
             locale.into(),
-            icu::datetime::fieldsets::YMDE::medium(),
+            icu::datetime::fieldsets::YMD::medium(),
         )
         .expect("failed to create DateTimeFormatter")
         .format(&icu::datetime::input::DateTime { date, time })

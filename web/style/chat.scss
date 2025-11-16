@@ -512,8 +512,8 @@
   width: fit-content;
 
   p {
-    margin: 0;
     line-height: 1.2;
+    margin: 0;
     color: inherit;
   }
 }
@@ -777,13 +777,6 @@
   border-radius: 50%;
   animation: spin 1s linear infinite;
   vertical-align: middle;
-  margin-left: 0.25rem;
-
-  // Center the spinner when it's the only child in a message bubble
-  .message__bubble>&:only-child {
-    display: block;
-    margin: 0 auto;
-  }
 }
 
 // Scrollbar styling

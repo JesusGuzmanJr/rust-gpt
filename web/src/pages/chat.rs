@@ -14,7 +14,7 @@ use {
     anyhow::Context,
     axum::{
         Form, Router,
-        extract::Query,
+        extract::{Path, Query},
         http::StatusCode,
         response::{
             IntoResponse, Redirect,
@@ -31,7 +31,7 @@ use {
     maud::{Markup, html},
     nonempty::NonEmpty,
     serde::Deserialize,
-    std::{cmp::Reverse, convert::Infallible, time::Duration},
+    std::{cmp::Reverse, convert::Infallible},
     strum::{Display, EnumIter, IntoEnumIterator},
     thousands::Separable,
     tokio_stream::StreamExt,
@@ -39,6 +39,8 @@ use {
 };
 
 pub(crate) const PATH: &str = "/chat";
+
+const END_OF_TRANSMISSION: &str = "\u{4}";
 
 #[instrument(skip_all)]
 pub(crate) async fn page(
@@ -91,7 +93,7 @@ pub(crate) async fn page(
                             hx-target=".chat-sidebar__list"
                             hx-swap="afterbegin"
                             hx-on::before-request="\
-                                document.querySelector('#chat-item-selected')?.removeAttribute('id'); \
+                                document.querySelector('#current-chat-item-preview')?.removeAttribute('id'); \
                                 document.querySelector('.chat-item.chat-item--active')?.classList.remove('chat-item--active');" {
                             (svg::plus(16, 16))
                             span { (ThreadTitle::new_chat_title()) }
@@ -278,10 +280,6 @@ pub(crate) async fn page(
                     }
                 }
             }
-            div hx-ext="sse" sse-connect="/api/chat/chatroom" sse-swap="Foo" {
-                "Contents of this box will be updated in real time "
-                "with every SSE message received from the chatroom."
-            }
             (super::scripts::chat_script())
         },
     ).into_response())
@@ -317,7 +315,7 @@ impl ThreadItem {
             id: thread.id,
             title: thread.title,
             created_at: thread.created_at,
-            preview: preview.chars().take(32).collect::<String>(),
+            preview: preview.chars().take(64).collect::<String>(),
             is_active: false,
         }
     }
@@ -400,17 +398,25 @@ async fn send_message(
         current_thread_id,
     })): Garde<Form<SendForm>>,
 ) -> AppResult<impl IntoResponse> {
-    let message = Message::new(current_thread_id.into_inner(), Payload::User { content });
+    let thread_id = current_thread_id.into_inner();
+    let message = Message::new(thread_id, Payload::User { content });
     message.clone().save().await?;
+
+    // TODO: find the user's queue, and add thread_id to it
+    let partial_message = Message::new(
+        thread_id,
+        Payload::PartialSystem {
+            content: SystemMessageContent::new(""),
+        },
+    );
+    partial_message.clone().save().await?;
 
     Ok(html! {
         (render_message(&message, &internationalization)?)
-        div hx-swap-oob="innerHTML:#chat-item-selected" {
+        (render_message(&partial_message, &internationalization)?)
+        // update the preview in the sidebar
+        div hx-swap-oob="innerHTML:#current-chat-item-preview" {
             (message.payload.as_str().trim().chars().take(10).collect::<String>())
-        }
-        div hx-ext="sse" sse-connect="/api/chat/chatroom" sse-swap="Foo" {
-            "Contents of this box will be updated in real time "
-            "with every SSE message received from the chatroom."
         }
     }
     .into_response())
@@ -702,11 +708,11 @@ fn render_message(
     Ok(match &message.payload {
         Payload::User { content } => {
             let message_id_str = format!("message-{}", message.id);
-            let message_display_id = format!("{}-display", message_id_str);
-            let message_edit_id = format!("{}-edit", message_id_str);
-            let message_input_id = format!("{}-input", message_id_str);
-            let message_meta_display_id = format!("{}-meta-display", message_id_str);
-            let message_meta_edit_id = format!("{}-meta-edit", message_id_str);
+            let message_display_id = format!("{message_id_str}-display");
+            let message_edit_id = format!("{message_id_str}-edit");
+            let message_input_id = format!("{message_id_str}-input");
+            let message_meta_display_id = format!("{message_id_str}-meta-display");
+            let message_meta_edit_id = format!("{message_id_str}-meta-edit");
 
             // Note the user message needs to be escaped; htmx escapes by default.
             html! {
@@ -715,7 +721,7 @@ fn render_message(
                     div.message__wrapper {
                         // Display mode
                         div.message__bubble.message__bubble--user id=(message_display_id) {
-                            p { (content) }
+                            (content)
                         }
 
                         // Edit mode (initially hidden)
@@ -730,7 +736,7 @@ fn render_message(
                         }
 
                         // Meta - Display mode (with edit button)
-                        div.message__meta.message__meta--user id=(message_meta_display_id) {
+                        div.message__meta id=(message_meta_display_id) {
                             span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-btn {
                                 (svg::edit(16, 16))
@@ -738,7 +744,7 @@ fn render_message(
                         }
 
                         // Meta - Edit mode (with confirm/cancel buttons, initially hidden)
-                        div.message__meta.message__meta--user id=(message_meta_edit_id) style="display: none;" {
+                        div.message__meta id=(message_meta_edit_id) style="display: none;" {
                             span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             button.message__edit-confirm
                                 type="button"
@@ -756,13 +762,6 @@ fn render_message(
                     }
                     input type="hidden" id=(format!("message-{}-hidden-id", message.id)) name="message_id" value=(GlassVault::new(message.id)?);
                 }
-                div.message.message--system {
-                                div.message__wrapper {
-                                    div.message__bubble.message__bubble--system {
-                                        div.spinner-beachball {}
-                                    }
-                                }
-                            }
             }
         }
         Payload::System { content, feedback } => {
@@ -770,7 +769,7 @@ fn render_message(
                 div.message.message--system {
                     div.message__wrapper {
                         div.message__bubble.message__bubble--system {
-                            p { (content) }
+                            (content)
                         }
                         div.message__meta {
                             span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
@@ -782,16 +781,19 @@ fn render_message(
         }
         Payload::PartialSystem { content } => {
             html! {
-                div.message.message--system {
+                div.message.message--system hx-ext="sse" sse-connect=(format!("/api/chat/response?message_id={}", GlassVault::new(message.id)?)) {
                     div.message__wrapper {
-                        div.message__bubble.message__bubble--system {
-                            p {
-                                (content)
+                        div.message__bubble.message__bubble--system sse-swap="Content" {
+                            @if content.is_empty() {
                                 span.spinner-beachball {}
+                            } @else {
+                                (content)
                             }
                         }
                         div.message__meta {
-                            span.message_subdued.shimmer-text id="system-state" { ("Waiting for GPU to become available...") }
+                            span.message_subdued.shimmer-text id="system-state" {
+                                span sse-swap="SystemState" { ("Waiting for GPU to become available...") }
+                            }
                         }
                     }
                 }
@@ -858,28 +860,70 @@ fn render_thread_item(
                         (svg::x(14, 14))
                     }
                 }
-                p.chat-item__preview id=(if thread.is_active { "chat-item-selected" } else { "" }) { (thread.preview) }
+                p.chat-item__preview id=(if thread.is_active { "current-chat-item-preview" } else { "" }) { (thread.preview) }
             }
         }
     })
 }
 
-async fn sse_handler() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+const has_send: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[derive(Debug, Deserialize)]
+struct StreamQuery {
+    message_id: GlassVault<MessageId>,
+}
+
+async fn stream_response(
+    Query(StreamQuery { message_id }): Query<StreamQuery>,
+) -> impl IntoResponse {
+    let message_id = message_id.into_inner();
     let (tx, rx) = tokio::sync::mpsc::channel(10);
-    let mut stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Ok);
+    let mut stream =
+        tokio_stream::wrappers::ReceiverStream::new(rx).map(Result::<_, Infallible>::Ok);
 
     tokio::spawn(async move {
-        tx.send(
-            Event::default()
-                .event("Foo")
-                .comment("comment from Foo!")
-                .data("hi from Foo!"),
-        )
-        .await
-        .unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+        let mut message = String::from("The ");
+
+        let tx_clone = tx.clone();
+
+        tokio::spawn(async move {
+            loop {
+                tx_clone
+                    .send(
+                        Event::default()
+                            .event("SystemState")
+                            .data("Generating response..."),
+                    )
+                    .await
+                    .unwrap();
+
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            }
+        });
+
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            let html = html! {
+                p {
+                    (message)
+                    // span.spinner-beachball {}
+                }
+            };
+            tx.send(Event::default().event("Content").data(html.into_string()))
+                .await
+                .unwrap();
+
+            message += " word";
+        }
     });
 
-    Sse::new(stream).keep_alive(KeepAlive::default())
+    // TODO: it should be 1 SSE connetion per user client!
+
+    Sse::new(stream)
+        .keep_alive(KeepAlive::default())
+        .into_response()
 }
 
 pub(crate) fn api() -> Router {
@@ -895,6 +939,6 @@ pub(crate) fn api() -> Router {
             .route("/new", post(new_thread))
             .route("/select", get(select_thread))
             .route("/delete", post(delete_thread))
-            .route("/chatroom", get(sse_handler)),
+            .route("/response", get(stream_response)),
     )
 }
