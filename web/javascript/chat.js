@@ -463,3 +463,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+// Scroll to bottom of chat messages on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const chatMessagesContainer = document.querySelector('.chat-messages');
+    if (chatMessagesContainer) {
+        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+});
+
+// Also scroll to bottom when messages are updated (e.g., switching threads)
+// Handle both regular swaps and out-of-band swaps
+document.addEventListener('htmx:afterSwap', (event) => {
+    const target = event.detail.target;
+    // Check if the swap happened on the chat-messages container
+    if (target && target.id === 'chat-messages') {
+        const chatMessagesContainer = document.querySelector('.chat-messages');
+        if (chatMessagesContainer) {
+            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+        }
+    }
+});
+
+// Handle out-of-band swaps (used when switching threads)
+document.addEventListener('htmx:oobAfterSwap', (event) => {
+    const target = event.detail.target;
+    if (target && target.id === 'chat-messages') {
+        const chatMessagesContainer = document.querySelector('.chat-messages');
+        if (chatMessagesContainer) {
+            // Use setTimeout to ensure DOM has fully updated
+            setTimeout(() => {
+                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+            }, 0);
+        }
+    }
+});
