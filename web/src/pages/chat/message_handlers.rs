@@ -1,6 +1,6 @@
 use {
     super::{
-        types::{FeedbackForm, SendForm, StreamQuery, UpdateMessageForm, END_OF_TRANSMISSION},
+        types::{END_OF_TRANSMISSION, FeedbackForm, SendForm, StreamQuery, UpdateMessageForm},
         views::{render_feedback_form, render_message},
     },
     crate::{
@@ -9,19 +9,27 @@ use {
         message::{Message, Payload, SystemMessageContent},
     },
     axum::{
+        Form,
         extract::Query,
         response::{
             IntoResponse,
             sse::{Event, KeepAlive, Sse},
         },
-        Form,
     },
     axum_valid::Garde,
-    maud::html,
+    maud::{Markup, html},
     std::convert::Infallible,
     tokio_stream::StreamExt,
     tracing::*,
 };
+
+fn render_preview_oob(content: &str) -> Markup {
+    html! {
+        div hx-swap-oob="innerHTML:#current-chat-item-preview" {
+            (content)
+        }
+    }
+}
 
 #[instrument]
 pub(super) async fn send_message(
@@ -47,10 +55,7 @@ pub(super) async fn send_message(
     Ok(html! {
         (render_message(&message, &internationalization)?)
         (render_message(&partial_message, &internationalization)?)
-        // update the preview in the sidebar
-        div hx-swap-oob="innerHTML:#current-chat-item-preview" {
-            (message.payload.as_str().trim().chars().take(10).collect::<String>())
-        }
+        (render_preview_oob(&message.payload.as_str()))
     }
     .into_response())
 }
@@ -91,8 +96,7 @@ pub(super) async fn stream_response(
 ) -> AppResult<impl IntoResponse> {
     let mut message = Message::by_id(message_id.into_inner()).await?;
     let (tx, rx) = tokio::sync::mpsc::channel(10);
-    let stream =
-        tokio_stream::wrappers::ReceiverStream::new(rx).map(Result::<_, Infallible>::Ok);
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Result::<_, Infallible>::Ok);
 
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -121,8 +125,8 @@ pub(super) async fn stream_response(
             let html = html! {
                 p {
                     (content)
-                    // span.spinner-beachball {}
                 }
+                (render_preview_oob(&content))
             };
             tx.send(Event::default().event("Content").data(html.into_string()))
                 .await
@@ -139,6 +143,7 @@ pub(super) async fn stream_response(
         };
         message.clone().save().await.unwrap();
 
+        // send final message
         tx.send(
             Event::default().event("Content").data(
                 html! {
@@ -151,6 +156,7 @@ pub(super) async fn stream_response(
                             (render_feedback_form(message.id, None).unwrap())
                         }
                     }
+                    (render_preview_oob(&content))
                 }
                 .into_string(),
             ),
@@ -169,8 +175,6 @@ pub(super) async fn stream_response(
         .await
         .unwrap();
     });
-
-    // TODO: it should be 1 SSE connetion per user client!
 
     Ok(Sse::new(stream)
         .keep_alive(KeepAlive::default())
