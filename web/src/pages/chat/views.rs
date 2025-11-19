@@ -1,5 +1,5 @@
 use {
-    super::types::{ModelSelection, ThreadItem, END_OF_TRANSMISSION},
+    super::types::{END_OF_TRANSMISSION, ModelSelection, ThreadItem},
     crate::{
         auth::AuthUser,
         error::AppResult,
@@ -12,7 +12,7 @@ use {
     },
     axum::response::IntoResponse,
     language_model::models::ModelInfo,
-    maud::{html, Markup},
+    maud::{Markup, html},
     strum::IntoEnumIterator,
     thousands::Separable,
     tracing::*,
@@ -464,4 +464,17 @@ pub(super) fn render_model_details(selection: ModelSelection) -> Markup {
         div.model-detail { (format!("Corpus Size: {}", model_info.corpus_size.display().iec())) }
         div.model-detail { (format!("Vocabulary Size: {}", model_info.vocabulary_size.separate_with_commas())) }
     }
+}
+
+pub(super) fn render_messages(
+    messages: &[Message],
+    internationalization: &Internationalization,
+) -> AppResult<Markup> {
+    Ok(html! {
+        div hx-swap-oob="innerHTML:#chat-messages" {
+            @for message in messages {
+                (render_message(message, internationalization)?)
+            }
+        }
+    })
 }

@@ -7,6 +7,7 @@ use {
         error::AppResult,
         internationalization::Internationalization,
         message::{Message, Payload, SystemMessageContent},
+        pages::chat::views::render_messages,
     },
     axum::{
         Form,
@@ -97,11 +98,7 @@ pub(super) async fn update_message(
     messages.sort_unstable_by_key(|m| m.created_at);
 
     Ok(html! {
-        div hx-swap-oob="innerHTML:#chat-messages" {
-            @for message in messages {
-                (render_message(&message, &internationalization)?)
-            }
-        }
+        (render_messages(&messages, &internationalization)?)
         (render_preview_oob(&message.payload.as_str()))
     }
     .into_response())

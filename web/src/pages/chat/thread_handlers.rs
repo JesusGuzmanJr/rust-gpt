@@ -1,24 +1,23 @@
 use {
     super::{
         types::{DeleteForm, SelectForm, ThreadItem, TitleForm},
-        views::{render_current_thread_id_input, render_message, render_thread_item, render_threads},
+        views::{
+            render_current_thread_id_input, render_message, render_thread_item, render_threads,
+        },
     },
     crate::{
         auth::AuthUser,
         error::AppResult,
         internationalization::Internationalization,
         message::{Message, Payload, SystemMessageContent},
+        pages::chat::views::render_messages,
         thread::{Thread, ThreadTitle},
         user::UserId,
     },
     anyhow::Context,
-    axum::{
-        http::StatusCode,
-        response::IntoResponse,
-        Form,
-    },
+    axum::{Form, http::StatusCode, response::IntoResponse},
     axum_valid::Garde,
-    maud::{html, Markup},
+    maud::{Markup, html},
     nonempty::NonEmpty,
     std::cmp::Reverse,
     tracing::*,
@@ -126,11 +125,7 @@ pub(super) async fn select_thread(
     Ok(html! {
         (render_threads(threads.iter(), user.id, &internationalization)?)
         (render_current_thread_id_input(Some(thread_id), true)?)
-        div hx-swap-oob="innerHTML:#chat-messages" {
-            @for message in messages {
-                (render_message(&message, &internationalization)?)
-            }
-        }
+        (render_messages(&messages, &internationalization)?)
         div hx-swap-oob="innerHTML:#chat-title-display" { (title) }
         script { "document.getElementById('message-input')?.focus();" }
     }
