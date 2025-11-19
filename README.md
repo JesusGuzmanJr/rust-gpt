@@ -2,7 +2,7 @@
 
 A Rust implementation for training / running GPT models from scratch.
 
-This is an education project in the sprit of Richard Feynman's:
+This is an education project in the spirit of Richard Feynman's:
 
 > What I cannot create, I do not understand.
 
@@ -149,7 +149,6 @@ We use a tokenizer to turn raw text into a sequence of discrete, learnable units
 | ----------------- | -------------------------- | ---------------------------------------------------------- |
 | Tokenize by words | Fast decoding              | Explodes vocabulary size (~10M+), massive memory overhead  |
 | Tokenize by bytes | Fully general, small vocab | Extremely long sequences, poor compression, slow inference |
-
 
 </details>
 

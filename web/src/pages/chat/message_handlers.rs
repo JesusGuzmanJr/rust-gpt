@@ -72,9 +72,39 @@ pub(super) async fn update_message(
     debug!(%message_id, "updating message content");
     let mut message = Message::by_id(message_id).await?;
     message.payload = Payload::User { content };
-    let response = render_message(&message, &internationalization)?.into_response();
-    message.save().await?;
-    Ok(response)
+    message.clone().save().await?;
+
+    // delete all later message in the thread
+    let mut messages = Message::get_all_messages(message.thread_id).await?;
+    messages.sort_unstable_by_key(|m| m.created_at);
+    let delete_timestamp = message.created_at;
+    for message in messages {
+        if message.created_at > delete_timestamp {
+            message.delete().await?;
+        }
+    }
+
+    // TODO: find the user's queue, and add thread_id to it
+    let partial_message = Message::new(
+        message.thread_id,
+        Payload::PartialSystem {
+            content: SystemMessageContent::new(""),
+        },
+    );
+    partial_message.clone().save().await?;
+
+    let mut messages = Message::get_all_messages(message.thread_id).await?;
+    messages.sort_unstable_by_key(|m| m.created_at);
+
+    Ok(html! {
+        div hx-swap-oob="innerHTML:#chat-messages" {
+            @for message in messages {
+                (render_message(&message, &internationalization)?)
+            }
+        }
+        (render_preview_oob(&message.payload.as_str()))
+    }
+    .into_response())
 }
 
 #[instrument]

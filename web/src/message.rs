@@ -182,4 +182,17 @@ impl Message {
         })
         .await?
     }
+
+    #[instrument]
+    pub(crate) async fn delete(self) -> Result<()> {
+        spawn_blocking(move || {
+            debug!("deleting message");
+            let rw = db().rw_transaction()?;
+            rw.remove(self)?;
+            rw.commit()
+                .context("failed to commit transaction that deletes message")?;
+            Ok(())
+        })
+        .await?
+    }
 }
