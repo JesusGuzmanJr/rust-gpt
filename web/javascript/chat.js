@@ -464,12 +464,17 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// Scroll to bottom of chat messages on page load
-document.addEventListener('DOMContentLoaded', () => {
+// Helper function to scroll chat to bottom
+const scrollChatToBottom = () => {
     const chatMessagesContainer = document.querySelector('.chat-messages');
     if (chatMessagesContainer) {
         chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
     }
+};
+
+// Scroll to bottom of chat messages on page load
+document.addEventListener('DOMContentLoaded', () => {
+    scrollChatToBottom();
 });
 
 // Also scroll to bottom when messages are updated (e.g., switching threads)
@@ -478,10 +483,7 @@ document.addEventListener('htmx:afterSwap', (event) => {
     const target = event.detail.target;
     // Check if the swap happened on the chat-messages container
     if (target && target.id === 'chat-messages') {
-        const chatMessagesContainer = document.querySelector('.chat-messages');
-        if (chatMessagesContainer) {
-            chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-        }
+        scrollChatToBottom();
     }
 });
 
@@ -489,23 +491,12 @@ document.addEventListener('htmx:afterSwap', (event) => {
 document.addEventListener('htmx:oobAfterSwap', (event) => {
     const target = event.detail.target;
     if (target && target.id === 'chat-messages') {
-        const chatMessagesContainer = document.querySelector('.chat-messages');
-        if (chatMessagesContainer) {
-            // Use setTimeout to ensure DOM has fully updated
-            setTimeout(() => {
-                chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-            }, 0);
-        }
+        // Use setTimeout to ensure DOM has fully updated
+        setTimeout(() => {
+            scrollChatToBottom();
+        }, 0);
     }
 });
-
-// Helper function to scroll chat to bottom
-const scrollChatToBottom = () => {
-    const chatMessagesContainer = document.querySelector('.chat-messages');
-    if (chatMessagesContainer) {
-        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
-    }
-};
 
 // Scroll to bottom when SSE messages are received and swapped
 document.addEventListener('htmx:sseMessage', (event) => {

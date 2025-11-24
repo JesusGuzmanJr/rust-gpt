@@ -415,7 +415,7 @@ pub(super) fn render_message(
                         }
                         div.message__meta {
                             span.message_subdued.shimmer-text id="system-state" {
-                                span sse-swap="SystemState" { ("Waiting for GPU to become available...") }
+                                span sse-swap="SystemState" { ("Connecting to inference server...") }
                             }
                         }
                     }
