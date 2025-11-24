@@ -498,3 +498,19 @@ document.addEventListener('htmx:oobAfterSwap', (event) => {
         }
     }
 });
+
+// Helper function to scroll chat to bottom
+const scrollChatToBottom = () => {
+    const chatMessagesContainer = document.querySelector('.chat-messages');
+    if (chatMessagesContainer) {
+        chatMessagesContainer.scrollTop = chatMessagesContainer.scrollHeight;
+    }
+};
+
+// Scroll to bottom when SSE messages are received and swapped
+document.addEventListener('htmx:sseMessage', (event) => {
+    // Scroll after a brief delay to ensure content is rendered
+    requestAnimationFrame(() => {
+        scrollChatToBottom();
+    });
+});
