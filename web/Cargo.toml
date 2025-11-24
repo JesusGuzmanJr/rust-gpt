@@ -48,6 +48,7 @@ lettre = { version = "0.11", default-features = false, features = [
     "serde",
 ] }
 mailchecker = "6.0.19"
+markdown.workspace = true
 maud = { version = "0.27.0", features = ["axum"] }
 native_db.workspace = true
 native_model = { version = "0.6.2", features = ["bincode_2"] }
@@ -80,6 +81,6 @@ zeroize.workspace = true
 zxcvbn = "3.1.0"
 
 [build-dependencies]
-oxc = { version = "0.96.0", features = ["full"] }
-oxc_allocator = "0.96.0"
+oxc = { version = "0.98.0", features = ["full"] }
+oxc_allocator = "0.98.0"
 rsass = "0.29.2"

@@ -9,7 +9,7 @@ use {
         auth::AuthUser,
         error::AppResult,
         internationalization::Internationalization,
-        message::{Message, Payload, SystemMessageContent},
+        message::{Message, Payload, SystemMessageMarkdown},
         pages::chat::views::render_messages,
         thread::{Thread, ThreadTitle},
         user::UserId,
@@ -57,7 +57,7 @@ pub(super) async fn get_or_create_thread_items(user_id: UserId) -> AppResult<Non
         None => {
             let thread = Thread::new(user_id, ThreadTitle::new_chat_title());
             thread.clone().save().await?;
-            let content = SystemMessageContent::greeting();
+            let content = SystemMessageMarkdown::greeting();
             let message = Message::new(
                 thread.id,
                 Payload::System {
@@ -81,7 +81,7 @@ pub(super) async fn new_thread(
     let thread = Thread::new(user.id, ThreadTitle::new_chat_title());
     thread.clone().save().await?;
 
-    let content = SystemMessageContent::greeting();
+    let content = SystemMessageMarkdown::greeting();
     let message = Message::new(
         thread.id,
         Payload::System {
@@ -179,7 +179,7 @@ pub(super) async fn delete_thread(
             let mut messages = Message::get_all_messages(thread.id).await?;
             messages.sort_unstable_by_key(|m| m.created_at);
 
-            let content = SystemMessageContent::greeting();
+            let content = SystemMessageMarkdown::greeting();
             if messages.is_empty() {
                 let message = Message::new(
                     thread.id,

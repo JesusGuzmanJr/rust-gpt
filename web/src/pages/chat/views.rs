@@ -5,7 +5,7 @@ use {
         error::AppResult,
         hash::GlassVault,
         internationalization::Internationalization,
-        message::{Feedback, Message, MessageId, Payload, SystemMessageContent},
+        message::{Feedback, Message, MessageId, Payload, SystemMessageMarkdown},
         svg,
         thread::{ThreadId, ThreadTitle},
         user::UserId,
@@ -34,7 +34,7 @@ pub(crate) async fn page(
         messages.sort_unstable_by_key(|m| m.created_at);
 
         if messages.is_empty() {
-            let content = SystemMessageContent::greeting();
+            let content = SystemMessageMarkdown::greeting();
             let message = Message::new(
                 thread.id,
                 Payload::System {
@@ -318,7 +318,7 @@ pub(super) fn render_thread_item(
                         (svg::x(14, 14))
                     }
                 }
-                p.chat-item__preview id=(if thread.is_active { "current-chat-item-preview" } else { "" }) { (thread.preview) }
+                div.chat-item__preview id=(if thread.is_active { "current-chat-item-preview" } else { "" }) { (thread.preview) }
             }
         }
     })
@@ -392,7 +392,7 @@ pub(super) fn render_message(
                 div.message.message--system {
                     div.message__wrapper {
                         div.message__bubble.message__bubble--system {
-                            (content)
+                            (content.to_html())
                         }
                         div.message__meta {
                             span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
@@ -410,7 +410,7 @@ pub(super) fn render_message(
                             @if content.is_empty() {
                                 span.spinner-beachball {}
                             } @else {
-                                (content)
+                                (content.to_html())
                             }
                         }
                         div.message__meta {

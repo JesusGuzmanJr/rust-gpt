@@ -7,6 +7,7 @@ use {
     chrono::{DateTime, Utc},
     common::{string_type, uuid_type},
     garde::Validate,
+    maud::Markup,
     native_db::{Models, ToKey, native_db},
     native_model::{Model, native_model},
     serde::{Deserialize, Serialize},
@@ -27,13 +28,23 @@ string_type!(
 
 string_type!(
     /// The content of a system message.
-    pub(crate) SystemMessageContent
+    pub(crate) SystemMessageMarkdown
 );
 
-impl SystemMessageContent {
+impl SystemMessageMarkdown {
     /// The default system greeting message.
     pub(crate) fn greeting() -> Self {
-        "Hello! How can I assist you today?".into()
+        Self("Hello! How can I assist you today?".into())
+    }
+
+    pub(crate) fn to_html(&self) -> Markup {
+        maud::PreEscaped(markdown::to_html(&self.0))
+    }
+}
+
+impl std::ops::AddAssign<&str> for SystemMessageMarkdown {
+    fn add_assign(&mut self, other: &str) {
+        self.0 += other;
     }
 }
 
@@ -52,11 +63,11 @@ pub(crate) enum Payload {
         content: UserMessageContent,
     },
     System {
-        content: SystemMessageContent,
+        content: SystemMessageMarkdown,
         feedback: Option<Feedback>,
     },
     PartialSystem {
-        content: SystemMessageContent,
+        content: SystemMessageMarkdown,
     },
 }
 

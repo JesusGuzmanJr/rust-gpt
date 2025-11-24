@@ -27,13 +27,14 @@ unused_qualifications = "warn"
 native_db = { git = "https://github.com/vincent-herlemont/native_db.git", branch = "main" }
 
 anyhow = "1.0.100"
-bytesize = "2.1.0"
+bytesize = "2.3.0"
 chrono = "0.4.42"
 const_format = "0.2.34"
 derive_more = { version = "2.0.1", features = ["display", "from", "from_str"] }
 futures = "0.3.21"
+markdown = "1.0.0"
 nonempty = "0.12.0"
-ron = "0.11.0"
+ron = "0.12.0"
 serde = { version = "1.0.219", features = ["derive"] }
 strum = { version = "0.27.2", features = ["derive"] }
 thiserror = "2.0.17"

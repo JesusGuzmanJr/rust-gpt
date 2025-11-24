@@ -6,7 +6,7 @@ use {
     crate::{
         error::AppResult,
         internationalization::Internationalization,
-        message::{Message, Payload, SystemMessageContent},
+        message::{Message, Payload, SystemMessageMarkdown},
         pages::chat::views::render_messages,
     },
     axum::{
@@ -48,7 +48,7 @@ pub(super) async fn send_message(
     let partial_message = Message::new(
         thread_id,
         Payload::PartialSystem {
-            content: SystemMessageContent::new(""),
+            content: SystemMessageMarkdown::new(""),
         },
     );
     partial_message.clone().save().await?;
@@ -56,7 +56,7 @@ pub(super) async fn send_message(
     Ok(html! {
         (render_message(&message, &internationalization)?)
         (render_message(&partial_message, &internationalization)?)
-        (render_preview_oob(&message.payload.as_str()))
+        (render_preview_oob(message.payload.as_str()))
     }
     .into_response())
 }
@@ -89,7 +89,7 @@ pub(super) async fn update_message(
     let partial_message = Message::new(
         message.thread_id,
         Payload::PartialSystem {
-            content: SystemMessageContent::new(""),
+            content: SystemMessageMarkdown::new(""),
         },
     );
     partial_message.clone().save().await?;
@@ -99,7 +99,7 @@ pub(super) async fn update_message(
 
     Ok(html! {
         (render_messages(&messages, &internationalization)?)
-        (render_preview_oob(&message.payload.as_str()))
+        (render_preview_oob(message.payload.as_str()))
     }
     .into_response())
 }
@@ -128,7 +128,7 @@ pub(super) async fn stream_response(
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let mut content = String::from("The ");
+        let mut system_message_markdown = SystemMessageMarkdown::new("# Dogs\nI like dogs.\nThe ");
 
         let tx_clone = tx.clone();
 
@@ -150,22 +150,44 @@ pub(super) async fn stream_response(
         for _ in 0..5 {
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             let html = html! {
-                p {
-                    (content)
-                }
-                (render_preview_oob(&content))
+                (system_message_markdown.to_html())
+                (render_preview_oob(system_message_markdown.as_str()))
             };
             tx.send(Event::default().event("Content").data(html.into_string()))
                 .await
                 .unwrap();
 
-            content += " word";
+            system_message_markdown += " word";
+        }
+
+        system_message_markdown += ".\n\nAnd";
+
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let html = html! {
+            (system_message_markdown.to_html())
+            (render_preview_oob(system_message_markdown.as_str()))
+        };
+        tx.send(Event::default().event("Content").data(html.into_string()))
+            .await
+            .unwrap();
+
+        for _ in 0..5 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            let html = html! {
+                (system_message_markdown.to_html())
+                (render_preview_oob(system_message_markdown.as_str()))
+            };
+            tx.send(Event::default().event("Content").data(html.into_string()))
+                .await
+                .unwrap();
+
+            system_message_markdown += " word";
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
         message.payload = Payload::System {
-            content: SystemMessageContent::new(content.clone()),
+            content: SystemMessageMarkdown::new(system_message_markdown.clone()),
             feedback: None,
         };
         message.clone().save().await.unwrap();
@@ -176,14 +198,14 @@ pub(super) async fn stream_response(
                 html! {
                     div.message__wrapper hx-swap-oob="outerHTML:#partial-system-message" {
                         div.message__bubble.message__bubble--system {
-                            (content)
+                            (system_message_markdown.to_html())
                         }
                         div.message__meta {
                             span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
                             (render_feedback_form(message.id, None).unwrap())
                         }
                     }
-                    (render_preview_oob(&content))
+                    (render_preview_oob(system_message_markdown.as_str()))
                 }
                 .into_string(),
             ),
