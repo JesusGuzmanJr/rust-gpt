@@ -4,6 +4,7 @@
 .chat-container {
   display: flex;
   height: 100vh;
+  height: 100dvh; // Dynamic viewport height for mobile browsers
   overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
