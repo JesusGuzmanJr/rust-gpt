@@ -27,12 +27,13 @@ mod datetime;
 mod error;
 mod hash;
 mod http;
+mod inference;
 mod internationalization;
-mod job;
 mod mailer;
 mod message;
 mod pages;
 mod persistence;
+mod runner;
 mod scheduler;
 mod svg;
 mod thread;
@@ -70,6 +71,7 @@ async fn main() -> Result<()> {
     hash::init(config.hash_key)?;
     persistence::init(&config.db_path)?;
     mailer::init(config.mailer).await?;
+    runner::init_runner();
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::to(pages::chat::PATH) }))

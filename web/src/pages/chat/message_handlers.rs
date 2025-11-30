@@ -4,14 +4,17 @@ use {
         views::{render_feedback_form, render_message},
     },
     crate::{
+        auth::AuthUser,
         error::AppResult,
+        inference::InferenceJob,
         internationalization::Internationalization,
         message::{Message, Payload, SystemMessageMarkdown},
         pages::chat::views::render_messages,
+        runner,
     },
     axum::{
         Form,
-        extract::Query,
+        extract::{Query, State},
         response::{
             IntoResponse,
             sse::{Event, KeepAlive, Sse},
@@ -34,6 +37,8 @@ fn render_preview_oob(content: &str) -> Markup {
 
 #[instrument]
 pub(super) async fn send_message(
+    AuthUser(user): AuthUser,
+
     internationalization: Internationalization,
     Garde(Form(SendForm {
         content,
@@ -44,7 +49,7 @@ pub(super) async fn send_message(
     let message = Message::new(thread_id, Payload::User { content });
     message.clone().save().await?;
 
-    // TODO: find the user's queue, and add thread_id to it
+    runner::queue_task(user.id, thread_id, InferenceJob {});
     let partial_message = Message::new(
         thread_id,
         Payload::PartialSystem {

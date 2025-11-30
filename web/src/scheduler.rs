@@ -1,11 +1,11 @@
 use {
-    crate::{job::Job, thread::ThreadId, user::UserId},
+    crate::{inference::InferenceJob, thread::ThreadId, user::UserId},
     chrono::{DateTime, Utc},
     std::collections::HashMap,
 };
 
 pub(crate) struct RoundRobin {
-    user_queues: HashMap<UserId, HashMap<ThreadId, (Job, DateTime<Utc>)>>,
+    user_queues: HashMap<UserId, HashMap<ThreadId, (InferenceJob, DateTime<Utc>)>>,
     order: Vec<UserId>, // round-robin over users
     idx: usize,
 }
@@ -19,7 +19,7 @@ impl RoundRobin {
         }
     }
 
-    pub(crate) fn push(&mut self, user: UserId, thread: ThreadId, job: Job) {
+    pub(crate) fn push(&mut self, user: UserId, thread: ThreadId, job: InferenceJob) {
         if !self.user_queues.contains_key(&user) {
             self.order.push(user);
         }
@@ -29,7 +29,7 @@ impl RoundRobin {
         user_queue.insert(thread, (job, Utc::now()));
     }
 
-    pub(crate) fn pop(&mut self) -> Option<(UserId, ThreadId, Job)> {
+    pub(crate) fn pop(&mut self) -> Option<(UserId, ThreadId, InferenceJob)> {
         if self.order.is_empty() {
             return None;
         }
@@ -78,7 +78,7 @@ mod tests {
         let mut scheduler = RoundRobin::new();
         let user_id = UserId::new();
         let thread_id = ThreadId::new();
-        let job = Job {};
+        let job = InferenceJob {};
 
         scheduler.push(user_id, thread_id, job);
 
@@ -94,7 +94,7 @@ mod tests {
         let mut scheduler = RoundRobin::new();
         let user_id = UserId::new();
         let thread_id = ThreadId::new();
-        let job = Job {};
+        let job = InferenceJob {};
 
         scheduler.push(user_id, thread_id, job);
         scheduler.pop();
@@ -111,11 +111,11 @@ mod tests {
         let thread_id_3 = ThreadId::new();
 
         // Push jobs in order
-        scheduler.push(user_id, thread_id_1, Job {});
+        scheduler.push(user_id, thread_id_1, InferenceJob {});
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_id, thread_id_2, Job {});
+        scheduler.push(user_id, thread_id_2, InferenceJob {});
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_id, thread_id_3, Job {});
+        scheduler.push(user_id, thread_id_3, InferenceJob {});
 
         // Should pop in FIFO order (earliest first)
         let (_, thread_1, _) = scheduler.pop().unwrap();
@@ -140,9 +140,9 @@ mod tests {
         let thread_3 = ThreadId::new();
 
         // Push jobs for different users
-        scheduler.push(user_1, thread_1, Job {});
-        scheduler.push(user_2, thread_2, Job {});
-        scheduler.push(user_3, thread_3, Job {});
+        scheduler.push(user_1, thread_1, InferenceJob {});
+        scheduler.push(user_2, thread_2, InferenceJob {});
+        scheduler.push(user_3, thread_3, InferenceJob {});
 
         // Should pop in round-robin order
         let (popped_user_1, ..) = scheduler.pop().unwrap();
@@ -166,10 +166,10 @@ mod tests {
         let thread_2b = ThreadId::new();
 
         // Push multiple jobs for each user
-        scheduler.push(user_1, thread_1a, Job {});
-        scheduler.push(user_1, thread_1b, Job {});
-        scheduler.push(user_2, thread_2a, Job {});
-        scheduler.push(user_2, thread_2b, Job {});
+        scheduler.push(user_1, thread_1a, InferenceJob {});
+        scheduler.push(user_1, thread_1b, InferenceJob {});
+        scheduler.push(user_2, thread_2a, InferenceJob {});
+        scheduler.push(user_2, thread_2b, InferenceJob {});
 
         // Should alternate between users in round-robin fashion
         let (user, ..) = scheduler.pop().unwrap();
@@ -192,8 +192,8 @@ mod tests {
         let thread_id = ThreadId::new();
 
         // Push same thread twice - should overwrite
-        scheduler.push(user_id, thread_id, Job {});
-        scheduler.push(user_id, thread_id, Job {});
+        scheduler.push(user_id, thread_id, InferenceJob {});
+        scheduler.push(user_id, thread_id, InferenceJob {});
 
         // Should only have one job
         assert!(scheduler.pop().is_some());
@@ -215,21 +215,21 @@ mod tests {
         let u3_t2 = ThreadId::new();
 
         // User 1: 2 threads
-        scheduler.push(user_1, u1_t1, Job {});
+        scheduler.push(user_1, u1_t1, InferenceJob {});
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_1, u1_t2, Job {});
+        scheduler.push(user_1, u1_t2, InferenceJob {});
 
         // User 2: 2 threads
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_2, u2_t1, Job {});
+        scheduler.push(user_2, u2_t1, InferenceJob {});
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_2, u2_t2, Job {});
+        scheduler.push(user_2, u2_t2, InferenceJob {});
 
         // User 3: 2 threads
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_3, u3_t1, Job {});
+        scheduler.push(user_3, u3_t1, InferenceJob {});
         std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_3, u3_t2, Job {});
+        scheduler.push(user_3, u3_t2, InferenceJob {});
 
         // Should alternate users in round-robin, with FIFO per user
         // Round 1: user_1 gets thread 1 (oldest)

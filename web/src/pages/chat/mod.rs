@@ -7,10 +7,13 @@ mod views;
 
 use {
     auth_handlers::sign_out,
+    axum::{
+        Router,
+        routing::{get, post},
+    },
     message_handlers::{send_message, stream_response, update_feedback, update_message},
     model_handlers::get_models,
     thread_handlers::{delete_thread, new_thread, select_thread, update_title},
-    axum::{routing::{get, post}, Router},
 };
 
 pub(crate) const PATH: &str = "/chat";

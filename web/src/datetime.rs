@@ -1,10 +1,7 @@
 use {
     crate::internationalization::Internationalization,
     chrono::{DateTime, Datelike, Timelike, Utc},
-    icu::{
-        datetime::input::{Date, Time},
-        time::Nanosecond,
-    },
+    icu::datetime::input::{Date, Time},
 };
 
 /// Formats a UTC datetime in a human-readable format according to the user's
