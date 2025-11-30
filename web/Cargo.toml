@@ -81,6 +81,6 @@ zeroize.workspace = true
 zxcvbn = "3.1.0"
 
 [build-dependencies]
-oxc = { version = "0.98.0", features = ["full"] }
-oxc_allocator = "0.98.0"
+oxc = { version = "0.99.0", features = ["full"] }
+oxc_allocator = "0.99.0"
 rsass = "0.29.2"
