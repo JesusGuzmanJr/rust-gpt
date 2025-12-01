@@ -1,268 +1,109 @@
 use {
-    crate::{inference::InferenceJob, thread::ThreadId, user::UserId},
-    chrono::{DateTime, Utc},
-    std::collections::HashMap,
+    crate::{inference::InferenceRequest, round_robin::RoundRobin, thread::ThreadId, user::UserId},
+    anyhow::Result,
+    std::sync::{LazyLock, OnceLock, RwLock},
+    tokio::sync::mpsc::UnboundedSender,
+    tracing::instrument,
 };
 
-pub(crate) struct RoundRobin {
-    user_queues: HashMap<UserId, HashMap<ThreadId, (InferenceJob, DateTime<Utc>)>>,
-    order: Vec<UserId>, // round-robin over users
-    idx: usize,
+static HANDLE: OnceLock<UnboundedSender<Message>> = OnceLock::new();
+
+fn handle() -> &'static UnboundedSender<Message> {
+    HANDLE.get().expect("runner not initialized")
 }
 
-impl RoundRobin {
-    pub(crate) fn new() -> Self {
-        Self {
-            user_queues: HashMap::new(),
-            order: Vec::new(),
-            idx: 0,
-        }
-    }
+static CURRENT_THREAD_ID: LazyLock<RwLock<Option<ThreadId>>> = LazyLock::new(|| RwLock::new(None));
 
-    pub(crate) fn push(&mut self, user: UserId, thread: ThreadId, job: InferenceJob) {
-        if !self.user_queues.contains_key(&user) {
-            self.order.push(user);
-        }
+pub(crate) fn current_thread_id() -> Option<ThreadId> {
+    *CURRENT_THREAD_ID.read().expect("poisoned RwLock")
+}
 
-        let user_queue = self.user_queues.entry(user).or_default();
+fn set_current_thread_id(thread_id: ThreadId) {
+    let _ = CURRENT_THREAD_ID
+        .write()
+        .expect("poisoned RwLock")
+        .insert(thread_id);
+}
 
-        user_queue.insert(thread, (job, Utc::now()));
-    }
+enum Message {
+    QueueRequest {
+        user_id: UserId,
+        thread_id: ThreadId,
+        request: InferenceRequest,
+    },
+    GpuReady,
+}
 
-    pub(crate) fn pop(&mut self) -> Option<(UserId, ThreadId, InferenceJob)> {
-        if self.order.is_empty() {
-            return None;
-        }
+#[instrument]
+pub(crate) fn queue_task(user_id: UserId, thread_id: ThreadId, request: InferenceRequest) {
+    tracing::debug!(%user_id, %thread_id, "queueing inference request");
+    handle()
+        .send(Message::QueueRequest {
+            user_id,
+            thread_id,
+            request,
+        })
+        .expect("failed to queue request; scheduler dropped");
+}
 
-        let user_id = self.order[self.idx];
-        let user_queue = self.user_queues.get_mut(&user_id).expect("user not found");
+pub(crate) fn gpu_ready() {
+    handle()
+        .send(Message::GpuReady)
+        .expect("failed to send GPU ready message; scheduler dropped");
+}
 
-        let thread_id = {
-            let mut user_queue_vec = user_queue.iter().collect::<Vec<_>>();
-            user_queue_vec.sort_by_key(|(_, (_, created_at))| *created_at);
-            let (thread_id, _) = user_queue_vec.first().expect("job not found");
+struct State {
+    scheduler: RoundRobin<UserId, ThreadId, InferenceRequest>,
+}
 
-            **thread_id
-        };
-        let (job, _) = user_queue.remove(&thread_id).expect("job not found");
+/// Start the scheduler in a new Tokio task.
+pub(crate) fn init() {
+    let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
 
-        if user_queue.is_empty() {
-            self.user_queues.remove(&user_id);
-            self.order.remove(self.idx);
+    HANDLE.set(sender).expect("scheduler already initialized");
 
-            if !self.order.is_empty() {
-                self.idx %= self.order.len();
-            } else {
-                self.idx = 0;
+    let mut state = State {
+        scheduler: RoundRobin::new(),
+    };
+
+    tokio::spawn(async move {
+        while let Some(message) = receiver.recv().await {
+            if let Err(error) = process_message(&mut state, message).await {
+                tracing::error!(?error, "failed to process message");
             }
-        } else {
-            self.idx = (self.idx + 1) % self.order.len();
         }
-
-        Some((user_id, thread_id, job))
-    }
+        tracing::debug!("scheduler shutting down");
+    });
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_new_scheduler_is_empty() {
-        let mut scheduler = RoundRobin::new();
-        assert_eq!(scheduler.pop(), None);
+async fn process_message(state: &mut State, message: Message) -> Result<()> {
+    match message {
+        Message::QueueRequest {
+            user_id,
+            thread_id,
+            request,
+        } => {
+            state.scheduler.push(user_id, thread_id, request);
+        }
+        Message::GpuReady => {
+            if let Some((user_id, thread_id, request)) = state.scheduler.pop() {
+                launch_inference(user_id, thread_id, request).await?;
+            } else {
+                tracing::debug!("GPU ready, but no scheduled inference jobs");
+            }
+        }
     }
+    Ok(())
+}
 
-    #[test]
-    fn test_push_and_pop_single_job() {
-        let mut scheduler = RoundRobin::new();
-        let user_id = UserId::new();
-        let thread_id = ThreadId::new();
-        let job = InferenceJob {};
-
-        scheduler.push(user_id, thread_id, job);
-
-        let result = scheduler.pop();
-        assert!(result.is_some());
-        let (popped_user, popped_thread, _) = result.unwrap();
-        assert_eq!(popped_user, user_id);
-        assert_eq!(popped_thread, thread_id);
-    }
-
-    #[test]
-    fn test_pop_empty_after_consuming_all_jobs() {
-        let mut scheduler = RoundRobin::new();
-        let user_id = UserId::new();
-        let thread_id = ThreadId::new();
-        let job = InferenceJob {};
-
-        scheduler.push(user_id, thread_id, job);
-        scheduler.pop();
-
-        assert_eq!(scheduler.pop(), None);
-    }
-
-    #[test]
-    fn test_multiple_jobs_same_user_fifo_order() {
-        let mut scheduler = RoundRobin::new();
-        let user_id = UserId::new();
-        let thread_id_1 = ThreadId::new();
-        let thread_id_2 = ThreadId::new();
-        let thread_id_3 = ThreadId::new();
-
-        // Push jobs in order
-        scheduler.push(user_id, thread_id_1, InferenceJob {});
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_id, thread_id_2, InferenceJob {});
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_id, thread_id_3, InferenceJob {});
-
-        // Should pop in FIFO order (earliest first)
-        let (_, thread_1, _) = scheduler.pop().unwrap();
-        assert_eq!(thread_1, thread_id_1);
-
-        let (_, thread_2, _) = scheduler.pop().unwrap();
-        assert_eq!(thread_2, thread_id_2);
-
-        let (_, thread_3, _) = scheduler.pop().unwrap();
-        assert_eq!(thread_3, thread_id_3);
-    }
-
-    #[test]
-    fn test_round_robin_between_users() {
-        let mut scheduler = RoundRobin::new();
-        let user_1 = UserId::new();
-        let user_2 = UserId::new();
-        let user_3 = UserId::new();
-
-        let thread_1 = ThreadId::new();
-        let thread_2 = ThreadId::new();
-        let thread_3 = ThreadId::new();
-
-        // Push jobs for different users
-        scheduler.push(user_1, thread_1, InferenceJob {});
-        scheduler.push(user_2, thread_2, InferenceJob {});
-        scheduler.push(user_3, thread_3, InferenceJob {});
-
-        // Should pop in round-robin order
-        let (popped_user_1, ..) = scheduler.pop().unwrap();
-        let (popped_user_2, ..) = scheduler.pop().unwrap();
-        let (popped_user_3, ..) = scheduler.pop().unwrap();
-
-        assert_eq!(popped_user_1, user_1);
-        assert_eq!(popped_user_2, user_2);
-        assert_eq!(popped_user_3, user_3);
-    }
-
-    #[test]
-    fn test_round_robin_wraps_around() {
-        let mut scheduler = RoundRobin::new();
-        let user_1 = UserId::new();
-        let user_2 = UserId::new();
-
-        let thread_1a = ThreadId::new();
-        let thread_1b = ThreadId::new();
-        let thread_2a = ThreadId::new();
-        let thread_2b = ThreadId::new();
-
-        // Push multiple jobs for each user
-        scheduler.push(user_1, thread_1a, InferenceJob {});
-        scheduler.push(user_1, thread_1b, InferenceJob {});
-        scheduler.push(user_2, thread_2a, InferenceJob {});
-        scheduler.push(user_2, thread_2b, InferenceJob {});
-
-        // Should alternate between users in round-robin fashion
-        let (user, ..) = scheduler.pop().unwrap();
-        assert_eq!(user, user_1);
-
-        let (user, ..) = scheduler.pop().unwrap();
-        assert_eq!(user, user_2);
-
-        let (user, ..) = scheduler.pop().unwrap();
-        assert_eq!(user, user_1); // Wrapped around back to user_1
-
-        let (user_d, ..) = scheduler.pop().unwrap();
-        assert_eq!(user_d, user_2); // Back to user_2
-    }
-
-    #[test]
-    fn test_same_thread_overwrite() {
-        let mut scheduler = RoundRobin::new();
-        let user_id = UserId::new();
-        let thread_id = ThreadId::new();
-
-        // Push same thread twice - should overwrite
-        scheduler.push(user_id, thread_id, InferenceJob {});
-        scheduler.push(user_id, thread_id, InferenceJob {});
-
-        // Should only have one job
-        assert!(scheduler.pop().is_some());
-        assert_eq!(scheduler.pop(), None);
-    }
-
-    #[test]
-    fn test_round_robin_with_multiple_users_and_threads() {
-        let mut scheduler = RoundRobin::new();
-        let user_1 = UserId::new();
-        let user_2 = UserId::new();
-        let user_3 = UserId::new();
-
-        let u1_t1 = ThreadId::new();
-        let u1_t2 = ThreadId::new();
-        let u2_t1 = ThreadId::new();
-        let u2_t2 = ThreadId::new();
-        let u3_t1 = ThreadId::new();
-        let u3_t2 = ThreadId::new();
-
-        // User 1: 2 threads
-        scheduler.push(user_1, u1_t1, InferenceJob {});
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_1, u1_t2, InferenceJob {});
-
-        // User 2: 2 threads
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_2, u2_t1, InferenceJob {});
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_2, u2_t2, InferenceJob {});
-
-        // User 3: 2 threads
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_3, u3_t1, InferenceJob {});
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        scheduler.push(user_3, u3_t2, InferenceJob {});
-
-        // Should alternate users in round-robin, with FIFO per user
-        // Round 1: user_1 gets thread 1 (oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_1);
-        assert_eq!(thread, u1_t1);
-
-        // Round 1: user_2 gets thread 1 (oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_2);
-        assert_eq!(thread, u2_t1);
-
-        // Round 1: user_3 gets thread 1 (oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_3);
-        assert_eq!(thread, u3_t1);
-
-        // Round 2: user_1 gets thread 2 (next oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_1);
-        assert_eq!(thread, u1_t2);
-
-        // Round 2: user_2 gets thread 2 (next oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_2);
-        assert_eq!(thread, u2_t2);
-
-        // Round 2: user_3 gets thread 2 (next oldest)
-        let (user, thread, _) = scheduler.pop().unwrap();
-        assert_eq!(user, user_3);
-        assert_eq!(thread, u3_t2);
-
-        // All jobs processed
-        assert_eq!(scheduler.pop(), None);
-    }
+pub(crate) async fn launch_inference(
+    user_id: UserId,
+    thread_id: ThreadId,
+    request: InferenceRequest,
+) -> Result<()> {
+    tracing::info!(%user_id, %thread_id, "mocking launching inference");
+    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    tracing::info!(%user_id, %thread_id, "mocking inference completed");
+    gpu_ready();
+    Ok(())
 }

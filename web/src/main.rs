@@ -33,14 +33,16 @@ mod mailer;
 mod message;
 mod pages;
 mod persistence;
-mod runner;
+mod round_robin;
 mod scheduler;
+mod stream;
 mod svg;
 mod thread;
 mod user;
 
-/// Set low to prevent abuse.
-const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(16);
+/// Set low to prevent abuse
+/// If seeing HTTP 413 errors, increase this value
+const MAX_REQUEST_BODY_SIZE: ByteSize = ByteSize::kib(4);
 
 const DEFAULT_HEADERS: [(HeaderName, HeaderValue); 2] =
     [http::CACHE_PUBLICLY_15_MIN, http::HTML_CONTENT_TYPE];
@@ -71,7 +73,7 @@ async fn main() -> Result<()> {
     hash::init(config.hash_key)?;
     persistence::init(&config.db_path)?;
     mailer::init(config.mailer).await?;
-    runner::init_runner();
+    scheduler::init();
 
     let app = Router::new()
         .route("/", get(|| async { Redirect::to(pages::chat::PATH) }))

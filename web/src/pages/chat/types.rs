@@ -6,7 +6,7 @@ use {
     },
     chrono::{DateTime, Utc},
     garde::Validate,
-    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelInfo},
+    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelId, ModelInfo},
     serde::Deserialize,
     strum::{Display, EnumIter},
 };
@@ -36,40 +36,32 @@ impl ThreadItem {
     }
 }
 
-#[derive(Debug, Display, Default, EnumIter, Deserialize)]
-pub(super) enum ModelSelection {
-    #[default]
-    Model0,
-    Model1,
-}
-
-impl From<ModelSelection> for ModelInfo {
-    fn from(model_option: ModelSelection) -> Self {
-        match model_option {
-            ModelSelection::Model0 => LANGUAGE_MODEL_0_INFO,
-            ModelSelection::Model1 => LANGUAGE_MODEL_1_INFO,
-        }
-    }
-}
-
 #[derive(Debug, Deserialize)]
 pub(super) struct ModelQuery {
     // must match the "name" attribute
-    pub(super) model: ModelSelection,
+    pub(super) model_id: ModelId,
 }
 
 #[derive(Debug, Validate, Deserialize)]
 pub(super) struct SendForm {
     #[garde(dive)]
     pub(super) content: UserMessageContent,
+
     #[garde(skip)]
     pub(super) current_thread_id: GlassVault<ThreadId>,
+
+    #[garde(skip)]
+    pub(super) model_id: ModelId,
+
+    #[garde(range(min = -1.0, max = 1.0))]
+    pub(super) temperature: f32,
 }
 
 #[derive(Debug, Deserialize, Validate)]
 pub(super) struct TitleForm {
     #[garde(dive)]
     pub(super) title: ThreadTitle,
+
     #[garde(skip)]
     pub(super) current_thread_id: GlassVault<ThreadId>,
 }
@@ -84,6 +76,7 @@ pub(super) struct FeedbackForm {
 pub(super) struct UpdateMessageForm {
     #[garde(dive)]
     pub(super) content: UserMessageContent,
+
     #[garde(skip)]
     pub(super) message_id: GlassVault<MessageId>,
 }

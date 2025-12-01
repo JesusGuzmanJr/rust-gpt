@@ -36,6 +36,7 @@
         "Memcpy",
         "nosniff",
         "nullptr",
+        "pretraining",
         "reqwest",
         "rsass",
         "rustls",

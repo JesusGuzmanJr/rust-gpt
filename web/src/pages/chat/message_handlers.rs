@@ -6,11 +6,11 @@ use {
     crate::{
         auth::AuthUser,
         error::AppResult,
-        inference::InferenceJob,
+        inference::InferenceRequest,
         internationalization::Internationalization,
         message::{Message, Payload, SystemMessageMarkdown},
         pages::chat::views::render_messages,
-        runner,
+        scheduler,
     },
     axum::{
         Form,
@@ -21,6 +21,7 @@ use {
         },
     },
     axum_valid::Garde,
+    language_model::models::ModelId,
     maud::{Markup, html},
     std::convert::Infallible,
     tokio_stream::StreamExt,
@@ -38,18 +39,26 @@ fn render_preview_oob(content: &str) -> Markup {
 #[instrument]
 pub(super) async fn send_message(
     AuthUser(user): AuthUser,
-
     internationalization: Internationalization,
     Garde(Form(SendForm {
         content,
         current_thread_id,
+        model_id,
+        temperature,
     })): Garde<Form<SendForm>>,
 ) -> AppResult<impl IntoResponse> {
     let thread_id = current_thread_id.into_inner();
     let message = Message::new(thread_id, Payload::User { content });
     message.clone().save().await?;
 
-    runner::queue_task(user.id, thread_id, InferenceJob {});
+    scheduler::queue_task(
+        user.id,
+        thread_id,
+        InferenceRequest {
+            model_id,
+            temperature,
+        },
+    );
     let partial_message = Message::new(
         thread_id,
         Payload::PartialSystem {
@@ -127,8 +136,8 @@ pub(super) async fn stream_response(
     Query(StreamQuery { message_id }): Query<StreamQuery>,
 ) -> AppResult<impl IntoResponse> {
     let mut message = Message::by_id(message_id.into_inner()).await?;
-    let (tx, rx) = tokio::sync::mpsc::channel(10);
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(Result::<_, Infallible>::Ok);
+    let (tx, rx) = tokio::sync::mpsc::channel::<anyhow::Result<Event>>(10);
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
@@ -140,11 +149,9 @@ pub(super) async fn stream_response(
         tokio::spawn(async move {
             loop {
                 tx_clone
-                    .send(
-                        Event::default()
-                            .event("SystemState")
-                            .data("Generating response..."),
-                    )
+                    .send(Ok(Event::default()
+                        .event("SystemState")
+                        .data("Generating response...")))
                     .await
                     .unwrap();
 
@@ -158,7 +165,9 @@ pub(super) async fn stream_response(
                 (system_message_markdown.to_html())
                 (render_preview_oob(system_message_markdown.as_str()))
             };
-            tx.send(Event::default().event("Content").data(html.into_string()))
+            tx.send(Ok(Event::default()
+                .event("Content")
+                .data(html.into_string())))
                 .await
                 .unwrap();
 
@@ -172,7 +181,9 @@ pub(super) async fn stream_response(
             (system_message_markdown.to_html())
             (render_preview_oob(system_message_markdown.as_str()))
         };
-        tx.send(Event::default().event("Content").data(html.into_string()))
+        tx.send(Ok(Event::default()
+            .event("Content")
+            .data(html.into_string())))
             .await
             .unwrap();
 
@@ -182,7 +193,9 @@ pub(super) async fn stream_response(
                 (system_message_markdown.to_html())
                 (render_preview_oob(system_message_markdown.as_str()))
             };
-            tx.send(Event::default().event("Content").data(html.into_string()))
+            tx.send(Ok(Event::default()
+                .event("Content")
+                .data(html.into_string())))
                 .await
                 .unwrap();
 
@@ -197,9 +210,13 @@ pub(super) async fn stream_response(
         };
         message.clone().save().await.unwrap();
 
+        // tx.send(Err(anyhow::anyhow!("failed to save message")))
+        //     .await
+        //     .unwrap();
+
         // send final message
         tx.send(
-            Event::default().event("Content").data(
+            Ok(Event::default().event("Content").data(
                 html! {
                     div.message__wrapper hx-swap-oob="outerHTML:#partial-system-message" {
                         div.message__bubble.message__bubble--system {
@@ -213,21 +230,19 @@ pub(super) async fn stream_response(
                     (render_preview_oob(system_message_markdown.as_str()))
                 }
                 .into_string(),
-            ),
+            )),
         )
         .await
         .unwrap();
 
-        // Note Safari will report an error when the client closes the EventSource. 🤷🏽‍♂️
-        // Note for the client to process the event, we always need to send a data
+        // Safari will report an error when the client closes the EventSource. 🤷🏽‍♂️
+        // For the client to process the event, we always need to send a data
         // payload.
-        tx.send(
-            Event::default()
-                .event(END_OF_TRANSMISSION)
-                .data(END_OF_TRANSMISSION),
-        )
-        .await
-        .unwrap();
+        tx.send(Ok(Event::default()
+            .event(END_OF_TRANSMISSION)
+            .data(END_OF_TRANSMISSION)))
+            .await
+            .unwrap();
     });
 
     Ok(Sse::new(stream)

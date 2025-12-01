@@ -1,5 +1,5 @@
 use {
-    super::types::{END_OF_TRANSMISSION, ModelSelection, ThreadItem},
+    super::types::{END_OF_TRANSMISSION, ThreadItem},
     crate::{
         auth::AuthUser,
         error::AppResult,
@@ -11,7 +11,7 @@ use {
         user::UserId,
     },
     axum::response::IntoResponse,
-    language_model::models::ModelInfo,
+    language_model::models::{ModelId, ModelInfo},
     maud::{Markup, html},
     strum::IntoEnumIterator,
     thousands::Separable,
@@ -210,13 +210,13 @@ pub(crate) async fn page(
                                     div.popover-inner {
                                         div.form-group {
                                             label.form-label { "Model" }
-                                            select.form-select name="model" hx-get="/api/chat/models" hx-target=".model-details" {
-                                                @for selection in ModelSelection::iter() {
-                                                    option value=(selection) { (ModelInfo::from(selection).name) }
+                                            select.form-select name="model_id" id="model-id" hx-get="/api/chat/models" hx-target=".model-details" {
+                                                @for model_id in ModelId::iter() {
+                                                    option value=(model_id) { (ModelInfo::from(model_id).name) }
                                                 }
                                             }
                                             div.model-details {
-                                                (render_model_details(ModelSelection::default()))
+                                                (render_model_details(ModelId::default().into()))
                                             }
                                         }
 
@@ -225,7 +225,7 @@ pub(crate) async fn page(
                                                 label.form-label { "Temperature" }
                                                 span.form-value { "0.0" }
                                             }
-                                            input.form-range type="range" min="-1" max="1" step="0.1" value="0" name="temperature";
+                                            input.form-range type="range" min="-1" max="1" step="0.1" value="0" name="temperature" id="temperature";
                                             div.range-labels {
                                                 span { "-1.0" }
                                                 span { "0.0" }
@@ -248,7 +248,7 @@ pub(crate) async fn page(
                                 disabled
                                 hx-post="/api/chat/send"
                                 hx-target="#chat-messages"
-                                hx-include="#message-input, #current-thread-id"
+                                hx-include="#message-input, #current-thread-id, #model-id, #temperature"
                                 hx-swap="beforeend" {
                                 (svg::arrow_right(20, 20, 3))
                             }
@@ -458,8 +458,7 @@ pub(super) fn render_feedback_form(
     })
 }
 
-pub(super) fn render_model_details(selection: ModelSelection) -> Markup {
-    let model_info: ModelInfo = selection.into();
+pub(super) fn render_model_details(model_info: ModelInfo) -> Markup {
     html! {
         div.model-detail { (format!("Corpus Size: {}", model_info.corpus_size.display().iec())) }
         div.model-detail { (format!("Vocabulary Size: {}", model_info.vocabulary_size.separate_with_commas())) }
