@@ -1,11 +1,12 @@
 use {
-    super::types::{END_OF_TRANSMISSION, ThreadItem},
+    super::types::ThreadItem,
     crate::{
         auth::AuthUser,
         error::AppResult,
         hash::GlassVault,
         internationalization::Internationalization,
         message::{Feedback, Message, MessageId, Payload, SystemMessageMarkdown},
+        pages::chat::sse::{CONTENT_SSE, END_OF_TRANSMISSION, SYSTEM_STATE_SSE, SystemStateLabel},
         svg,
         thread::{ThreadId, ThreadTitle},
         user::UserId,
@@ -406,7 +407,7 @@ pub(super) fn render_message(
             html! {
                 div.message.message--system hx-ext="sse" sse-close=(END_OF_TRANSMISSION) sse-connect=(format!("/api/chat/response?message_id={}", GlassVault::new(message.id)?)) {
                     div.message__wrapper id="partial-system-message" {
-                        div.message__bubble.message__bubble--system sse-swap="Content" {
+                        div.message__bubble.message__bubble--system sse-swap=(CONTENT_SSE) {
                             @if content.is_empty() {
                                 span.spinner-beachball {}
                             } @else {
@@ -415,7 +416,7 @@ pub(super) fn render_message(
                         }
                         div.message__meta {
                             span.message_subdued.shimmer-text id="system-state" {
-                                span sse-swap="SystemState" { ("Connecting to inference server...") }
+                                span sse-swap=(SYSTEM_STATE_SSE) { (SystemStateLabel::Initializing) }
                             }
                         }
                     }

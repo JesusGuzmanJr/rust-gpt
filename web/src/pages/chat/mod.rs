@@ -1,6 +1,7 @@
 mod auth_handlers;
 mod message_handlers;
 mod model_handlers;
+mod sse;
 mod thread_handlers;
 mod types;
 mod views;

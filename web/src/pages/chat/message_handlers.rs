@@ -1,6 +1,6 @@
 use {
     super::{
-        types::{END_OF_TRANSMISSION, FeedbackForm, SendForm, StreamQuery, UpdateMessageForm},
+        types::{FeedbackForm, SendForm, StreamQuery, UpdateMessageForm},
         views::{render_feedback_form, render_message},
     },
     crate::{
@@ -8,27 +8,17 @@ use {
         error::AppResult,
         inference::InferenceRequest,
         internationalization::Internationalization,
-        message::{Message, Payload, SystemMessageMarkdown},
-        pages::chat::views::render_messages,
+        message::{Message, PartialSystemMessage, Payload, SystemMessage, SystemMessageMarkdown},
+        pages::chat::{sse::SystemStateLabel, views::render_messages},
         scheduler,
     },
-    axum::{
-        Form,
-        extract::{Query, State},
-        response::{
-            IntoResponse,
-            sse::{Event, KeepAlive, Sse},
-        },
-    },
+    axum::{Form, extract::Query, response::IntoResponse},
     axum_valid::Garde,
-    language_model::models::ModelId,
     maud::{Markup, html},
-    std::convert::Infallible,
-    tokio_stream::StreamExt,
     tracing::*,
 };
 
-fn render_preview_oob(content: &str) -> Markup {
+pub(super) fn render_preview_oob(content: &str) -> Markup {
     html! {
         div hx-swap-oob="innerHTML:#current-chat-item-preview" {
             (content)
@@ -136,116 +126,72 @@ pub(super) async fn stream_response(
     Query(StreamQuery { message_id }): Query<StreamQuery>,
 ) -> AppResult<impl IntoResponse> {
     let mut message = Message::by_id(message_id.into_inner()).await?;
-    let (tx, rx) = tokio::sync::mpsc::channel::<anyhow::Result<Event>>(10);
-    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let (sse_tx, sse_rx) = super::sse::new_sse_channel();
 
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        let mut system_message_markdown = SystemMessageMarkdown::new("# Dogs\nI like dogs.\nThe ");
+        let mut partial_system_message = PartialSystemMessage {
+            id: message.id,
+            thread_id: message.thread_id,
+            created_at: message.created_at,
+            content: SystemMessageMarkdown::new("# Dogs\nI like dogs.\nThe "),
+        };
 
-        let tx_clone = tx.clone();
-
-        tokio::spawn(async move {
-            loop {
-                tx_clone
-                    .send(Ok(Event::default()
-                        .event("SystemState")
-                        .data("Generating response...")))
-                    .await
-                    .unwrap();
-
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        tokio::spawn({
+            let sse_tx = sse_tx.clone();
+            async move {
+                loop {
+                    if sse_tx
+                        .send_system_state(SystemStateLabel::GeneratingResponse)
+                        .await
+                        .is_err()
+                    {
+                        // stop sending system state messages when channel is closed
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
             }
         });
 
         for _ in 0..5 {
+            partial_system_message.content += " word";
+
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let html = html! {
-                (system_message_markdown.to_html())
-                (render_preview_oob(system_message_markdown.as_str()))
-            };
-            tx.send(Ok(Event::default()
-                .event("Content")
-                .data(html.into_string())))
+
+            if let Err(error) = sse_tx
+                .send_partial_system_message(&partial_system_message)
                 .await
-                .unwrap();
-
-            system_message_markdown += " word";
-        }
-
-        system_message_markdown += ".\n\nAnd";
-
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-        let html = html! {
-            (system_message_markdown.to_html())
-            (render_preview_oob(system_message_markdown.as_str()))
-        };
-        tx.send(Ok(Event::default()
-            .event("Content")
-            .data(html.into_string())))
-            .await
-            .unwrap();
-
-        for _ in 0..5 {
-            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-            let html = html! {
-                (system_message_markdown.to_html())
-                (render_preview_oob(system_message_markdown.as_str()))
-            };
-            tx.send(Ok(Event::default()
-                .event("Content")
-                .data(html.into_string())))
-                .await
-                .unwrap();
-
-            system_message_markdown += " word";
+            {
+                warn!(?error);
+            }
         }
 
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
+        // save the final system message
         message.payload = Payload::System {
-            content: SystemMessageMarkdown::new(system_message_markdown.clone()),
+            content: partial_system_message.content.clone(),
             feedback: None,
         };
-        message.clone().save().await.unwrap();
 
-        // tx.send(Err(anyhow::anyhow!("failed to save message")))
-        //     .await
-        //     .unwrap();
+        if let Err(error) = message.clone().save().await {
+            warn!(?error, "failed to save message");
+        }
 
         // send final message
-        tx.send(
-            Ok(Event::default().event("Content").data(
-                html! {
-                    div.message__wrapper hx-swap-oob="outerHTML:#partial-system-message" {
-                        div.message__bubble.message__bubble--system {
-                            (system_message_markdown.to_html())
-                        }
-                        div.message__meta {
-                            span.message_subdued { (crate::datetime::today_implied_readable_datetime(&message.created_at, &internationalization)) }
-                            (render_feedback_form(message.id, None).unwrap())
-                        }
-                    }
-                    (render_preview_oob(system_message_markdown.as_str()))
-                }
-                .into_string(),
-            )),
-        )
-        .await
-        .unwrap();
-
-        // Safari will report an error when the client closes the EventSource. 🤷🏽‍♂️
-        // For the client to process the event, we always need to send a data
-        // payload.
-        tx.send(Ok(Event::default()
-            .event(END_OF_TRANSMISSION)
-            .data(END_OF_TRANSMISSION)))
+        if let Err(error) = sse_tx
+            .send_final_system_message(
+                &SystemMessage::try_from(message)
+                    .expect("failed to convert message to system message"),
+                &internationalization,
+            )
             .await
-            .unwrap();
+        {
+            warn!(?error, "failed to send final system message");
+        }
     });
 
-    Ok(Sse::new(stream)
-        .keep_alive(KeepAlive::default())
-        .into_response())
+    Ok(sse_rx.into_response())
 }

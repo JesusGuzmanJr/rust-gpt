@@ -6,13 +6,9 @@ use {
     },
     chrono::{DateTime, Utc},
     garde::Validate,
-    language_model::models::{LANGUAGE_MODEL_0_INFO, LANGUAGE_MODEL_1_INFO, ModelId, ModelInfo},
+    language_model::models::ModelId,
     serde::Deserialize,
-    strum::{Display, EnumIter},
 };
-
-/// The Unicode End of Transmission (EOT) character U+0004.
-pub(super) const END_OF_TRANSMISSION: &str = "\u{4}";
 
 #[derive(Debug)]
 pub(super) struct ThreadItem {

@@ -81,6 +81,58 @@ impl Payload {
     }
 }
 
+/// A system message.
+#[derive(Debug)]
+pub(crate) struct SystemMessage {
+    pub(crate) id: MessageId,
+    pub(crate) thread_id: ThreadId,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) content: SystemMessageMarkdown,
+    pub(crate) feedback: Option<Feedback>,
+}
+
+impl TryFrom<Message> for SystemMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(message: Message) -> Result<Self> {
+        match message.payload {
+            Payload::System { content, feedback } => Ok(SystemMessage {
+                id: message.id,
+                thread_id: message.thread_id,
+                created_at: message.created_at,
+                content,
+                feedback,
+            }),
+            _ => anyhow::bail!("message is not a system message"),
+        }
+    }
+}
+
+/// A partial system message.
+#[derive(Debug)]
+pub(crate) struct PartialSystemMessage {
+    pub(crate) id: MessageId,
+    pub(crate) thread_id: ThreadId,
+    pub(crate) created_at: DateTime<Utc>,
+    pub(crate) content: SystemMessageMarkdown,
+}
+
+impl TryFrom<Message> for PartialSystemMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(message: Message) -> Result<Self> {
+        match message.payload {
+            Payload::PartialSystem { content } => Ok(PartialSystemMessage {
+                id: message.id,
+                thread_id: message.thread_id,
+                created_at: message.created_at,
+                content,
+            }),
+            _ => anyhow::bail!("message is not a partial system message"),
+        }
+    }
+}
+
 pub(crate) mod v1 {
     use super::*;
 
