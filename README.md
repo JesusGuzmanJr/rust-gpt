@@ -190,16 +190,4 @@ ___
 
 ---
 
-## Pre-Training
-
-*(Work in Progress)*
-
----
-
-## Inference
-
-*(Work in Progress)*
-
----
-
 Made with 💜 by Jesus Guzman, Jr. in Seattle, WA.
